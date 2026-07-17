@@ -14,19 +14,19 @@
 
 One muted sage accent on a warm off-white neutral base. No pure black/white.
 
-| Role | Value | Use |
-|------|-------|-----|
-| Background | `#fbfbf9` | App canvas |
-| Surface / sidebar | `#f4f5f0` | Sidebar, panels, wells |
-| Accent tint | `#e6e9df` / `#f0f2ea` | Active nav, assistant blocks, selected states |
-| Hairline | `#e6e7e0` | Borders, dividers |
-| Faint line | `#eeeee8` | Row dividers |
-| Text | `#2c2f28` | Primary text |
-| Muted text | `#9aa08f` / `#a3a599` | Labels, secondary |
-| Sub text | `#7c8274` | Tertiary |
-| **Accent** | `#6f7d5f` (deep `#5a6650`) | Primary actions, identity, active stage |
-| Gold | `#8a6f3f` | "Offer" stage only |
-| Muted rose | `#b0908c` | "Rejected" / "Withdrawn" stages only |
+| Role              | Value                      | Use                                           |
+| ----------------- | -------------------------- | --------------------------------------------- |
+| Background        | `#fbfbf9`                  | App canvas                                    |
+| Surface / sidebar | `#f4f5f0`                  | Sidebar, panels, wells                        |
+| Accent tint       | `#e6e9df` / `#f0f2ea`      | Active nav, assistant blocks, selected states |
+| Hairline          | `#e6e7e0`                  | Borders, dividers                             |
+| Faint line        | `#eeeee8`                  | Row dividers                                  |
+| Text              | `#2c2f28`                  | Primary text                                  |
+| Muted text        | `#9aa08f` / `#a3a599`      | Labels, secondary                             |
+| Sub text          | `#7c8274`                  | Tertiary                                      |
+| **Accent**        | `#6f7d5f` (deep `#5a6650`) | Primary actions, identity, active stage       |
+| Gold              | `#8a6f3f`                  | "Offer" stage only                            |
+| Muted rose        | `#b0908c`                  | "Rejected" / "Withdrawn" stages only          |
 
 - Accent used sparingly: primary buttons, top identity edge, active states, current stage.
 - Stage colors: early stages muted, mid stages sage, offer gold, closed rose.
@@ -48,6 +48,7 @@ One muted sage accent on a warm off-white neutral base. No pure black/white.
 - **Crisp 3px sage top edge** on primary surfaces for identity.
 - Monogram tiles: white fill, 1px `#d9ded0` border, sage letter, not filled blocks.
 - Lay out with flex/grid + `gap`; prefer flat lists and tables with hairline dividers over boxed cards.
+
 ---
 
 ## 6. Things to AVOID (explicit)
