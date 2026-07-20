@@ -34,6 +34,24 @@ Enforced by Prettier + ESLint. Key settings:
 - `@typescript-eslint/no-explicit-any` is an error — avoid `any`
 - `no-console` is a warning — use structured logging or remove before committing
 
+## UI & Design
+
+- Follow `DESIGN.md` for all UI. Design tokens are Tailwind theme values in `src/app/globals.css` (`bg-background`, `bg-surface`, `text-ink`, `text-sub`, `text-muted`, `border-hairline`, `border-faint`, `bg-accent`, `accent-tint`, `gold`, `rose`, `tile-border`)
+- Default to square corners; `rounded-*` is available but reserved for the rare case that justifies it
+- Prefer built-in Tailwind scale values over arbitrary ones: `text-xs` not `text-[11px]`, `h-0.75` not `h-[3px]`
+- Icons: Iconify Tailwind plugin, e.g. `icon-[simple-icons--github]`. Add sets with `bun add -d @iconify-json/<set>`
+- Brand marks (`Logo`, `CARET_PATH`, `SLASH_PATH`) live in `src/components/brand/logo.tsx`; favicon is `src/app/icon.svg`
+
+## Component Conventions
+
+- Arrow-function components only. Pages/layouts: `export default X;` on the line directly after the definition; never anonymous default exports
+- Extract to `src/components/<area>/` (e.g. `brand/`, `login/`) only when reused or bulky/static (SVG art); keep small single-use elements (a lone button) inline in the page
+- Verify UI changes in a real browser. A dev server is usually already running at `localhost:3000` — check before starting another (`bun run dev` will fail on the port)
+
+## Git
+
+- Never run `git commit` or `git push` — the repo owner always commits their own work
+
 ## Next.js 16 — Key Differences from Prior Versions
 
 Read `node_modules/next/dist/docs/` before writing code. The most impactful changes:

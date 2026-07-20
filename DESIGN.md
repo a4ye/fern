@@ -44,7 +44,7 @@ One muted sage accent on a warm off-white neutral base. No pure black/white.
 
 ## 4. Shape, spacing, layout
 
-- **No rounded corners.** All corners square, including avatar/monogram tiles.
+- **Square corners by default.** The vast majority of the UI is square, including avatar/monogram tiles; rounding is allowed only in rare cases that clearly justify it.
 - **Crisp 3px sage top edge** on primary surfaces for identity.
 - Monogram tiles: white fill, 1px `#d9ded0` border, sage letter, not filled blocks.
 - Lay out with flex/grid + `gap`; prefer flat lists and tables with hairline dividers over boxed cards.
@@ -54,7 +54,7 @@ One muted sage accent on a warm off-white neutral base. No pure black/white.
 ## 6. Things to AVOID (explicit)
 
 - ❌ Pure black-and-white; must carry some thoughtful color.
-- ❌ Rounded corners of any kind.
+- ❌ Rounded corners as a default; reserve rounding for rare, justified exceptions.
 - ❌ Brutalist and terminal aesthetics.
 - ❌ Left/side accent borders on cards.
 - ❌ Decorative status dots. A colored dot is only for a real operational signal (e.g. "synced"), not for stage/status.
