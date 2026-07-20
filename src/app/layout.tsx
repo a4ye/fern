@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Be_Vietnam_Pro } from "next/font/google";
+import { Toaster } from "sonner";
 import "./globals.css";
 
 const beVietnamPro = Be_Vietnam_Pro({
@@ -19,7 +20,20 @@ const RootLayout = ({
     children: React.ReactNode;
 }>) => (
     <html lang="en" className={`${beVietnamPro.variable} h-full antialiased`}>
-        <body className="flex min-h-full flex-col">{children}</body>
+        <body className="flex min-h-full flex-col">
+            {children}
+            <Toaster
+                position="bottom-right"
+                toastOptions={{
+                    style: {
+                        borderRadius: 0,
+                        border: "1px solid var(--color-hairline)",
+                        background: "var(--color-background)",
+                        color: "var(--color-ink)",
+                    },
+                }}
+            />
+        </body>
     </html>
 );
 export default RootLayout;
