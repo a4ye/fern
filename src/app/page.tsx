@@ -1,9 +1,11 @@
 import Link from "next/link";
-import { CARET_PATH, Logo, SLASH_PATH } from "@/components/brand/logo";
+import { CARET_PATH, SLASH_PATH } from "@/components/brand/logo";
 import { HeroMock } from "@/components/landing/hero-mock";
 import { ParallaxLayer } from "@/components/landing/parallax-layer";
 import { Pipeline } from "@/components/landing/pipeline";
 import { Sankey } from "@/components/landing/sankey";
+import { SiteFooter } from "@/components/landing/site-footer";
+import { SiteHeader } from "@/components/landing/site-header";
 import { SpreadsheetArt } from "@/components/landing/spreadsheet-art";
 import { SystemDiagram } from "@/components/landing/system-diagram";
 import { Timeline } from "@/components/landing/timeline";
@@ -53,34 +55,7 @@ const SectionRule = ({ number, id }: { number: string; id?: string }) => (
 
 const Home = () => (
     <main className="flex flex-1 flex-col overflow-x-clip">
-        <header className="sticky top-0 z-50 border-b border-hairline bg-background/90 backdrop-blur-sm">
-            <div className="h-0.75 bg-accent" />
-            <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between border-x border-hairline px-6 sm:px-10">
-                <Link
-                    href="/"
-                    className="flex items-center gap-2.5 transition-opacity hover:opacity-70"
-                >
-                    <Logo className="h-5 w-auto" />
-                    <span className="text-sm font-semibold tracking-tight text-ink">
-                        Job Tracker
-                    </span>
-                </Link>
-                <div className="flex items-center gap-5">
-                    <Link
-                        href="/login"
-                        className="text-sm font-medium text-sub transition-colors hover:text-ink"
-                    >
-                        Sign in
-                    </Link>
-                    <Link
-                        href="/login"
-                        className="hidden h-8 items-center bg-accent px-3.5 text-xs font-medium text-background transition-colors hover:bg-accent-deep sm:inline-flex"
-                    >
-                        Start tracking
-                    </Link>
-                </div>
-            </div>
-        </header>
+        <SiteHeader />
 
         <div className="mx-auto w-full max-w-6xl flex-1 border-x border-hairline">
             <section className="px-6 pt-16 pb-20 [background:linear-gradient(165deg,var(--color-accent-tint-soft)_0%,var(--color-background)_55%)] sm:px-10 lg:pt-20">
@@ -307,17 +282,7 @@ const Home = () => (
             </section>
         </div>
 
-        <footer className="border-t border-hairline">
-            <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-6 sm:px-10">
-                <div className="flex items-center gap-4">
-                    <Logo className="h-4 w-auto" />
-                    <p className="text-xs text-muted">
-                        A quiet tracker for a loud process.
-                    </p>
-                </div>
-                <p className="text-xs text-muted">Job Tracker, 2026</p>
-            </div>
-        </footer>
+        <SiteFooter />
     </main>
 );
 export default Home;

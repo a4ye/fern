@@ -1,10 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getSessionCookie } from "better-auth/cookies";
 
+// users; the rest are static marketing/legal pages with no gated content.
+const PUBLIC_PATHS = ["/", "/privacy", "/terms", "/cookies"];
+
 export const proxy = (request: NextRequest) => {
-    // "/" is public: the page renders the landing view for visitors
-    // and the app view for signed-in users.
-    if (request.nextUrl.pathname === "/") {
+    if (PUBLIC_PATHS.includes(request.nextUrl.pathname)) {
         return NextResponse.next();
     }
     const sessionCookie = getSessionCookie(request);
