@@ -1,11 +1,18 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getSessionCookie } from "better-auth/cookies";
 
-// users; the rest are static marketing/legal pages with no gated content.
-const PUBLIC_PATHS = ["/", "/privacy", "/terms", "/cookies"];
+// Route prefixes that hold gated content and require a session. Anything else
+// (marketing, legal, and unknown URLs) falls through so Next can serve the page
+// or its 404, which is what signed-out visitors should see on a bad link.
+const PROTECTED_PREFIXES = ["/applications"];
+
+const isProtected = (pathname: string) =>
+    PROTECTED_PREFIXES.some(
+        (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+    );
 
 export const proxy = (request: NextRequest) => {
-    if (PUBLIC_PATHS.includes(request.nextUrl.pathname)) {
+    if (!isProtected(request.nextUrl.pathname)) {
         return NextResponse.next();
     }
     const sessionCookie = getSessionCookie(request);
