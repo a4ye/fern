@@ -55,22 +55,16 @@ const Home = () => (
     <main className="flex flex-1 flex-col overflow-x-clip">
         <header className="sticky top-0 z-50 border-b border-hairline bg-background/90 backdrop-blur-sm">
             <div className="h-0.75 bg-accent" />
-            <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between px-6 sm:px-10">
-                <Logo className="h-5 w-auto" />
-                <nav className="hidden items-center gap-8 sm:flex">
-                    <a
-                        href="#how"
-                        className="text-sm text-sub transition-colors hover:text-ink"
-                    >
-                        How it works
-                    </a>
-                    <a
-                        href="#record"
-                        className="text-sm text-sub transition-colors hover:text-ink"
-                    >
-                        The record
-                    </a>
-                </nav>
+            <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between border-x border-hairline px-6 sm:px-10">
+                <Link
+                    href="/"
+                    className="flex items-center gap-2.5 transition-opacity hover:opacity-70"
+                >
+                    <Logo className="h-5 w-auto" />
+                    <span className="text-sm font-semibold tracking-tight text-ink">
+                        Job Tracker
+                    </span>
+                </Link>
                 <div className="flex items-center gap-5">
                     <Link
                         href="/login"
@@ -223,7 +217,7 @@ const Home = () => (
                 </div>
             </section>
 
-            <SectionRule number="04" id="record" />
+            <SectionRule number="04" />
             <section className="relative overflow-hidden bg-surface px-6 py-16 sm:px-10 lg:py-20">
                 <svg
                     aria-hidden="true"
