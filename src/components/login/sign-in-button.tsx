@@ -8,7 +8,7 @@ export const SignInButton = () => (
         onClick={() =>
             void authClient.signIn.social({
                 provider: "github",
-                callbackURL: "/",
+                callbackURL: "/dashboard",
                 errorCallbackURL: "/login",
             })
         }

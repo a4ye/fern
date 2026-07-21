@@ -4,7 +4,7 @@ import { getSessionCookie } from "better-auth/cookies";
 // Route prefixes that hold gated content and require a session. Anything else
 // (marketing, legal, and unknown URLs) falls through so Next can serve the page
 // or its 404, which is what signed-out visitors should see on a bad link.
-const PROTECTED_PREFIXES = ["/applications"];
+const PROTECTED_PREFIXES = ["/dashboard"];
 
 const isProtected = (pathname: string) =>
     PROTECTED_PREFIXES.some(

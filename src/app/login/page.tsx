@@ -16,7 +16,7 @@ const LoginPage = async ({
     searchParams: Promise<{ error?: string }>;
 }) => {
     const session = await auth.api.getSession({ headers: await headers() });
-    if (session) redirect("/");
+    if (session) redirect("/dashboard");
 
     const { error } = await searchParams;
 

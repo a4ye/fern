@@ -10,7 +10,7 @@ const SESSION_COOKIE = "__Secure-better-auth.session_token";
 const SIGNED_IN = `${SESSION_COOKIE}=abc.def`;
 
 const PUBLIC_PATHS = ["/", "/privacy", "/terms", "/cookies"];
-const GATED_PATH = "/applications";
+const GATED_PATH = "/dashboard";
 
 const requestFor = (path: string, cookie?: string) =>
     new NextRequest(new URL(path, "https://tracker.test"), {
