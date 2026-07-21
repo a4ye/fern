@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Be_Vietnam_Pro } from "next/font/google";
 import { Toaster } from "sonner";
+import { APP_NAME } from "@/lib/site";
 import "./globals.css";
 
 const beVietnamPro = Be_Vietnam_Pro({
@@ -10,7 +11,10 @@ const beVietnamPro = Be_Vietnam_Pro({
 });
 
 export const metadata: Metadata = {
-    title: "Job Tracker",
+    title: {
+        default: APP_NAME,
+        template: `%s | ${APP_NAME}`,
+    },
     description: "Track applications, interviews, and offers.",
 };
 

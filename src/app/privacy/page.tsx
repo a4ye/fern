@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { APP_NAME } from "@/lib/site";
 import { LegalPage } from "@/components/legal/legal-page";
 
 export const metadata: Metadata = {
@@ -8,7 +9,7 @@ export const metadata: Metadata = {
 const Privacy = () => (
     <LegalPage title="Privacy Policy">
         <p>
-            Job Tracker connects to your email and job postings to keep your
+            {APP_NAME} connects to your email and job postings to keep your
             application record current. This policy will explain exactly what
             data is read, how it is stored, how long it is kept, and how you can
             export or delete it at any time.

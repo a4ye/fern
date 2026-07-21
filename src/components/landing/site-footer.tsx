@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Logo } from "@/components/brand/logo";
-import { GITHUB_URL } from "@/lib/site";
+import { APP_NAME, GITHUB_URL } from "@/lib/site";
 
 type FooterLink = { label: string; href: string; external?: boolean };
 
@@ -79,7 +79,7 @@ export const SiteFooter = () => (
                     >
                         <Logo className="h-5 w-auto" />
                         <span className="text-sm font-semibold tracking-tight text-ink">
-                            Job Tracker
+                            {APP_NAME}
                         </span>
                     </Link>
                     <p className="mt-4 max-w-xs text-sm leading-6 text-sub">
@@ -109,7 +109,7 @@ export const SiteFooter = () => (
             </div>
             <div className="mt-14 border-t border-hairline pt-6">
                 <p className="text-xs text-muted">
-                    Job Tracker, 2026. An open-source project.
+                    {APP_NAME}, 2026. An open-source project.
                 </p>
             </div>
         </div>

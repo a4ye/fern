@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { Logo } from "@/components/brand/logo";
-import { GITHUB_URL } from "@/lib/site";
+import { APP_NAME, GITHUB_URL } from "@/lib/site";
 
 export const LegalPage = ({
     title,
@@ -20,7 +20,7 @@ export const LegalPage = ({
                 >
                     <Logo className="h-5 w-auto" />
                     <span className="text-sm font-semibold tracking-tight text-ink">
-                        Job Tracker
+                        {APP_NAME}
                     </span>
                 </Link>
             </div>

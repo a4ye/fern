@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Logo } from "@/components/brand/logo";
-import { GITHUB_URL } from "@/lib/site";
+import { APP_NAME, GITHUB_URL } from "@/lib/site";
 
 export const SiteHeader = ({ signedIn }: { signedIn: boolean }) => (
     <header className="sticky top-0 z-50 border-b border-hairline bg-background/90 backdrop-blur-sm">
@@ -12,7 +12,7 @@ export const SiteHeader = ({ signedIn }: { signedIn: boolean }) => (
             >
                 <Logo className="h-5 w-auto" />
                 <span className="text-sm font-semibold tracking-tight text-ink">
-                    Job Tracker
+                    {APP_NAME}
                 </span>
             </Link>
             <div className="flex items-center gap-5">

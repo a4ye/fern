@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
+import { APP_NAME } from "@/lib/site";
 import { CARET_PATH, SLASH_PATH } from "@/components/brand/logo";
 import { HeroMock } from "@/components/landing/hero-mock";
 import { ParallaxLayer } from "@/components/landing/parallax-layer";
@@ -34,7 +35,7 @@ const STEPS = [
 const FINE_PRINT = [
     {
         title: "Read only",
-        body: "Job Tracker reads your recruiting mail. It never sends, moves, or deletes anything.",
+        body: `${APP_NAME} reads your recruiting mail. It never sends, moves, or deletes anything.`,
     },
     {
         title: "Open source",

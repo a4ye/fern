@@ -1,3 +1,5 @@
+import { APP_NAME } from "@/lib/site";
+
 const PanelHeader = ({ label }: { label: string }) => (
     <div className="flex h-8 items-center border-b border-hairline px-3">
         <span className="text-xs font-medium text-sub">{label}</span>
@@ -92,7 +94,7 @@ const TrackerPanel = () => (
     <div className="border border-hairline bg-background shadow-xl shadow-ink/5">
         <div className="h-0.75 bg-accent" />
         <div className="flex h-9 items-center border-b border-hairline px-4">
-            <span className="text-xs font-medium text-ink">Job Tracker</span>
+            <span className="text-xs font-medium text-ink">{APP_NAME}</span>
         </div>
         <div className="flex items-center gap-3 px-4 py-3">
             <span className="flex size-6 shrink-0 items-center justify-center border border-tile-border bg-background text-xs font-medium text-accent">

@@ -2,12 +2,13 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { APP_NAME } from "@/lib/site";
 import { Logo } from "@/components/brand/logo";
 import { LoginArt } from "@/components/login/login-art";
 import { SignInButton } from "@/components/login/sign-in-button";
 
 export const metadata: Metadata = {
-    title: "Sign in | Job Tracker",
+    title: "Sign in",
 };
 
 const LoginPage = async ({
@@ -29,7 +30,7 @@ const LoginPage = async ({
                         <Logo className="h-8 w-auto" />
 
                         <h1 className="mt-8 text-2xl font-semibold tracking-tight">
-                            Sign in to Job Tracker
+                            Sign in to {APP_NAME}
                         </h1>
                         <p className="mt-2 text-sm leading-6 text-sub">
                             The faster way to track your applications.

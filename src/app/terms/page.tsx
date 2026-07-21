@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { APP_NAME } from "@/lib/site";
 import { LegalPage } from "@/components/legal/legal-page";
 
 export const metadata: Metadata = {
@@ -8,7 +9,7 @@ export const metadata: Metadata = {
 const Terms = () => (
     <LegalPage title="Terms of Service">
         <p>
-            These terms will cover acceptable use of Job Tracker, the
+            These terms will cover acceptable use of {APP_NAME}, the
             responsibilities of both sides, and the limits of the service while
             it is in active development.
         </p>
