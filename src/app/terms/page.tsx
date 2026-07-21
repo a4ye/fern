@@ -14,8 +14,8 @@ const Terms = () => (
         </p>
         <p>
             The full text is being finalized ahead of launch. By using the
-            service in the meantime, you accept that it is a work in progress and
-            provided without warranty.
+            service in the meantime, you accept that it is a work in progress
+            and provided without warranty.
         </p>
     </LegalPage>
 );

@@ -1,4 +1,4 @@
-    import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { GITHUB_URL } from "@/lib/site";
 
 describe("GITHUB_URL", () => {

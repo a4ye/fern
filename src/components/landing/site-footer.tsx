@@ -16,7 +16,11 @@ const FOOTER_COLUMNS: { title: string; links: FooterLink[] }[] = [
         title: "Project",
         links: [
             { label: "Source code", href: GITHUB_URL, external: true },
-            { label: "Report an issue", href: `${GITHUB_URL}/issues`, external: true },
+            {
+                label: "Report an issue",
+                href: `${GITHUB_URL}/issues`,
+                external: true,
+            },
         ],
     },
     {
@@ -29,7 +33,13 @@ const FOOTER_COLUMNS: { title: string; links: FooterLink[] }[] = [
     },
 ];
 
-const FooterColumn = ({ title, links }: { title: string; links: FooterLink[] }) => (
+const FooterColumn = ({
+    title,
+    links,
+}: {
+    title: string;
+    links: FooterLink[];
+}) => (
     <div>
         <h3 className="text-xs font-medium text-muted">{title}</h3>
         <ul className="mt-4 space-y-3">
