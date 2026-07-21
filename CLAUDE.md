@@ -37,6 +37,7 @@ Enforced by Prettier + ESLint. Key settings:
 ## UI & Design
 
 - Follow `DESIGN.md` for all UI. Design tokens are Tailwind theme values in `src/app/globals.css` (`bg-background`, `bg-surface`, `text-ink`, `text-sub`, `text-muted`, `border-hairline`, `border-faint`, `bg-accent`, `accent-tint`, `gold`, `rose`, `tile-border`)
+- Never use em dashes (—) in UI copy. Split into two sentences, or use a comma or period instead
 - Default to square corners; `rounded-*` is available but reserved for the rare case that justifies it
 - Prefer built-in Tailwind scale values over arbitrary ones: `text-xs` not `text-[11px]`, `h-0.75` not `h-[3px]`
 - Icons: Iconify Tailwind plugin, e.g. `icon-[simple-icons--github]`. Add sets with `bun add -d @iconify-json/<set>`

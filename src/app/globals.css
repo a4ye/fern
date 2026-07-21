@@ -1,4 +1,6 @@
 @import "tailwindcss";
+@import "./landing-animations.css";
+
 @plugin "@iconify/tailwind4";
 
 @theme {
@@ -14,15 +16,21 @@
     --color-faint: #eeeee8;
     --color-ink: #2c2f28;
     --color-muted: #9aa08f;
-    --color-muted-alt: #a3a599;
     --color-sub: #7c8274;
     --color-gold: #8a6f3f;
     --color-rose: #b0908c;
+    --color-rose-tint: #f4eae8;
     --color-tile-border: #d9ded0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    html {
+        scroll-behavior: smooth;
+    }
 }
 
 body {
     background: var(--color-background);
     color: var(--color-ink);
-    font-family: var(--font-sans);
+    font-family: var(--font-sans), sans-serif;
 }
