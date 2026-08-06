@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "./landing-animations.css";
+@import "./skeleton.css";
 
 @plugin "@iconify/tailwind4";
 
@@ -33,4 +34,28 @@ body {
     background: var(--color-background);
     color: var(--color-ink);
     font-family: var(--font-sans), sans-serif;
+}
+
+/* The checkbox is the one control browsers insist on rounding, so it is redrawn
+   from scratch to keep the UI square. */
+input[type="checkbox"] {
+    appearance: none;
+    border: 1px solid var(--color-tile-border);
+    background-color: var(--color-background);
+}
+
+input[type="checkbox"]:checked,
+input[type="checkbox"]:indeterminate {
+    border-color: var(--color-accent);
+    background-color: var(--color-accent);
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+input[type="checkbox"]:checked {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23fbfbf9' stroke-width='2.5'><path d='M3.5 8.5l3 3 6-6'/></svg>");
+}
+
+input[type="checkbox"]:indeterminate {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23fbfbf9' stroke-width='2.5'><path d='M4 8h8'/></svg>");
 }
