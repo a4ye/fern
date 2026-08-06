@@ -2,6 +2,11 @@
 
 # Project Context
 
+## Token Usage
+
+- Tool calls are expensive, try to minimize them.
+- Avoid using Chrome or Playwright MCP unless necessary, since they burn tokens quickly.
+
 ## Stack
 
 - **Runtime / package manager**: Bun (`bun install`, `bun run <script>`) — no npm, no yarn

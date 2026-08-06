@@ -205,7 +205,9 @@ export const EmailSyncMenu = ({ panel }: { panel: EmailSyncPanel }) => {
                             {panel.connected && panel.lastSyncedAt && (
                                 <span className="truncate text-xs text-muted">
                                     Synced{" "}
-                                    {formatRelative(new Date(panel.lastSyncedAt))}
+                                    {formatRelative(
+                                        new Date(panel.lastSyncedAt),
+                                    )}
                                 </span>
                             )}
                         </div>

@@ -1,8 +1,5 @@
 import { auth, emailSyncEnabled, GOOGLE_PROVIDER_ID } from "@/lib/auth";
-import {
-    getLastSyncedAt,
-    listPendingSuggestions,
-} from "@/db/email";
+import { getLastSyncedAt, listPendingSuggestions } from "@/db/email";
 import type { EmailSyncPanel } from "@/components/dashboard/data";
 
 // Assembles the dashboard's email panel: whether the feature is configured,

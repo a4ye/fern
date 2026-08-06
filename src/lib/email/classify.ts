@@ -1,7 +1,10 @@
 import { generateObject } from "ai";
 import { google } from "@ai-sdk/google";
 import { z } from "zod";
-import { STATUS_META, type ApplicationStatus } from "@/components/dashboard/data";
+import {
+    STATUS_META,
+    type ApplicationStatus,
+} from "@/components/dashboard/data";
 import type { NormalizedEmail } from "./types";
 
 // Calls the Google Generative AI API directly (reads GOOGLE_GENERATIVE_AI_API_KEY).
@@ -46,7 +49,9 @@ const matchSchema = z.object({
     applicationIndex: z
         .number()
         .int()
-        .describe("Index of the matching application from the APPLICATIONS list."),
+        .describe(
+            "Index of the matching application from the APPLICATIONS list.",
+        ),
     suggestedStatus: z
         .enum(SUGGESTABLE_STATUSES)
         .describe("The status this email implies the application has reached."),

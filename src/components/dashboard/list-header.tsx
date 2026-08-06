@@ -210,7 +210,9 @@ export const ListHeader = ({
                     {initialName}
                 </h1>
                 {initialDescription && (
-                    <p className="mt-2 text-sm text-sub">{initialDescription}</p>
+                    <p className="mt-2 text-sm text-sub">
+                        {initialDescription}
+                    </p>
                 )}
                 <span
                     className={`mt-2 inline-flex items-center border px-2 py-0.5 text-xs font-medium ${currentStatus.className}`}

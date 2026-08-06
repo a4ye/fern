@@ -41,7 +41,7 @@ const LoginPage = async ({
                         <Logo className="h-8 w-auto" />
 
                         <h1 className="mt-8 text-2xl font-semibold tracking-tight">
-                            Sign in to  {APP_NAME}
+                            Sign in to {APP_NAME}
                         </h1>
                         <p className="mt-2 text-sm leading-6 text-sub">
                             The faster way to track your applications.

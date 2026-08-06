@@ -23,7 +23,13 @@ const RootLayout = ({
 }: Readonly<{
     children: React.ReactNode;
 }>) => (
-    <html lang="en" className={`${beVietnamPro.variable} h-full antialiased`}>
+    // Browser extensions (LanguageTool, Grammarly) add attributes to <html>
+    // before React hydrates. This suppresses the mismatch one level deep only.
+    <html
+        lang="en"
+        className={`${beVietnamPro.variable} h-full antialiased`}
+        suppressHydrationWarning
+    >
         <body className="flex min-h-full flex-col">
             {children}
             <Toaster

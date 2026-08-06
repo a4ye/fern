@@ -50,10 +50,7 @@ const extractBody = (part: GmailPart | undefined): string => {
     return "";
 };
 
-const findPart = (
-    part: GmailPart,
-    mimeType: string,
-): GmailPart | undefined => {
+const findPart = (part: GmailPart, mimeType: string): GmailPart | undefined => {
     if (part.mimeType === mimeType && part.body?.data) return part;
     for (const child of part.parts ?? []) {
         const found = findPart(child, mimeType);
