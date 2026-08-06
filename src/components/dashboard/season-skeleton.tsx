@@ -23,7 +23,9 @@ const ApplicationRowSkeleton = () => (
         <span className="skeleton size-3.5" />
         <Cell width="w-28" />
         <Cell width="w-36" />
-        <Cell width="w-20" />
+        {/* Status renders as a bordered plate in the real row, so the placeholder
+            matches that box rather than a text line. */}
+        <span className="skeleton h-5.5 w-20" />
         <Cell width="w-24" />
         <Cell width="w-14" />
         <Cell width="w-16" />
@@ -74,18 +76,25 @@ export const SeasonPageSkeleton = () => (
         </div>
 
         <section className="mt-4 border border-hairline bg-background">
-            <div className="flex h-10 items-center justify-between border-b border-hairline px-5">
-                <h2 className="text-xs font-medium text-muted">Applications</h2>
-                <span aria-hidden="true" className="skeleton h-3 w-4" />
+            <div className="flex h-12 items-center justify-between gap-4 border-b border-hairline px-5">
+                <h2 className="flex items-baseline gap-2 text-xs font-medium text-muted">
+                    Applications
+                    <span
+                        aria-hidden="true"
+                        className="skeleton h-3 w-4 self-center"
+                    />
+                </h2>
+                <div aria-hidden="true" className="flex items-center gap-2">
+                    <span className="skeleton h-8 w-24" />
+                    <span className="skeleton h-8 w-36" />
+                </div>
             </div>
-            <div
-                aria-hidden="true"
-                className="border-b border-hairline px-5 py-2"
-            >
-                <span className="skeleton block h-7 w-32" />
-            </div>
-            <div className="overflow-hidden">
-                <ApplicationsHeaderRow />
+            <div className="max-h-[70vh] overflow-auto">
+                <ApplicationsHeaderRow
+                    selectAll={
+                        <span aria-hidden="true" className="skeleton size-3.5" />
+                    }
+                />
                 <ul aria-hidden="true">
                     {Array.from({ length: 10 }, (_, index) => (
                         <ApplicationRowSkeleton key={index} />
