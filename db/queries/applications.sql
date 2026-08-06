@@ -45,7 +45,7 @@ select
     updated_at
 from applications
 where list_id = $1
-order by position asc, created_at asc;
+order by created_at desc, position desc;
 
 -- name: PipelineForList :many
 select status, count(*)::int as count
