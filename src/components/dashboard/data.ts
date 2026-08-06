@@ -24,7 +24,20 @@ export type Arrangement = "remote" | "hybrid" | "onsite";
 export type PayPeriod =
     "hourly" | "weekly" | "biweekly" | "monthly" | "yearly" | "one_time";
 
-export type StatusMeta = { label: string; tile: string; text: string };
+// `plate` is the bordered chip used wherever a status is shown on its own, so
+// applications read the same way lists do on the index.
+export type StatusMeta = {
+    label: string;
+    tile: string;
+    text: string;
+    plate: string;
+};
+
+const NEUTRAL_PLATE = "border-hairline bg-surface text-muted";
+const SOFT_PLATE = "border-accent-tint bg-accent-tint-soft text-sub";
+const SAGE_PLATE = "border-accent-tint bg-accent-tint text-accent-deep";
+const GOLD_PLATE = "border-gold/30 bg-gold/10 text-gold";
+const ROSE_PLATE = "border-rose/30 bg-rose-tint text-rose";
 
 // Early stages muted, mid stages sage, offer gold, accepted deep sage, closed rose.
 export const STATUS_META: Record<ApplicationStatus, StatusMeta> = {
@@ -32,47 +45,267 @@ export const STATUS_META: Record<ApplicationStatus, StatusMeta> = {
         label: "Not applied",
         tile: "bg-tile-border",
         text: "text-muted",
+        plate: NEUTRAL_PLATE,
     },
-    applied: { label: "Applied", tile: "bg-tile-border", text: "text-sub" },
+    applied: {
+        label: "Applied",
+        tile: "bg-tile-border",
+        text: "text-sub",
+        plate: "border-hairline bg-surface text-sub",
+    },
     online_assessment: {
         label: "Online assessment",
         tile: "bg-accent-tint",
         text: "text-sub",
+        plate: SOFT_PLATE,
     },
-    takehome: { label: "Take-home", tile: "bg-accent-tint", text: "text-sub" },
+    takehome: {
+        label: "Take-home",
+        tile: "bg-accent-tint",
+        text: "text-sub",
+        plate: SOFT_PLATE,
+    },
     interviewing: {
         label: "Interviewing",
         tile: "bg-accent",
         text: "text-accent-deep",
+        plate: SAGE_PLATE,
     },
     onsite: {
         label: "Onsite",
         tile: "bg-accent-deep",
         text: "text-accent-deep",
+        plate: SAGE_PLATE,
     },
     offer_in_progress: {
         label: "Offer in progress",
         tile: "bg-gold",
         text: "text-gold",
+        plate: GOLD_PLATE,
     },
     offer_accepted: {
         label: "Offer accepted",
         tile: "bg-accent-deep",
         text: "text-accent-deep",
+        plate: "border-accent bg-accent-tint text-accent-deep",
     },
     offer_declined: {
         label: "Offer declined",
         tile: "bg-rose/40",
         text: "text-muted",
+        plate: NEUTRAL_PLATE,
     },
     offer_rescinded: {
         label: "Offer rescinded",
         tile: "bg-rose",
         text: "text-rose",
+        plate: ROSE_PLATE,
     },
-    rejected: { label: "Rejected", tile: "bg-rose", text: "text-rose" },
-    ghosted: { label: "Ghosted", tile: "bg-rose/40", text: "text-muted" },
-    other: { label: "Other", tile: "bg-tile-border", text: "text-muted" },
+    rejected: {
+        label: "Rejected",
+        tile: "bg-rose",
+        text: "text-rose",
+        plate: ROSE_PLATE,
+    },
+    ghosted: {
+        label: "Ghosted",
+        tile: "bg-rose/40",
+        text: "text-muted",
+        plate: NEUTRAL_PLATE,
+    },
+    other: {
+        label: "Other",
+        tile: "bg-tile-border",
+        text: "text-muted",
+        plate: NEUTRAL_PLATE,
+    },
+};
+
+// Search terms that stand in for a status without appearing in its label, so
+// typing what happened ("hackerrank", "no reply", "signed") finds the right one.
+// The status vocabulary is closed and small, which is why a written-out list
+// beats anything model-driven here: it is exhaustive, instant, and offline.
+export const STATUS_KEYWORDS: Record<ApplicationStatus, string[]> = {
+    not_applied: [
+        "not applied",
+        "todo",
+        "to do",
+        "saved",
+        "bookmarked",
+        "wishlist",
+        "shortlist",
+        "backlog",
+        "planned",
+        "queued",
+        "prospect",
+        "lead",
+        "open",
+        "draft",
+        "havent applied",
+        "yet to apply",
+    ],
+    applied: [
+        "applied",
+        "submitted",
+        "sent",
+        "application sent",
+        "in review",
+        "under review",
+        "pending",
+        "waiting",
+        "awaiting",
+        "no news",
+        "resume sent",
+        "applied online",
+    ],
+    online_assessment: [
+        "online assessment",
+        "oa",
+        "assessment",
+        "codesignal",
+        "hackerrank",
+        "codility",
+        "leetcode",
+        "coderbyte",
+        "karat",
+        "hirevue",
+        "coding test",
+        "coding challenge",
+        "timed test",
+        "screening test",
+        "quiz",
+        "aptitude",
+    ],
+    takehome: [
+        "take home",
+        "takehome",
+        "project",
+        "assignment",
+        "coding project",
+        "homework",
+        "exercise",
+        "case study",
+        "work sample",
+    ],
+    interviewing: [
+        "interview",
+        "interviews",
+        "phone screen",
+        "phone interview",
+        "recruiter call",
+        "recruiter screen",
+        "hr screen",
+        "screen",
+        "technical interview",
+        "tech screen",
+        "behavioral",
+        "system design",
+        "first round",
+        "second round",
+        "video interview",
+        "chat",
+    ],
+    onsite: [
+        "onsite",
+        "on site",
+        "final round",
+        "final",
+        "superday",
+        "super day",
+        "loop",
+        "panel",
+        "last round",
+        "in person",
+        "site visit",
+        "office visit",
+    ],
+    offer_in_progress: [
+        "offer in progress",
+        "offer",
+        "verbal offer",
+        "pending offer",
+        "negotiating",
+        "negotiation",
+        "reviewing offer",
+        "deciding",
+        "considering",
+        "compensation",
+        "comp",
+        "terms",
+        "deadline",
+    ],
+    offer_accepted: [
+        "offer accepted",
+        "accepted",
+        "signed",
+        "signed offer",
+        "hired",
+        "joined",
+        "took it",
+        "got the job",
+        "yes",
+        "won",
+    ],
+    offer_declined: [
+        "offer declined",
+        "declined",
+        "turned it down",
+        "passed",
+        "no thanks",
+        "withdrew",
+        "walked away",
+        "said no",
+        "went elsewhere",
+    ],
+    offer_rescinded: [
+        "offer rescinded",
+        "rescinded",
+        "revoked",
+        "offer pulled",
+        "pulled",
+        "reneged",
+        "cancelled",
+        "canceled",
+        "role closed",
+        "backed out",
+    ],
+    rejected: [
+        "rejected",
+        "rejection",
+        "denied",
+        "no",
+        "not selected",
+        "not moving forward",
+        "unsuccessful",
+        "pass",
+        "dinged",
+        "ding",
+        "lost",
+        "eliminated",
+    ],
+    ghosted: [
+        "ghosted",
+        "ghost",
+        "no reply",
+        "no response",
+        "never heard back",
+        "silence",
+        "radio silence",
+        "stale",
+        "ignored",
+        "abandoned",
+        "dead",
+    ],
+    other: [
+        "other",
+        "misc",
+        "miscellaneous",
+        "unknown",
+        "unsure",
+        "not sure",
+        "custom",
+        "something else",
+    ],
 };
 
 // Statuses that count as still moving through the pipeline (not terminal).
@@ -145,17 +378,35 @@ export type ApplicationRow = {
     company: string;
     role: string | null;
     status: ApplicationStatus;
+    // `pay` is the rendered label, which may come from the structured pay range;
+    // `payNote` is the free-text field the editor writes back to.
     pay: string | null;
+    payNote: string | null;
     location: string | null;
     arrangement: Arrangement | null;
+    appliedAt: string | null;
     url: string | null;
     notes: string | null;
     updated: string;
 };
 
-export type Stat = { label: string; value: string; detail: string };
+export const ARRANGEMENTS: Arrangement[] = ["remote", "hybrid", "onsite"];
+
+export const APPLICATION_STATUSES = Object.keys(
+    STATUS_META,
+) as ApplicationStatus[];
+
+export type Stat = { label: string; value: string };
 
 export type PipelineEntry = { status: ApplicationStatus; count: number };
+
+// One application's status history, so the flow chart can show where things
+// travelled rather than only where they ended up. `history` is chronological,
+// earliest first, and ends on the current status. It may revisit a status.
+export type FlowEntry = {
+    status: ApplicationStatus;
+    history: ApplicationStatus[];
+};
 
 export type ActivityItem = {
     id: string;
@@ -173,6 +424,7 @@ export type ListDetail = {
     stats: Stat[];
     applications: ApplicationRow[];
     pipeline: PipelineEntry[];
+    flow: FlowEntry[];
     activity: ActivityItem[];
 };
 
@@ -205,15 +457,20 @@ export type EmailSyncPanel = {
 
 const moneyFormatters = new Map<string, Intl.NumberFormat>();
 
+// Salaries read better whole, but cents are the whole point of an hourly rate
+// like $32.50, so they are kept only when the amount actually has them.
 const formatMoney = (amount: number, currency: string): string => {
-    let formatter = moneyFormatters.get(currency);
+    const cents = !Number.isInteger(amount);
+    const key = `${currency}:${cents}`;
+    let formatter = moneyFormatters.get(key);
     if (!formatter) {
         formatter = new Intl.NumberFormat("en-US", {
             style: "currency",
             currency,
-            maximumFractionDigits: 0,
+            minimumFractionDigits: cents ? 2 : 0,
+            maximumFractionDigits: cents ? 2 : 0,
         });
-        moneyFormatters.set(currency, formatter);
+        moneyFormatters.set(key, formatter);
     }
     return formatter.format(amount);
 };
@@ -239,6 +496,38 @@ export const formatPay = (input: {
             ? `${formatMoney(min, currency)}–${formatMoney(max, currency)}`
             : formatMoney((min ?? max) as number, currency);
     return `${base}${suffix}`;
+};
+
+const MONTHS = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+];
+
+// Applied dates come from a `date` column, which carries no time zone, so they
+// travel as plain yyyy-mm-dd strings and are formatted from their parts. Going
+// through `new Date(value)` would read them as UTC midnight and land on the
+// previous day for anyone west of it.
+export const toDateInput = (date: Date): string =>
+    [
+        date.getFullYear(),
+        `${date.getMonth() + 1}`.padStart(2, "0"),
+        `${date.getDate()}`.padStart(2, "0"),
+    ].join("-");
+
+export const formatDay = (value: string): string => {
+    const [year, month, day] = value.split("-").map(Number);
+    const label = `${MONTHS[month - 1]} ${day}`;
+    return year === new Date().getFullYear() ? label : `${label}, ${year}`;
 };
 
 export const formatEdited = (iso: string): string =>
