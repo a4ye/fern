@@ -46,6 +46,38 @@ export async function recentEventsForList(client: Client, args: RecentEventsForL
     });
 }
 
+export const statusEventsForListQuery = `-- name: StatusEventsForList :many
+select e.application_id, e.from_status, e.to_status
+from application_events e
+join applications a on a.id = e.application_id
+where a.list_id = $1
+order by e.application_id, e.occurred_at`;
+
+export interface StatusEventsForListArgs {
+    listId: string;
+}
+
+export interface StatusEventsForListRow {
+    applicationId: string;
+    fromStatus: string | null;
+    toStatus: string | null;
+}
+
+export async function statusEventsForList(client: Client, args: StatusEventsForListArgs): Promise<StatusEventsForListRow[]> {
+    const result = await client.query({
+        text: statusEventsForListQuery,
+        values: [args.listId],
+        rowMode: "array"
+    });
+    return result.rows.map(row => {
+        return {
+            applicationId: row[0],
+            fromStatus: row[1],
+            toStatus: row[2]
+        };
+    });
+}
+
 export const insertApplicationEventQuery = `-- name: InsertApplicationEvent :exec
 insert into application_events (application_id, from_status, to_status, note)
 values ($1, $2, $3, $4)`;

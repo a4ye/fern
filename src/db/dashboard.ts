@@ -7,10 +7,12 @@ import {
     STATUS_META,
     formatPay,
     formatRelative,
+    toDateInput,
     type ApplicationRow,
     type ApplicationStatus,
     type Arrangement,
     type ActivityItem,
+    type FlowEntry,
     type ListDetail,
     type ListSort,
     type ListStatus,
@@ -19,6 +21,7 @@ import {
     type PipelineEntry,
     type Stat,
 } from "@/components/dashboard/data";
+import { parsePay } from "@/lib/pay";
 
 const STATUS_ORDER = Object.keys(STATUS_META) as ApplicationStatus[];
 
@@ -83,27 +86,123 @@ export const createList = async (
     };
 };
 
+export type ApplicationInput = {
+    company: string;
+    role: string | null;
+    status: ApplicationStatus;
+    location: string | null;
+    arrangement: Arrangement | null;
+    pay: string | null;
+    appliedAt: string | null;
+    url: string | null;
+};
+
+// Builds the Date from the parts so the driver sends the day the user picked,
+// rather than the UTC instant that a yyyy-mm-dd string parses to.
+const parseDateInput = (value: string | null): Date | null => {
+    if (!value) return null;
+    const [year, month, day] = value.split("-").map(Number);
+    return new Date(year, month - 1, day);
+};
+
+// The column set shared by insert and update, including pay split out of the
+// free-text field the user types.
+const columnsFrom = (input: ApplicationInput) => ({
+    companyName: input.company,
+    roleTitle: input.role,
+    status: input.status,
+    url: input.url,
+    location: input.location,
+    arrangement: input.arrangement,
+    appliedAt: parseDateInput(input.appliedAt),
+    ...parsePay(input.pay),
+});
+
 export const createApplication = async (
     userId: string,
     listId: string,
-    input: {
-        company: string;
-        role: string | null;
-        url: string | null;
-        location: string | null;
-        pay: string | null;
-    },
+    input: ApplicationInput,
 ): Promise<boolean> => {
     const row = await gen.createApplication(getPool(), {
         userId,
         listId,
-        companyName: input.company,
-        roleTitle: input.role,
-        url: input.url,
-        location: input.location,
-        payNote: input.pay,
+        ...columnsFrom(input),
     });
     return row !== null;
+};
+
+export const updateApplication = async (
+    userId: string,
+    applicationId: string,
+    input: ApplicationInput,
+): Promise<void> => {
+    const pool = getPool();
+    const current = await gen.getApplicationForUser(pool, {
+        applicationId,
+        userId,
+    });
+    if (!current) return;
+
+    await gen.updateApplication(pool, {
+        applicationId,
+        userId,
+        ...columnsFrom(input),
+    });
+
+    if (current.status !== input.status) {
+        await gen.insertApplicationEvent(pool, {
+            applicationId,
+            fromStatus: current.status,
+            toStatus: input.status,
+            note: null,
+        });
+    }
+};
+
+export const updateApplications = async (
+    userId: string,
+    rows: { id: string; input: ApplicationInput }[],
+): Promise<void> => {
+    for (const row of rows) {
+        await updateApplication(userId, row.id, row.input);
+    }
+};
+
+export const setApplicationsStatus = async (
+    userId: string,
+    applicationIds: string[],
+    status: ApplicationStatus,
+): Promise<void> => {
+    const pool = getPool();
+    const args = { applicationIds, userId, status };
+    await gen.insertStatusEvents(pool, args);
+    await gen.setApplicationsStatus(pool, args);
+};
+
+export const setApplicationsArrangement = async (
+    userId: string,
+    applicationIds: string[],
+    arrangement: Arrangement | null,
+): Promise<void> => {
+    await gen.setApplicationsArrangement(getPool(), {
+        applicationIds,
+        userId,
+        arrangement,
+    });
+};
+
+export const deleteApplication = async (
+    userId: string,
+    applicationId: string,
+): Promise<void> => {
+    await gen.deleteApplication(getPool(), { applicationId, userId });
+};
+
+export const deleteApplications = async (
+    userId: string,
+    applicationIds: string[],
+): Promise<void> => {
+    await gen.deleteApplications(getPool(), { applicationIds, userId });
 };
 
 export const updateList = async (
@@ -149,11 +248,13 @@ export const getListDetail = async (
     const list = await gen.getListForUser(pool, { id: listId, userId });
     if (!list) return null;
 
-    const [applicationRows, pipelineRows, eventRows] = await Promise.all([
-        gen.listApplicationsForList(pool, { listId }),
-        gen.pipelineForList(pool, { listId }),
-        gen.recentEventsForList(pool, { listId }),
-    ]);
+    const [applicationRows, pipelineRows, eventRows, statusEventRows] =
+        await Promise.all([
+            gen.listApplicationsForList(pool, { listId }),
+            gen.pipelineForList(pool, { listId }),
+            gen.recentEventsForList(pool, { listId }),
+            gen.statusEventsForList(pool, { listId }),
+        ]);
 
     const applications: ApplicationRow[] = applicationRows.map((row) => ({
         id: row.id,
@@ -167,8 +268,10 @@ export const getListDetail = async (
             payPeriod: row.payPeriod as PayPeriod | null,
             payNote: row.payNote,
         }),
+        payNote: row.payNote,
         location: row.location,
         arrangement: row.arrangement as Arrangement | null,
+        appliedAt: row.appliedAt ? toDateInput(row.appliedAt) : null,
         url: row.url,
         notes: row.notes,
         updated: formatRelative(row.updatedAt),
@@ -188,24 +291,32 @@ export const getListDetail = async (
         counts.has(status),
     ).map((status) => ({ status, count: counts.get(status) as number }));
 
-    const total = applications.length;
+    // Rows arrive ordered by application and time, so appending each event's
+    // target status replays the trail. The first event also contributes where
+    // it started from, which is the only record of the status on creation.
+    const trails = new Map<string, ApplicationStatus[]>();
+    for (const row of statusEventRows) {
+        let trail = trails.get(row.applicationId);
+        if (!trail) {
+            trail = [];
+            trails.set(row.applicationId, trail);
+            if (row.fromStatus) trail.push(row.fromStatus as ApplicationStatus);
+        }
+        if (row.toStatus) trail.push(row.toStatus as ApplicationStatus);
+    }
+
+    const flow: FlowEntry[] = applicationRows.map((row) => {
+        const status = row.status as ApplicationStatus;
+        const history = [...(trails.get(row.id) ?? [])];
+        if (history[history.length - 1] !== status) history.push(status);
+        return { status, history };
+    });
+
     const stats: Stat[] = [
-        { label: "Total", value: String(total), detail: "applications" },
-        {
-            label: "Active",
-            value: String(sumOf(ACTIVE_STATUSES)),
-            detail: "in the pipeline",
-        },
-        {
-            label: "Interviewing",
-            value: String(sumOf(INTERVIEWING_STATUSES)),
-            detail: "in progress",
-        },
-        {
-            label: "Offers",
-            value: String(sumOf(OFFER_STATUSES)),
-            detail: "on the table",
-        },
+        { label: "Total", value: String(applications.length) },
+        { label: "Active", value: String(sumOf(ACTIVE_STATUSES)) },
+        { label: "Interviewing", value: String(sumOf(INTERVIEWING_STATUSES)) },
+        { label: "Offers", value: String(sumOf(OFFER_STATUSES)) },
     ];
 
     const activity: ActivityItem[] = eventRows.map((row, index) => ({
@@ -224,6 +335,7 @@ export const getListDetail = async (
         stats,
         applications,
         pipeline,
+        flow,
         activity,
     };
 };
