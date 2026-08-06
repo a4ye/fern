@@ -24,7 +24,7 @@ export type Arrangement = "remote" | "hybrid" | "onsite";
 export type PayPeriod =
     "hourly" | "weekly" | "biweekly" | "monthly" | "yearly" | "one_time";
 
-// `plate` is the bordered chip used wherever a status is shown on its own, so
+// `plate` is the filled chip used wherever a status is shown on its own, so
 // applications read the same way lists do on the index.
 export type StatusMeta = {
     label: string;
@@ -33,11 +33,14 @@ export type StatusMeta = {
     plate: string;
 };
 
-const NEUTRAL_PLATE = "border-hairline bg-surface text-muted";
-const SOFT_PLATE = "border-accent-tint bg-accent-tint-soft text-sub";
-const SAGE_PLATE = "border-accent-tint bg-accent-tint text-accent-deep";
-const GOLD_PLATE = "border-gold/30 bg-gold/10 text-gold";
-const ROSE_PLATE = "border-rose/30 bg-rose-tint text-rose";
+// Plates are borderless, so each fill has to stay legible against the row
+// backgrounds it sits on: bg-background, bg-surface on hover, and
+// bg-accent-tint-soft when selected.
+const NEUTRAL_PLATE = "bg-hairline text-sub";
+const SOFT_PLATE = "bg-accent-tint text-sub";
+const SAGE_PLATE = "bg-accent-tint text-accent-deep";
+const GOLD_PLATE = "bg-gold-tint text-gold";
+const ROSE_PLATE = "bg-rose-tint text-rose";
 
 // Early stages muted, mid stages sage, offer gold, accepted deep sage, closed rose.
 export const STATUS_META: Record<ApplicationStatus, StatusMeta> = {
@@ -51,7 +54,7 @@ export const STATUS_META: Record<ApplicationStatus, StatusMeta> = {
         label: "Applied",
         tile: "bg-tile-border",
         text: "text-sub",
-        plate: "border-hairline bg-surface text-sub",
+        plate: NEUTRAL_PLATE,
     },
     online_assessment: {
         label: "Online assessment",
@@ -87,7 +90,7 @@ export const STATUS_META: Record<ApplicationStatus, StatusMeta> = {
         label: "Offer accepted",
         tile: "bg-accent-deep",
         text: "text-accent-deep",
-        plate: "border-accent bg-accent-tint text-accent-deep",
+        plate: SAGE_PLATE,
     },
     offer_declined: {
         label: "Offer declined",

@@ -20,17 +20,17 @@ const STATUS_OPTIONS: {
     {
         value: "active",
         label: "Active",
-        className: "border-accent-tint bg-accent-tint-soft text-accent-deep",
+        className: "bg-accent-tint text-accent-deep",
     },
     {
         value: "closed",
         label: "Closed",
-        className: "border-hairline bg-surface text-muted",
+        className: "bg-hairline text-sub",
     },
     {
         value: "archived",
         label: "Archived",
-        className: "border-hairline bg-surface text-muted",
+        className: "bg-hairline text-sub",
     },
 ];
 
@@ -144,7 +144,7 @@ export const ListHeader = ({
                                 key={opt.value}
                                 type="button"
                                 onClick={() => setStatus(opt.value)}
-                                className={`inline-flex cursor-pointer items-center border px-2 py-0.5 text-xs font-medium transition-opacity ${opt.className} ${status !== opt.value ? "opacity-40" : ""}`}
+                                className={`inline-flex cursor-pointer items-center px-2 py-0.5 text-xs font-medium transition-opacity ${opt.className} ${status !== opt.value ? "opacity-40" : ""}`}
                             >
                                 {opt.label}
                             </button>
@@ -215,7 +215,7 @@ export const ListHeader = ({
                     </p>
                 )}
                 <span
-                    className={`mt-2 inline-flex items-center border px-2 py-0.5 text-xs font-medium ${currentStatus.className}`}
+                    className={`mt-2 inline-flex items-center px-2 py-0.5 text-xs font-medium ${currentStatus.className}`}
                 >
                     {currentStatus.label}
                 </span>

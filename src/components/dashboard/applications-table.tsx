@@ -214,7 +214,7 @@ const ReadRow = ({
             <Cell value={app.role} />
             <span className="min-w-0">
                 <span
-                    className={`inline-flex max-w-full items-center truncate border px-2 py-0.5 font-medium ${meta.plate}`}
+                    className={`inline-flex max-w-full items-center truncate px-2 py-0.5 font-medium ${meta.plate}`}
                     title={meta.label}
                 >
                     {meta.label}

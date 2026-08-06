@@ -23,9 +23,9 @@ const ApplicationRowSkeleton = () => (
         <span className="skeleton size-3.5" />
         <Cell width="w-28" />
         <Cell width="w-36" />
-        {/* Status renders as a bordered plate in the real row, so the placeholder
+        {/* Status renders as a filled plate in the real row, so the placeholder
             matches that box rather than a text line. */}
-        <span className="skeleton h-5.5 w-20" />
+        <span className="skeleton h-5 w-20" />
         <Cell width="w-24" />
         <Cell width="w-14" />
         <Cell width="w-16" />

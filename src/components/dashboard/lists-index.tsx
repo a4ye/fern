@@ -37,15 +37,15 @@ import {
 const STATUS_PLATE: Record<ListStatus, { label: string; className: string }> = {
     active: {
         label: "Active",
-        className: "border-accent-tint bg-accent-tint-soft text-accent-deep",
+        className: "bg-accent-tint text-accent-deep",
     },
     closed: {
         label: "Closed",
-        className: "border-hairline bg-surface text-muted",
+        className: "bg-hairline text-sub",
     },
     archived: {
         label: "Archived",
-        className: "border-hairline bg-surface text-muted",
+        className: "bg-hairline text-sub",
     },
 };
 
@@ -55,7 +55,7 @@ const StatusPlate = ({ status }: { status: ListStatus }) => {
     const plate = STATUS_PLATE[status];
     return (
         <span
-            className={`inline-flex items-center border px-2 py-0.5 text-xs font-medium ${plate.className}`}
+            className={`inline-flex items-center px-2 py-0.5 text-xs font-medium ${plate.className}`}
         >
             {plate.label}
         </span>
@@ -325,7 +325,7 @@ const ListEditorRow = ({
                                 key={s}
                                 type="button"
                                 onClick={() => setStatus(s)}
-                                className={`inline-flex cursor-pointer items-center border px-2 py-0.5 text-xs font-medium transition-opacity ${plate.className} ${status !== s ? "opacity-40" : ""}`}
+                                className={`inline-flex cursor-pointer items-center px-2 py-0.5 text-xs font-medium transition-opacity ${plate.className} ${status !== s ? "opacity-40" : ""}`}
                             >
                                 {plate.label}
                             </button>
