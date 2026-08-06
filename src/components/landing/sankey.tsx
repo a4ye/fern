@@ -1,149 +1,108 @@
 import type { CSSProperties } from "react";
+import {
+    buildSankey,
+    sankeyRibbon,
+    type SankeyLinkSpec,
+    type SankeyNode,
+    type SankeyNodeSpec,
+} from "@/lib/sankey";
 
 const W = 640;
 const H = 320;
 const NODE_W = 10;
+const COLUMN_X = [0, 300, 630];
 
-type SankeyNode = {
-    name: string;
-    count: number;
-    x: number;
-    y: number;
-    h: number;
-    fill: string;
-    labelSide: "start" | "end";
-};
-
-// Scale: 6 viewBox units per application. Same season as the word-fill
-// copy and the pipeline: forty applications, six interviews, one offer.
-const NODES: SankeyNode[] = [
+// One season, described as a flow rather than as coordinates: forty
+// applications fan out into interviews, rejections, and silence; six
+// interviews yield a single offer. Node heights and ribbon geometry are
+// derived from these values.
+const NODE_SPECS: SankeyNodeSpec[] = [
     {
+        id: "applied",
         name: "Applied",
-        count: 40,
-        x: 0,
-        y: 40,
-        h: 240,
+        column: 0,
         fill: "var(--color-accent)",
         labelSide: "start",
     },
     {
+        id: "interview",
         name: "Interview",
-        count: 6,
-        x: 300,
-        y: 28,
-        h: 36,
+        column: 1,
         fill: "var(--color-accent)",
         labelSide: "start",
     },
     {
+        id: "offer",
         name: "Offer",
-        count: 1,
-        x: 630,
-        y: 18,
-        h: 6,
+        column: 2,
         fill: "var(--color-gold)",
         labelSide: "end",
     },
     {
+        id: "rejected",
         name: "Rejected",
-        count: 24,
-        x: 630,
-        y: 48,
-        h: 144,
+        column: 2,
         fill: "var(--color-rose)",
         labelSide: "end",
     },
     {
+        id: "noReply",
         name: "No reply",
-        count: 15,
-        x: 630,
-        y: 204,
-        h: 90,
+        column: 2,
         fill: "var(--color-tile-border)",
         labelSide: "end",
     },
 ];
 
-type SankeyLink = {
-    x0: number;
-    s0: number;
-    s1: number;
-    x1: number;
-    t0: number;
-    t1: number;
-    fill: string;
-    opacity: number;
-    shine: number;
-};
-
-const LINKS: SankeyLink[] = [
+const LINK_SPECS: SankeyLinkSpec[] = [
     {
-        x0: 10,
-        s0: 40,
-        s1: 76,
-        x1: 300,
-        t0: 28,
-        t1: 64,
+        source: "applied",
+        target: "interview",
+        value: 6,
         fill: "var(--color-accent)",
         opacity: 0.18,
         shine: 0.4,
     },
     {
-        x0: 310,
-        s0: 28,
-        s1: 34,
-        x1: 630,
-        t0: 18,
-        t1: 24,
+        source: "interview",
+        target: "offer",
+        value: 1,
         fill: "var(--color-gold)",
         opacity: 0.4,
         shine: 0.8,
     },
     {
-        x0: 310,
-        s0: 34,
-        s1: 64,
-        x1: 630,
-        t0: 48,
-        t1: 78,
+        source: "interview",
+        target: "rejected",
+        value: 5,
         fill: "var(--color-rose)",
         opacity: 0.16,
         shine: 0.36,
     },
     {
-        x0: 10,
-        s0: 76,
-        s1: 190,
-        x1: 630,
-        t0: 78,
-        t1: 192,
+        source: "applied",
+        target: "rejected",
+        value: 19,
         fill: "var(--color-rose)",
         opacity: 0.13,
         shine: 0.3,
     },
     {
-        x0: 10,
-        s0: 190,
-        s1: 280,
-        x1: 630,
-        t0: 204,
-        t1: 294,
+        source: "applied",
+        target: "noReply",
+        value: 15,
         fill: "var(--color-tile-border)",
         opacity: 0.5,
         shine: 0.9,
     },
 ];
 
-const ribbon = ({ x0, s0, s1, x1, t0, t1 }: SankeyLink) => {
-    const mx = (x0 + x1) / 2;
-    return [
-        `M${x0} ${s0}`,
-        `C${mx} ${s0} ${mx} ${t0} ${x1} ${t0}`,
-        `L${x1} ${t1}`,
-        `C${mx} ${t1} ${mx} ${s1} ${x0} ${s1}`,
-        "Z",
-    ].join(" ");
-};
+const { nodes: NODES, links: LINKS } = buildSankey(NODE_SPECS, LINK_SPECS, {
+    width: W,
+    height: H,
+    columnsX: COLUMN_X,
+    nodeWidth: NODE_W,
+});
 
 const pct = (value: number, total: number) => `${(value / total) * 100}%`;
 
@@ -163,7 +122,7 @@ const Ribbons = ({ shine = false }: { shine?: boolean }) => (
         {LINKS.map((link, index) => (
             <path
                 key={index}
-                d={ribbon(link)}
+                d={sankeyRibbon(link)}
                 fill={link.fill}
                 opacity={shine ? link.shine : link.opacity}
             />
