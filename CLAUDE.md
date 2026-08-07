@@ -5,7 +5,18 @@
 ## Token Usage
 
 - Tool calls are expensive, try to minimize them.
-- Avoid using Chrome or Playwright MCP unless necessary, since they burn tokens quickly.
+
+## Browser Automation
+
+The browser is a last resort. Ask "pixel question or data question?" first.
+
+- **Data never justifies it.** Counts, ordering, labels, whether a transform is right: run the function in a script or `bun test` and print the answer. A screenshot costs about a thousand words of context.
+- **Pixels do**: collision, overlap, spacing, responsive behaviour, scroll, overflow.
+- **Look once at the end**, not after each edit. Change, typecheck, test, then look.
+- Chart and layout helpers are pure, so a colocated `*.test.ts` case beats a screenshot and outlives the session.
+- **Playwright MCP must run headless** or it steals focus. `--headless` is set in `~/.claude/plugins/cache/claude-plugins-official/playwright/unknown/.mcp.json` and the `marketplaces/` mirror. Plugin updates revert it, and it only applies to a freshly launched server, so it needs a session restart.
+- Screenshots go to `/tmp`. Delete `.playwright-mcp/` and stray `*.png` before finishing.
+- The dashboard needs a logged-in session. If a page redirects to `/login`, say so rather than authenticating.
 
 ## Stack
 
