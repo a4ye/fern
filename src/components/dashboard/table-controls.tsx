@@ -49,6 +49,9 @@ export const primaryButtonClass =
 export const secondaryButtonClass =
     "inline-flex h-8 cursor-pointer items-center gap-1.5 border border-hairline bg-background px-3 text-sm text-ink transition-colors hover:border-tile-border focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 
+export const dangerButtonClass =
+    "inline-flex h-8 cursor-pointer items-center bg-rose px-3 text-sm font-medium text-background transition-colors hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+
 export const quietButtonClass =
     "inline-flex cursor-pointer items-center gap-1.5 text-xs text-sub transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 

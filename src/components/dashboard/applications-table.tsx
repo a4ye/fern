@@ -30,12 +30,15 @@ import {
     ARRANGEMENT_OPTIONS,
     cellFieldClass,
     checkboxClass,
+    dangerButtonClass,
+    type Option,
     editFieldClass,
     ghostButtonClass,
     primaryButtonClass,
     quietButtonClass,
     secondaryButtonClass,
 } from "@/components/dashboard/table-controls";
+import { ConfirmDialog } from "@/components/dashboard/confirm-dialog";
 import {
     STATUS_META,
     arrangementLabel,
@@ -421,13 +424,34 @@ const DeleteRow = ({
             <button
                 type="button"
                 onClick={onConfirm}
-                className="inline-flex h-8 cursor-pointer items-center bg-rose px-3 text-sm font-medium text-background transition-colors hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                className={dangerButtonClass}
             >
                 Delete
             </button>
         </div>
     </li>
 );
+
+const Divider = () => (
+    <span aria-hidden="true" className="h-4 w-px shrink-0 bg-hairline" />
+);
+
+const countLabel = (count: number) =>
+    `${count} application${count === 1 ? "" : "s"}`;
+
+// "Not set" is itself a value a bulk edit can write, so backing out of a staged
+// field needs an option of its own. It lives in the menu rather than beside it
+// so that what it resets is never in question.
+const UNCHANGED = "unchanged";
+
+const STAGED_STATUS_OPTIONS: Option<ApplicationStatus | typeof UNCHANGED>[] = [
+    { value: UNCHANGED, label: "Leave unchanged" },
+    ...STATUS_OPTIONS,
+];
+
+const STAGED_ARRANGEMENT_OPTIONS: Option<
+    Arrangement | null | typeof UNCHANGED
+>[] = [{ value: UNCHANGED, label: "Leave unchanged" }, ...ARRANGEMENT_OPTIONS];
 
 export const ApplicationsTable = ({
     listId,
@@ -443,7 +467,16 @@ export const ApplicationsTable = ({
     const [drafts, setDrafts] = useState<Map<string, Draft> | null>(null);
     const [bulkError, setBulkError] = useState<string | null>(null);
     const [bulkSaving, setBulkSaving] = useState(false);
-    const [confirmingBulkDelete, setConfirmingBulkDelete] = useState(false);
+    // A bulk edit rewrites rows that are mostly scrolled out of view, so a menu
+    // pick only stages a value here and the Apply button is what writes it.
+    const [stagedStatus, setStagedStatus] = useState<ApplicationStatus | null>(
+        null,
+    );
+    // Wrapped because null is itself a staged value, meaning "clear it".
+    const [stagedArrangement, setStagedArrangement] = useState<{
+        value: Arrangement | null;
+    } | null>(null);
+    const [confirmingDelete, setConfirmingDelete] = useState(false);
     const [adding, setAdding] = useState(false);
     const selectAllRef = useRef<HTMLInputElement>(null);
 
@@ -513,21 +546,32 @@ export const ApplicationsTable = ({
         }
     }, [selected, allSelected]);
 
-    const clearSelection = () => setSelected(new Set());
+    const clearStaged = () => {
+        setStagedStatus(null);
+        setStagedArrangement(null);
+    };
 
-    const toggleSelected = (id: string, isSelected: boolean) =>
-        setSelected((current) => {
-            const next = new Set(current);
-            if (isSelected) {
-                next.add(id);
-            } else {
-                next.delete(id);
-            }
-            return next;
-        });
+    // A staged value belongs to the selection it was staged for, so emptying the
+    // selection by any route drops it rather than leaving it primed for the next.
+    const setSelection = (next: Set<string>) => {
+        setSelected(next);
+        if (next.size === 0) clearStaged();
+    };
+
+    const clearSelection = () => setSelection(new Set());
+
+    const toggleSelected = (id: string, isSelected: boolean) => {
+        const next = new Set(selected);
+        if (isSelected) {
+            next.add(id);
+        } else {
+            next.delete(id);
+        }
+        setSelection(next);
+    };
 
     const toggleAll = (isSelected: boolean) =>
-        setSelected(
+        setSelection(
             isSelected
                 ? new Set(optimisticApplications.map((app) => app.id))
                 : new Set(),
@@ -633,11 +677,17 @@ export const ApplicationsTable = ({
     const deleteSelected = () => {
         const ids = new Set(selected);
         clearSelection();
-        setConfirmingBulkDelete(false);
         startMutation(async () => {
             applyOptimistic({ type: "delete", ids });
             await removeApplications(listId, [...ids]);
         });
+    };
+
+    // Both appliers read `selected` from this render and clear the staged
+    // values on their way out, so they can run back to back.
+    const applyStaged = () => {
+        if (stagedStatus) applyStatus(stagedStatus);
+        if (stagedArrangement) applyArrangement(stagedArrangement.value);
     };
 
     return (
@@ -715,60 +765,71 @@ export const ApplicationsTable = ({
             )}
 
             {selected.size > 0 && !bulkMode && (
-                <div className="flex h-10 flex-wrap items-center gap-5 border-b border-hairline bg-surface px-5">
-                    <span className="text-xs text-ink tabular-nums">
-                        {selected.size} selected
-                    </span>
-                    <CellSelect
-                        label="Set status for selected"
-                        placeholder="Set status"
-                        value={null}
-                        options={STATUS_OPTIONS}
-                        onChange={applyStatus}
-                        className="w-32"
-                        variant="form"
-                        searchable
-                    />
-                    <CellSelect
-                        label="Set arrangement for selected"
-                        placeholder="Set arrangement"
-                        value={null}
-                        options={ARRANGEMENT_OPTIONS}
-                        onChange={applyArrangement}
-                        className="w-36"
-                        variant="form"
-                    />
-                    {confirmingBulkDelete ? (
-                        <span className="flex items-center gap-4 text-xs text-ink">
-                            Delete {selected.size}?
-                            <button
-                                type="button"
-                                onClick={() => setConfirmingBulkDelete(false)}
-                                className={quietButtonClass}
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="button"
-                                onClick={deleteSelected}
-                                className={`${quietButtonClass} font-medium text-rose hover:text-rose hover:opacity-80`}
-                            >
-                                Delete
-                            </button>
-                        </span>
-                    ) : (
+                <div className="flex h-12 items-center gap-4 border-b border-hairline bg-surface px-5">
+                    <p className="shrink-0 text-xs text-sub">
+                        <span className="font-medium text-ink tabular-nums">
+                            {selected.size}
+                        </span>{" "}
+                        selected
+                    </p>
+                    <Divider />
+                    <div className="flex items-center gap-2">
+                        <CellSelect
+                            label="Set status for selected"
+                            placeholder={
+                                stagedStatus ? undefined : "Set status"
+                            }
+                            value={stagedStatus}
+                            options={STAGED_STATUS_OPTIONS}
+                            onChange={(status) =>
+                                setStagedStatus(
+                                    status === UNCHANGED ? null : status,
+                                )
+                            }
+                            className="w-32"
+                            variant="form"
+                            searchable
+                        />
+                        <CellSelect
+                            label="Set arrangement for selected"
+                            placeholder={
+                                stagedArrangement
+                                    ? undefined
+                                    : "Set arrangement"
+                            }
+                            value={stagedArrangement?.value ?? null}
+                            options={STAGED_ARRANGEMENT_OPTIONS}
+                            onChange={(arrangement) =>
+                                setStagedArrangement(
+                                    arrangement === UNCHANGED
+                                        ? null
+                                        : { value: arrangement },
+                                )
+                            }
+                            className="w-36"
+                            variant="form"
+                        />
                         <button
                             type="button"
-                            onClick={() => setConfirmingBulkDelete(true)}
-                            className={`${quietButtonClass} hover:text-rose`}
+                            onClick={applyStaged}
+                            disabled={!stagedStatus && !stagedArrangement}
+                            className={primaryButtonClass}
                         >
-                            <span
-                                aria-hidden="true"
-                                className="icon-[lucide--trash-2] size-3.5"
-                            />
-                            Delete
+                            Apply to {selected.size}
                         </button>
-                    )}
+                    </div>
+                    <Divider />
+                    <button
+                        type="button"
+                        onClick={() => setConfirmingDelete(true)}
+                        className={`${quietButtonClass} hover:text-rose`}
+                    >
+                        <span
+                            aria-hidden="true"
+                            className="icon-[lucide--trash-2] size-3.5"
+                        />
+                        Delete
+                    </button>
                     <button
                         type="button"
                         onClick={clearSelection}
@@ -792,8 +853,8 @@ export const ApplicationsTable = ({
                                     ref={selectAllRef}
                                     type="checkbox"
                                     checked={allSelected}
-                                    onChange={(event) =>
-                                        toggleAll(event.target.checked)
+                                    onChange={() =>
+                                        toggleAll(selected.size === 0)
                                     }
                                     aria-label="Select all applications"
                                     className={checkboxClass}
@@ -850,6 +911,20 @@ export const ApplicationsTable = ({
                         })}
                     </ul>
                 </div>
+            )}
+
+            {confirmingDelete && (
+                <ConfirmDialog
+                    title={`Delete ${countLabel(selected.size)}?`}
+                    detail="This cannot be undone."
+                    confirmLabel="Delete"
+                    tone="danger"
+                    onConfirm={() => {
+                        deleteSelected();
+                        setConfirmingDelete(false);
+                    }}
+                    onCancel={() => setConfirmingDelete(false)}
+                />
             )}
         </section>
     );
