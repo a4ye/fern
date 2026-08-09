@@ -210,6 +210,9 @@ const ReadRow = ({
                 type="checkbox"
                 checked={selected}
                 onChange={(event) => onSelect(event.target.checked)}
+                // Firefox restores tick marks across a reload, which would
+                // outlive the selection state that drives the rest of the UI.
+                autoComplete="off"
                 aria-label={`Select ${app.company}`}
                 className={checkboxClass}
             />
@@ -867,6 +870,7 @@ export const ApplicationsTable = ({
                                     onChange={() =>
                                         toggleAll(selected.size === 0)
                                     }
+                                    autoComplete="off"
                                     aria-label="Select all applications"
                                     className={checkboxClass}
                                 />

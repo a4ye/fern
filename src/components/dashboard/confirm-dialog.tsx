@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useRef } from "react";
 import {
     dangerButtonClass,
     ghostButtonClass,
     primaryButtonClass,
 } from "@/components/dashboard/table-controls";
+import { useModalDialog } from "@/components/dashboard/use-modal-dialog";
 
 // Native <dialog> rather than a hand-rolled overlay: showModal gives the focus
 // trap, Escape handling, inert background and top-layer stacking for free.
@@ -24,12 +24,8 @@ export const ConfirmDialog = ({
     onConfirm: () => void;
     onCancel: () => void;
 }) => {
-    const dialogRef = useRef<HTMLDialogElement>(null);
+    const { ref: dialogRef, close } = useModalDialog();
     const danger = tone === "danger";
-
-    useEffect(() => {
-        dialogRef.current?.showModal();
-    }, []);
 
     return (
         <dialog
@@ -37,10 +33,10 @@ export const ConfirmDialog = ({
             aria-labelledby="confirm-dialog-title"
             onCancel={(event) => {
                 event.preventDefault();
-                onCancel();
+                close(onCancel);
             }}
             onClick={(event) => {
-                if (event.target === dialogRef.current) onCancel();
+                if (event.target === dialogRef.current) close(onCancel);
             }}
             className="m-auto w-88 max-w-[calc(100vw-2rem)] border-0 bg-background p-0 backdrop:bg-ink/25"
         >
@@ -59,7 +55,7 @@ export const ConfirmDialog = ({
                 <div className="mt-5 flex items-center justify-end gap-1">
                     <button
                         type="button"
-                        onClick={onCancel}
+                        onClick={() => close(onCancel)}
                         // The safe choice takes focus so a stray Enter cannot
                         // confirm a delete.
                         autoFocus={danger}
@@ -69,7 +65,7 @@ export const ConfirmDialog = ({
                     </button>
                     <button
                         type="button"
-                        onClick={onConfirm}
+                        onClick={() => close(onConfirm)}
                         autoFocus={!danger}
                         className={
                             danger ? dangerButtonClass : primaryButtonClass

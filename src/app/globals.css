@@ -37,6 +37,94 @@ body {
     font-family: var(--font-sans), sans-serif;
 }
 
+/* Overlays fade both ways. `display` and `overlay` are discrete properties, so
+   without `allow-discrete` the browser hides the element and drops it out of the
+   top layer on the first frame and the closing fade never gets to run.
+   `@starting-style` supplies the frame before opening. */
+dialog {
+    opacity: 0;
+    scale: 0.96;
+    translate: 0 8px;
+    transition:
+        opacity 160ms ease-out,
+        scale 160ms ease-out,
+        translate 160ms ease-out,
+        display 160ms allow-discrete,
+        overlay 160ms allow-discrete;
+}
+
+dialog::backdrop {
+    opacity: 0;
+    transition:
+        opacity 160ms ease-out,
+        display 160ms allow-discrete,
+        overlay 160ms allow-discrete;
+}
+
+dialog[open],
+dialog[open]::backdrop {
+    opacity: 1;
+}
+
+dialog[open] {
+    scale: 1;
+    translate: 0 0;
+}
+
+@starting-style {
+    dialog[open],
+    dialog[open]::backdrop {
+        opacity: 0;
+    }
+
+    dialog[open] {
+        scale: 0.96;
+        translate: 0 8px;
+    }
+}
+
+/* Dropdowns stay mounted once opened so that `display` can carry them out. They
+   grow from the trigger edge, which is always above them. */
+.popup {
+    display: none;
+    opacity: 0;
+    scale: 1 0.98;
+    translate: 0 -4px;
+    transform-origin: top;
+    transition:
+        opacity 120ms ease-out,
+        scale 120ms ease-out,
+        translate 120ms ease-out,
+        display 120ms allow-discrete;
+}
+
+.popup[data-open] {
+    display: flex;
+    opacity: 1;
+    scale: 1;
+    translate: 0 0;
+}
+
+@starting-style {
+    .popup[data-open] {
+        opacity: 0;
+        scale: 1 0.98;
+        translate: 0 -4px;
+    }
+}
+
+/* Movement is the part worth dropping here. The fades stay so that the close
+   still ends in a transitionend, which is what unmounts a dialog. */
+@media (prefers-reduced-motion: reduce) {
+    dialog,
+    dialog[open],
+    .popup,
+    .popup[data-open] {
+        scale: 1;
+        translate: 0 0;
+    }
+}
+
 /* The checkbox is the one control browsers insist on rounding, so it is redrawn
    from scratch to keep the UI square. */
 input[type="checkbox"] {

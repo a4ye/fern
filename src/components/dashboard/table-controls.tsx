@@ -272,17 +272,17 @@ export const CellSelect = <T,>({
                     className={`icon-[lucide--chevron-down] size-3 shrink-0 text-muted transition-transform ${open ? "rotate-180" : ""}`}
                 />
             </button>
-            {open &&
-                placed &&
+            {placed &&
                 createPortal(
                     <div
                         ref={popupRef}
                         onKeyDown={onPopupKeyDown}
+                        data-open={open || undefined}
                         style={{
                             ...placed.style,
                             maxHeight: placed.maxHeight,
                         }}
-                        className="fixed z-50 flex flex-col border border-hairline bg-background shadow-sm"
+                        className="popup fixed z-50 flex-col border border-hairline bg-background shadow-sm"
                     >
                         {searchable && (
                             <input

@@ -25,6 +25,7 @@ import {
     type ApplicationStatus,
     type FlowEntry,
 } from "@/components/dashboard/data";
+import { useModalDialog } from "@/components/dashboard/use-modal-dialog";
 
 const SAGE = "var(--color-accent)";
 const DEEP = "var(--color-accent-deep)";
@@ -1046,11 +1047,7 @@ const ExpandedDialog = ({
     onDownload: (format: ExportFormat) => void;
     onClose: () => void;
 }) => {
-    const dialogRef = useRef<HTMLDialogElement>(null);
-
-    useEffect(() => {
-        dialogRef.current?.showModal();
-    }, []);
+    const { ref: dialogRef, close } = useModalDialog();
 
     return (
         <dialog
@@ -1058,10 +1055,10 @@ const ExpandedDialog = ({
             aria-label="Sankey"
             onCancel={(event) => {
                 event.preventDefault();
-                onClose();
+                close(onClose);
             }}
             onClick={(event) => {
-                if (event.target === dialogRef.current) onClose();
+                if (event.target === dialogRef.current) close(onClose);
             }}
             className="m-auto flex max-h-[calc(100vh-3rem)] max-w-[calc(100vw-3rem)] flex-col border border-hairline bg-background backdrop:bg-ink/25"
         >
@@ -1074,7 +1071,7 @@ const ExpandedDialog = ({
                     <DownloadMenu busy={busy} onSelect={onDownload} />
                     <button
                         type="button"
-                        onClick={onClose}
+                        onClick={() => close(onClose)}
                         aria-label="Close this chart"
                         title="Close"
                         className={headerButtonClass}
