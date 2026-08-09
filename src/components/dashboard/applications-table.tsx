@@ -690,71 +690,158 @@ export const ApplicationsTable = ({
         if (stagedArrangement) applyArrangement(stagedArrangement.value);
     };
 
+    const selecting = selected.size > 0 && !bulkMode;
+
     return (
         <section className="border border-hairline bg-background">
-            <div className="flex h-12 items-center justify-between gap-4 border-b border-hairline px-5">
-                <h2 className="flex items-baseline gap-2 text-xs font-medium text-muted">
-                    {bulkMode ? "Editing every row" : "Applications"}
-                    {!bulkMode && (
-                        <span className="text-sub tabular-nums">
-                            {optimisticApplications.length}
-                        </span>
-                    )}
-                </h2>
-                <div className="flex items-center gap-2">
-                    {bulkError && (
-                        <p className="mr-1 text-xs text-rose">{bulkError}</p>
-                    )}
-                    {bulkMode ? (
-                        <>
+            {/* The bulk controls take over the header row rather than adding
+                one, so selecting a row tints this bar instead of pushing the
+                whole table down. */}
+            <div
+                className={`flex h-12 items-center justify-between gap-4 border-b border-hairline px-5 ${selecting ? "bg-surface" : ""}`}
+            >
+                {selecting ? (
+                    <div className="flex w-full items-center gap-4">
+                        <p className="shrink-0 text-xs text-sub">
+                            <span className="font-medium text-ink tabular-nums">
+                                {selected.size}
+                            </span>{" "}
+                            selected
+                        </p>
+                        <Divider />
+                        <div className="flex items-center gap-2">
+                            <CellSelect
+                                label="Set status for selected"
+                                placeholder={
+                                    stagedStatus ? undefined : "Set status"
+                                }
+                                value={stagedStatus}
+                                options={STAGED_STATUS_OPTIONS}
+                                onChange={(status) =>
+                                    setStagedStatus(
+                                        status === UNCHANGED ? null : status,
+                                    )
+                                }
+                                className="w-32"
+                                variant="form"
+                                searchable
+                            />
+                            <CellSelect
+                                label="Set arrangement for selected"
+                                placeholder={
+                                    stagedArrangement
+                                        ? undefined
+                                        : "Set arrangement"
+                                }
+                                value={stagedArrangement?.value ?? null}
+                                options={STAGED_ARRANGEMENT_OPTIONS}
+                                onChange={(arrangement) =>
+                                    setStagedArrangement(
+                                        arrangement === UNCHANGED
+                                            ? null
+                                            : { value: arrangement },
+                                    )
+                                }
+                                className="w-36"
+                                variant="form"
+                            />
                             <button
                                 type="button"
-                                onClick={() => {
-                                    setDrafts(null);
-                                    setBulkError(null);
-                                }}
-                                className={ghostButtonClass}
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="button"
-                                onClick={saveBulk}
-                                disabled={bulkSaving}
+                                onClick={applyStaged}
+                                disabled={!stagedStatus && !stagedArrangement}
                                 className={primaryButtonClass}
                             >
-                                {bulkSaving ? "Saving" : "Save all"}
+                                Apply to {selected.size}
                             </button>
-                        </>
-                    ) : (
-                        <>
-                            {optimisticApplications.length > 0 && (
-                                <button
-                                    type="button"
-                                    onClick={startBulkEdit}
-                                    className={secondaryButtonClass}
-                                >
-                                    <span
-                                        aria-hidden="true"
-                                        className="icon-[lucide--pencil-line] size-4 shrink-0"
-                                    />
-                                    Edit all
-                                </button>
+                        </div>
+                        <Divider />
+                        <button
+                            type="button"
+                            onClick={() => setConfirmingDelete(true)}
+                            className={`${quietButtonClass} hover:text-rose`}
+                        >
+                            <span
+                                aria-hidden="true"
+                                className="icon-[lucide--trash-2] size-3.5"
+                            />
+                            Delete
+                        </button>
+                        <button
+                            type="button"
+                            onClick={clearSelection}
+                            className={`${quietButtonClass} ml-auto`}
+                        >
+                            Clear
+                        </button>
+                    </div>
+                ) : (
+                    <>
+                        <h2 className="flex items-baseline gap-2 text-xs font-medium text-muted">
+                            {bulkMode ? "Editing every row" : "Applications"}
+                            {!bulkMode && (
+                                <span className="text-sub tabular-nums">
+                                    {optimisticApplications.length}
+                                </span>
                             )}
-                            <button
-                                type="button"
-                                onClick={() => setAdding(true)}
-                                className={primaryButtonClass}
-                            >
-                                <span
-                                    aria-hidden="true"
-                                    className="icon-[lucide--plus] mr-1.5 size-4 shrink-0"
-                                />
-                                Add application
-                            </button>
-                        </>
-                    )}
-                </div>
+                        </h2>
+                        <div className="flex items-center gap-2">
+                            {bulkError && (
+                                <p className="mr-1 text-xs text-rose">
+                                    {bulkError}
+                                </p>
+                            )}
+                            {bulkMode ? (
+                                <>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setDrafts(null);
+                                            setBulkError(null);
+                                        }}
+                                        className={ghostButtonClass}
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={saveBulk}
+                                        disabled={bulkSaving}
+                                        className={primaryButtonClass}
+                                    >
+                                        {bulkSaving ? "Saving" : "Save all"}
+                                    </button>
+                                </>
+                            ) : (
+                                <>
+                                    {optimisticApplications.length > 0 && (
+                                        <button
+                                            type="button"
+                                            onClick={startBulkEdit}
+                                            className={secondaryButtonClass}
+                                        >
+                                            <span
+                                                aria-hidden="true"
+                                                className="icon-[lucide--pencil-line] size-4 shrink-0"
+                                            />
+                                            Edit all
+                                        </button>
+                                    )}
+                                    <button
+                                        type="button"
+                                        onClick={() => setAdding(true)}
+                                        className={primaryButtonClass}
+                                    >
+                                        <span
+                                            aria-hidden="true"
+                                            className="icon-[lucide--plus] mr-1.5 size-4 shrink-0"
+                                        />
+                                        Add application
+                                    </button>
+                                </>
+                            )}
+                        </div>
+                    </>
+                )}
             </div>
 
             {adding && !bulkMode && (
@@ -762,82 +849,6 @@ export const ApplicationsTable = ({
                     listId={listId}
                     onClose={() => setAdding(false)}
                 />
-            )}
-
-            {selected.size > 0 && !bulkMode && (
-                <div className="flex h-12 items-center gap-4 border-b border-hairline bg-surface px-5">
-                    <p className="shrink-0 text-xs text-sub">
-                        <span className="font-medium text-ink tabular-nums">
-                            {selected.size}
-                        </span>{" "}
-                        selected
-                    </p>
-                    <Divider />
-                    <div className="flex items-center gap-2">
-                        <CellSelect
-                            label="Set status for selected"
-                            placeholder={
-                                stagedStatus ? undefined : "Set status"
-                            }
-                            value={stagedStatus}
-                            options={STAGED_STATUS_OPTIONS}
-                            onChange={(status) =>
-                                setStagedStatus(
-                                    status === UNCHANGED ? null : status,
-                                )
-                            }
-                            className="w-32"
-                            variant="form"
-                            searchable
-                        />
-                        <CellSelect
-                            label="Set arrangement for selected"
-                            placeholder={
-                                stagedArrangement
-                                    ? undefined
-                                    : "Set arrangement"
-                            }
-                            value={stagedArrangement?.value ?? null}
-                            options={STAGED_ARRANGEMENT_OPTIONS}
-                            onChange={(arrangement) =>
-                                setStagedArrangement(
-                                    arrangement === UNCHANGED
-                                        ? null
-                                        : { value: arrangement },
-                                )
-                            }
-                            className="w-36"
-                            variant="form"
-                        />
-                        <button
-                            type="button"
-                            onClick={applyStaged}
-                            disabled={!stagedStatus && !stagedArrangement}
-                            className={primaryButtonClass}
-                        >
-                            Apply to {selected.size}
-                        </button>
-                    </div>
-                    <Divider />
-                    <button
-                        type="button"
-                        onClick={() => setConfirmingDelete(true)}
-                        className={`${quietButtonClass} hover:text-rose`}
-                    >
-                        <span
-                            aria-hidden="true"
-                            className="icon-[lucide--trash-2] size-3.5"
-                        />
-                        Delete
-                    </button>
-                    <button
-                        type="button"
-                        onClick={clearSelection}
-                        className={`${quietButtonClass} ml-auto`}
-                    >
-                        Clear
-                    </button>
-                </div>
             )}
 
             {optimisticApplications.length === 0 ? (
