@@ -26,6 +26,10 @@ import {
 import { EmailSyncMenu } from "@/components/dashboard/email-sync";
 import { ListRowsSkeleton } from "@/components/dashboard/lists-skeleton";
 import {
+    ghostButtonClass,
+    primaryButtonClass,
+} from "@/components/dashboard/table-controls";
+import {
     firstIssue,
     LIST_DESCRIPTION_MAX,
     LIST_NAME_MAX,
@@ -50,6 +54,18 @@ const STATUS_PLATE: Record<ListStatus, { label: string; className: string }> = {
 };
 
 const STATUS_KEYS: ListStatus[] = ["active", "closed", "archived"];
+
+// Sits on the description line rather than below it, so a failed save doesn't
+// grow the row. Long messages truncate and keep the full text in the tooltip.
+const RowError = ({ message }: { message: string | null }) =>
+    message ? (
+        <span
+            title={message}
+            className="max-w-40 shrink-0 truncate text-xs text-rose"
+        >
+            {message}
+        </span>
+    ) : null;
 
 const StatusPlate = ({ status }: { status: ListStatus }) => {
     const plate = STATUS_PLATE[status];
@@ -79,7 +95,7 @@ const ListRow = ({
             className="flex min-w-0 flex-1 items-center gap-4 px-5 py-4 transition-colors hover:bg-surface"
         >
             <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-3">
+                <div className="flex h-6 items-center gap-3">
                     <span className="truncate text-base font-medium text-ink">
                         {list.name}
                     </span>
@@ -203,24 +219,26 @@ const ListComposerRow = ({
                     placeholder="Untitled list"
                     aria-label="List name"
                     maxLength={LIST_NAME_MAX}
-                    className="w-full bg-transparent text-base font-medium text-ink placeholder:text-muted focus:outline-none"
+                    className="block h-6 w-full bg-transparent text-base font-medium text-ink placeholder:text-muted focus:outline-none"
                 />
-                <input
-                    value={description}
-                    onChange={(event) => setDescription(event.target.value)}
-                    onKeyDown={onKeyDown}
-                    placeholder="Add a description (optional)"
-                    aria-label="List description"
-                    maxLength={LIST_DESCRIPTION_MAX}
-                    className="mt-1 w-full bg-transparent text-sm text-sub placeholder:text-muted focus:outline-none"
-                />
-                {error && <p className="mt-1 text-xs text-rose">{error}</p>}
+                <div className="mt-1 flex h-5 items-center gap-2">
+                    <input
+                        value={description}
+                        onChange={(event) => setDescription(event.target.value)}
+                        onKeyDown={onKeyDown}
+                        placeholder="Add a description (optional)"
+                        aria-label="List description"
+                        maxLength={LIST_DESCRIPTION_MAX}
+                        className="min-w-0 flex-1 bg-transparent text-sm text-sub placeholder:text-muted focus:outline-none"
+                    />
+                    <RowError message={error} />
+                </div>
             </div>
             <div className="flex shrink-0 items-center gap-1">
                 <button
                     type="button"
                     onClick={onCancel}
-                    className="inline-flex h-8 cursor-pointer items-center px-3 text-sm text-sub transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                    className={ghostButtonClass}
                 >
                     Cancel
                 </button>
@@ -228,7 +246,7 @@ const ListComposerRow = ({
                     type="button"
                     onClick={submit}
                     disabled={!trimmed || saving}
-                    className="inline-flex h-8 cursor-pointer items-center bg-accent px-3 text-sm font-medium text-background transition-colors hover:bg-accent-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-accent"
+                    className={primaryButtonClass}
                 >
                     Create
                 </button>
@@ -295,7 +313,7 @@ const ListEditorRow = ({
     };
 
     return (
-        <li className="flex items-center gap-4 border-b border-faint bg-surface px-5 py-4 last:border-b-0">
+        <li className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-faint bg-surface px-5 py-4 last:border-b-0">
             <div className="min-w-0 flex-1">
                 <input
                     ref={nameRef}
@@ -305,39 +323,45 @@ const ListEditorRow = ({
                     placeholder="List name"
                     aria-label="List name"
                     maxLength={LIST_NAME_MAX}
-                    className="w-full bg-transparent text-base font-medium text-ink placeholder:text-muted focus:outline-none"
+                    className="block h-6 w-full bg-transparent text-base font-medium text-ink placeholder:text-muted focus:outline-none"
                 />
-                <input
-                    value={description}
-                    onChange={(event) => setDescription(event.target.value)}
-                    onKeyDown={onKeyDown}
-                    placeholder="Add a description (optional)"
-                    aria-label="List description"
-                    maxLength={LIST_DESCRIPTION_MAX}
-                    className="mt-1 w-full bg-transparent text-sm text-sub placeholder:text-muted focus:outline-none"
-                />
-                {error && <p className="mt-1 text-xs text-rose">{error}</p>}
-                <div className="mt-2 flex gap-1.5">
-                    {STATUS_KEYS.map((s) => {
-                        const plate = STATUS_PLATE[s];
-                        return (
-                            <button
-                                key={s}
-                                type="button"
-                                onClick={() => setStatus(s)}
-                                className={`inline-flex cursor-pointer items-center px-2 py-0.5 text-xs font-medium transition-opacity ${plate.className} ${status !== s ? "opacity-40" : ""}`}
-                            >
-                                {plate.label}
-                            </button>
-                        );
-                    })}
+                <div className="mt-1 flex h-5 items-center gap-2">
+                    <input
+                        value={description}
+                        onChange={(event) => setDescription(event.target.value)}
+                        onKeyDown={onKeyDown}
+                        placeholder="Add a description (optional)"
+                        aria-label="List description"
+                        maxLength={LIST_DESCRIPTION_MAX}
+                        className="min-w-0 flex-1 bg-transparent text-sm text-sub placeholder:text-muted focus:outline-none"
+                    />
+                    <RowError message={error} />
                 </div>
+            </div>
+            {/* The picker takes the slot the read row gives its application
+                count and edited date, so editing adds no line. That slot is
+                hidden below sm, where the picker wraps onto its own line. */}
+            <div className="order-last flex basis-full gap-1.5 sm:order-none sm:basis-auto">
+                {STATUS_KEYS.map((s) => {
+                    const plate = STATUS_PLATE[s];
+                    return (
+                        <button
+                            key={s}
+                            type="button"
+                            onClick={() => setStatus(s)}
+                            aria-pressed={status === s}
+                            className={`inline-flex cursor-pointer items-center px-2 py-0.5 text-xs font-medium transition-opacity ${plate.className} ${status !== s ? "opacity-40" : ""}`}
+                        >
+                            {plate.label}
+                        </button>
+                    );
+                })}
             </div>
             <div className="flex shrink-0 items-center gap-1">
                 <button
                     type="button"
                     onClick={onCancel}
-                    className="inline-flex h-8 cursor-pointer items-center px-3 text-sm text-sub transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                    className={ghostButtonClass}
                 >
                     Cancel
                 </button>
@@ -345,7 +369,7 @@ const ListEditorRow = ({
                     type="button"
                     onClick={submit}
                     disabled={!trimmed || saving}
-                    className="inline-flex h-8 cursor-pointer items-center bg-accent px-3 text-sm font-medium text-background transition-colors hover:bg-accent-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-accent"
+                    className={primaryButtonClass}
                 >
                     Save
                 </button>
