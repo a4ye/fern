@@ -4,7 +4,12 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
 import { deleteList, updateList } from "@/app/dashboard/actions";
+import { ConfirmDialog } from "@/components/dashboard/confirm-dialog";
 import type { ListStatus } from "@/components/dashboard/data";
+import {
+    ghostButtonClass,
+    primaryButtonClass,
+} from "@/components/dashboard/table-controls";
 import {
     firstIssue,
     LIST_DESCRIPTION_MAX,
@@ -47,7 +52,7 @@ export const ListHeader = ({
 }) => {
     const router = useRouter();
     const [isEditing, setIsEditing] = useState(false);
-    const [isDeleting, setIsDeleting] = useState(false);
+    const [confirmingDelete, setConfirmingDelete] = useState(false);
     const [name, setName] = useState(initialName);
     const [description, setDescription] = useState(initialDescription ?? "");
     const [status, setStatus] = useState<ListStatus>(initialStatus);
@@ -114,138 +119,140 @@ export const ListHeader = ({
         STATUS_OPTIONS.find((o) => o.value === initialStatus) ??
         STATUS_OPTIONS[0];
 
-    if (isEditing) {
-        return (
-            <div className="mt-4">
-                <input
-                    ref={nameRef}
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    onKeyDown={onKeyDown}
-                    placeholder="List name"
-                    aria-label="List name"
-                    maxLength={LIST_NAME_MAX}
-                    className="w-full bg-transparent text-2xl font-semibold tracking-tight text-ink placeholder:text-muted focus:outline-none"
-                />
-                <input
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    onKeyDown={onKeyDown}
-                    placeholder="Add a description (optional)"
-                    aria-label="List description"
-                    maxLength={LIST_DESCRIPTION_MAX}
-                    className="mt-2 w-full bg-transparent text-sm text-sub placeholder:text-muted focus:outline-none"
-                />
-                {error && <p className="mt-2 text-xs text-rose">{error}</p>}
-                <div className="mt-3 flex flex-wrap items-center gap-3">
-                    <div className="flex gap-1.5">
-                        {STATUS_OPTIONS.map((opt) => (
-                            <button
-                                key={opt.value}
-                                type="button"
-                                onClick={() => setStatus(opt.value)}
-                                className={`inline-flex cursor-pointer items-center px-2 py-0.5 text-xs font-medium transition-opacity ${opt.className} ${status !== opt.value ? "opacity-40" : ""}`}
-                            >
-                                {opt.label}
-                            </button>
-                        ))}
-                    </div>
-                    <div className="ml-auto flex items-center gap-1">
-                        <button
-                            type="button"
-                            onClick={cancel}
-                            className="inline-flex h-8 cursor-pointer items-center px-3 text-sm text-sub transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            type="button"
-                            onClick={save}
-                            disabled={!name.trim() || isPending}
-                            className="inline-flex h-8 cursor-pointer items-center bg-accent px-3 text-sm font-medium text-background transition-colors hover:bg-accent-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-accent"
-                        >
-                            {isPending ? "Saving..." : "Save"}
-                        </button>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
-    if (isDeleting) {
-        return (
-            <div className="mt-4">
-                <p className="text-2xl font-semibold tracking-tight">
-                    {initialName}
-                </p>
-                <p className="mt-2 text-sm text-sub">
-                    Delete this list? All applications will be permanently
-                    removed. This cannot be undone.
-                </p>
-                <div className="mt-3 flex items-center justify-end gap-1">
-                    <button
-                        type="button"
-                        onClick={() => setIsDeleting(false)}
-                        className="inline-flex h-8 cursor-pointer items-center px-3 text-sm text-sub transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        type="button"
-                        onClick={handleDelete}
-                        disabled={isPending}
-                        className="inline-flex h-8 cursor-pointer items-center bg-rose px-3 text-sm font-medium text-background transition-colors hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                        {isPending ? "Deleting..." : "Delete"}
-                    </button>
-                </div>
-            </div>
-        );
-    }
-
+    // Reading and editing occupy the same boxes: h-8 for the 2xl name row, h-5
+    // for the description, h-8 for the status row. Single-line and truncated on
+    // both sides, so swapping in the inputs never moves the page.
     return (
-        <div className="mt-4 flex items-start gap-3">
-            <div className="min-w-0 flex-1">
-                <h1 className="text-2xl font-semibold tracking-tight">
-                    {initialName}
-                </h1>
-                {initialDescription && (
-                    <p className="mt-2 text-sm text-sub">
-                        {initialDescription}
-                    </p>
+        <div className="mt-4">
+            <div className="flex items-start gap-3">
+                <div className="min-w-0 flex-1">
+                    {isEditing ? (
+                        <input
+                            ref={nameRef}
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            onKeyDown={onKeyDown}
+                            placeholder="List name"
+                            aria-label="List name"
+                            maxLength={LIST_NAME_MAX}
+                            className="block h-8 w-full bg-transparent text-2xl font-semibold tracking-tight text-ink placeholder:text-muted focus:outline-none"
+                        />
+                    ) : (
+                        <h1 className="h-8 truncate text-2xl font-semibold tracking-tight">
+                            {initialName}
+                        </h1>
+                    )}
+                    {isEditing ? (
+                        <input
+                            value={description}
+                            onChange={(e) => setDescription(e.target.value)}
+                            onKeyDown={onKeyDown}
+                            placeholder="Add a description (optional)"
+                            aria-label="List description"
+                            maxLength={LIST_DESCRIPTION_MAX}
+                            className="mt-2 block h-5 w-full bg-transparent text-sm text-sub placeholder:text-muted focus:outline-none"
+                        />
+                    ) : (
+                        <p className="mt-2 h-5 truncate text-sm text-sub">
+                            {initialDescription}
+                        </p>
+                    )}
+                </div>
+                <div className="flex h-8 w-12 shrink-0 items-center justify-end">
+                    {!isEditing && (
+                        <>
+                            <button
+                                type="button"
+                                onClick={startEdit}
+                                aria-label="Edit list details"
+                                title="Edit list details"
+                                className="cursor-pointer p-1 text-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                            >
+                                <span
+                                    aria-hidden="true"
+                                    className="icon-[lucide--pencil] block size-4"
+                                />
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setConfirmingDelete(true)}
+                                aria-label="Delete list"
+                                title="Delete list"
+                                className="cursor-pointer p-1 text-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                            >
+                                <span
+                                    aria-hidden="true"
+                                    className="icon-[lucide--trash-2] block size-4"
+                                />
+                            </button>
+                        </>
+                    )}
+                </div>
+            </div>
+
+            <div className="mt-2 flex h-8 items-center gap-3">
+                {isEditing ? (
+                    <>
+                        <div className="flex shrink-0 gap-1.5">
+                            {STATUS_OPTIONS.map((opt) => (
+                                <button
+                                    key={opt.value}
+                                    type="button"
+                                    onClick={() => setStatus(opt.value)}
+                                    className={`inline-flex cursor-pointer items-center px-2 py-0.5 text-xs font-medium transition-opacity ${opt.className} ${status !== opt.value ? "opacity-40" : ""}`}
+                                >
+                                    {opt.label}
+                                </button>
+                            ))}
+                        </div>
+                        {error && (
+                            <p
+                                title={error}
+                                className="min-w-0 flex-1 truncate text-xs text-rose"
+                            >
+                                {error}
+                            </p>
+                        )}
+                        <div className="ml-auto flex shrink-0 items-center gap-1">
+                            <button
+                                type="button"
+                                onClick={cancel}
+                                className={ghostButtonClass}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={save}
+                                disabled={!name.trim() || isPending}
+                                className={primaryButtonClass}
+                            >
+                                {isPending ? "Saving..." : "Save"}
+                            </button>
+                        </div>
+                    </>
+                ) : (
+                    <span
+                        className={`inline-flex items-center px-2 py-0.5 text-xs font-medium ${currentStatus.className}`}
+                    >
+                        {currentStatus.label}
+                    </span>
                 )}
-                <span
-                    className={`mt-2 inline-flex items-center px-2 py-0.5 text-xs font-medium ${currentStatus.className}`}
-                >
-                    {currentStatus.label}
-                </span>
             </div>
-            <div className="mt-1 flex shrink-0 items-center">
-                <button
-                    type="button"
-                    onClick={startEdit}
-                    aria-label="Edit list details"
-                    title="Edit list details"
-                    className="cursor-pointer p-1 text-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                >
-                    <span
-                        aria-hidden="true"
-                        className="icon-[lucide--pencil] block size-4"
-                    />
-                </button>
-                <button
-                    type="button"
-                    onClick={() => setIsDeleting(true)}
-                    aria-label="Delete list"
-                    title="Delete list"
-                    className="cursor-pointer p-1 text-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                >
-                    <span
-                        aria-hidden="true"
-                        className="icon-[lucide--trash-2] block size-4"
-                    />
-                </button>
-            </div>
+
+            {confirmingDelete && (
+                <ConfirmDialog
+                    title={`Delete ${initialName}?`}
+                    detail="All applications in this list will be permanently removed. This cannot be undone."
+                    confirmLabel="Delete"
+                    tone="danger"
+                    onConfirm={() => {
+                        setConfirmingDelete(false);
+                        handleDelete();
+                    }}
+                    onCancel={() => setConfirmingDelete(false)}
+                />
+            )}
         </div>
     );
 };
