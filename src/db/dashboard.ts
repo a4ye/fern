@@ -19,6 +19,7 @@ import {
     type ListSummary,
     type PayPeriod,
     type PipelineEntry,
+    type StatusStep,
     type Stat,
 } from "@/components/dashboard/data";
 import { parsePay } from "@/lib/pay";
@@ -105,8 +106,8 @@ const parseDateInput = (value: string | null): Date | null => {
     return new Date(year, month - 1, day);
 };
 
-// The column set shared by insert and update, including pay split out of the
-// free-text field the user types.
+// The column set shared by insert and update, minus pay, which only some of
+// them write.
 const columnsFrom = (input: ApplicationInput) => ({
     companyName: input.company,
     roleTitle: input.role,
@@ -115,7 +116,6 @@ const columnsFrom = (input: ApplicationInput) => ({
     location: input.location,
     arrangement: input.arrangement,
     appliedAt: parseDateInput(input.appliedAt),
-    ...parsePay(input.pay),
 });
 
 export const createApplication = async (
@@ -127,14 +127,20 @@ export const createApplication = async (
         userId,
         listId,
         ...columnsFrom(input),
+        ...parsePay(input.pay),
     });
     return row !== null;
 };
 
-export const updateApplication = async (
+// One row of the quick edit grid. `payTyped` says whether the pay box was
+// actually edited: the grid holds pay as one line of text, so writing it back
+// when it was only sitting there would flatten a range, currency and note the
+// detail panel had set.
+const updateApplication = async (
     userId: string,
     applicationId: string,
     input: ApplicationInput,
+    payTyped: boolean,
 ): Promise<void> => {
     const pool = getPool();
     const current = await gen.getApplicationForUser(pool, {
@@ -143,11 +149,15 @@ export const updateApplication = async (
     });
     if (!current) return;
 
-    await gen.updateApplication(pool, {
-        applicationId,
-        userId,
-        ...columnsFrom(input),
-    });
+    const columns = { applicationId, userId, ...columnsFrom(input) };
+    if (payTyped) {
+        await gen.updateApplication(pool, {
+            ...columns,
+            ...parsePay(input.pay),
+        });
+    } else {
+        await gen.updateApplicationFields(pool, columns);
+    }
 
     if (current.status !== input.status) {
         await gen.insertApplicationEvent(pool, {
@@ -161,10 +171,107 @@ export const updateApplication = async (
 
 export const updateApplications = async (
     userId: string,
-    rows: { id: string; input: ApplicationInput }[],
+    rows: { id: string; input: ApplicationInput; payTyped: boolean }[],
 ): Promise<void> => {
     for (const row of rows) {
-        await updateApplication(userId, row.id, row.input);
+        await updateApplication(userId, row.id, row.input, row.payTyped);
+    }
+};
+
+// Everything the detail panel edits. Amounts are decimal strings, since that is
+// how numeric columns arrive and leave, and rounding them through a float would
+// lose cents.
+export type ApplicationDetail = {
+    company: string;
+    role: string | null;
+    location: string | null;
+    arrangement: Arrangement | null;
+    appliedAt: string | null;
+    url: string | null;
+    payMin: string | null;
+    payMax: string | null;
+    payCurrency: string;
+    payPeriod: PayPeriod | null;
+    bonus: string | null;
+    payNote: string | null;
+    notes: string | null;
+};
+
+export const saveApplicationDetail = async (
+    userId: string,
+    applicationId: string,
+    detail: ApplicationDetail,
+): Promise<void> => {
+    await gen.updateApplicationDetail(getPool(), {
+        applicationId,
+        userId,
+        companyName: detail.company,
+        roleTitle: detail.role,
+        url: detail.url,
+        location: detail.location,
+        arrangement: detail.arrangement,
+        appliedAt: parseDateInput(detail.appliedAt),
+        payMin: detail.payMin,
+        payMax: detail.payMax,
+        payCurrency: detail.payCurrency,
+        payPeriod: detail.payPeriod,
+        bonusAmount: detail.bonus,
+        payNote: detail.payNote,
+        notes: detail.notes,
+    });
+};
+
+// Records a step in the history and leaves the application sitting at it. The
+// status it already holds is a valid step: that is how a second interview is
+// logged, and the chart draws it as a round of its own.
+export const logStatusStep = async (
+    userId: string,
+    applicationId: string,
+    status: ApplicationStatus,
+): Promise<void> => {
+    const pool = getPool();
+    const current = await gen.getApplicationForUser(pool, {
+        applicationId,
+        userId,
+    });
+    if (!current) return;
+
+    await gen.insertApplicationEvent(pool, {
+        applicationId,
+        fromStatus: current.status,
+        toStatus: status,
+        note: null,
+    });
+    await gen.setApplicationStatus(pool, { applicationId, userId, status });
+};
+
+// Takes back a recorded step, so removing the one just logged is an undo. The
+// application is left where the last remaining step put it, or, when that was
+// the only step, back where the step came from.
+export const removeStatusStep = async (
+    userId: string,
+    applicationId: string,
+    eventId: string,
+): Promise<void> => {
+    const pool = getPool();
+    const steps = await gen.statusEventsForApplication(pool, {
+        applicationId,
+        userId,
+    });
+    const removed = steps.find((step) => step.id === eventId);
+    if (!removed) return;
+
+    await gen.deleteApplicationEvent(pool, { eventId, applicationId, userId });
+
+    const remaining = steps.filter((step) => step.id !== eventId);
+    const status =
+        remaining[remaining.length - 1]?.toStatus ?? removed.fromStatus;
+    if (status) {
+        await gen.setApplicationStatus(pool, {
+            applicationId,
+            userId,
+            status,
+        });
     }
 };
 
@@ -256,26 +363,71 @@ export const getListDetail = async (
             gen.statusEventsForList(pool, { listId }),
         ]);
 
-    const applications: ApplicationRow[] = applicationRows.map((row) => ({
-        id: row.id,
-        company: row.companyName,
-        role: row.roleTitle,
-        status: row.status as ApplicationStatus,
-        pay: formatPay({
+    // Rows arrive ordered by application and time, so appending each event's
+    // target status replays the trail. The first event also contributes where it
+    // started from, which is the only record of the status on creation and so
+    // the one step with no event of its own to take back.
+    const trails = new Map<string, StatusStep[]>();
+    for (const row of statusEventRows) {
+        let trail = trails.get(row.applicationId);
+        if (!trail) {
+            trail = [];
+            trails.set(row.applicationId, trail);
+            if (row.fromStatus) {
+                trail.push({
+                    id: null,
+                    status: row.fromStatus as ApplicationStatus,
+                    at: null,
+                });
+            }
+        }
+        if (row.toStatus) {
+            trail.push({
+                id: row.id,
+                status: row.toStatus as ApplicationStatus,
+                at: row.occurredAt.toISOString(),
+            });
+        }
+    }
+
+    // Where the application sits now always ends the trail, even when it got
+    // there without a step being recorded, which is how one that never moved
+    // still has a history of one.
+    const historyOf = (id: string, status: ApplicationStatus): StatusStep[] => {
+        const trail = trails.get(id) ?? [];
+        if (trail[trail.length - 1]?.status === status) return trail;
+        return [...trail, { id: null, status, at: null }];
+    };
+
+    const applications: ApplicationRow[] = applicationRows.map((row) => {
+        const status = row.status as ApplicationStatus;
+        return {
+            id: row.id,
+            company: row.companyName,
+            role: row.roleTitle,
+            status,
+            pay: formatPay({
+                payMin: row.payMin,
+                payMax: row.payMax,
+                payCurrency: row.payCurrency,
+                payPeriod: row.payPeriod as PayPeriod | null,
+                payNote: row.payNote,
+            }),
+            payNote: row.payNote,
             payMin: row.payMin,
             payMax: row.payMax,
             payCurrency: row.payCurrency,
             payPeriod: row.payPeriod as PayPeriod | null,
-            payNote: row.payNote,
-        }),
-        payNote: row.payNote,
-        location: row.location,
-        arrangement: row.arrangement as Arrangement | null,
-        appliedAt: row.appliedAt ? toDateInput(row.appliedAt) : null,
-        url: row.url,
-        notes: row.notes,
-        updated: formatRelative(row.updatedAt),
-    }));
+            bonus: row.bonusAmount,
+            location: row.location,
+            arrangement: row.arrangement as Arrangement | null,
+            appliedAt: row.appliedAt ? toDateInput(row.appliedAt) : null,
+            url: row.url,
+            notes: row.notes,
+            history: historyOf(row.id, status),
+            updated: formatRelative(row.updatedAt),
+        };
+    });
 
     const counts = new Map<ApplicationStatus, number>();
     for (const row of pipelineRows) {
@@ -291,26 +443,10 @@ export const getListDetail = async (
         counts.has(status),
     ).map((status) => ({ status, count: counts.get(status) as number }));
 
-    // Rows arrive ordered by application and time, so appending each event's
-    // target status replays the trail. The first event also contributes where
-    // it started from, which is the only record of the status on creation.
-    const trails = new Map<string, ApplicationStatus[]>();
-    for (const row of statusEventRows) {
-        let trail = trails.get(row.applicationId);
-        if (!trail) {
-            trail = [];
-            trails.set(row.applicationId, trail);
-            if (row.fromStatus) trail.push(row.fromStatus as ApplicationStatus);
-        }
-        if (row.toStatus) trail.push(row.toStatus as ApplicationStatus);
-    }
-
-    const flow: FlowEntry[] = applicationRows.map((row) => {
-        const status = row.status as ApplicationStatus;
-        const history = [...(trails.get(row.id) ?? [])];
-        if (history[history.length - 1] !== status) history.push(status);
-        return { status, history };
-    });
+    const flow: FlowEntry[] = applications.map((app) => ({
+        status: app.status,
+        history: app.history.map((step) => step.status),
+    }));
 
     const stats: Stat[] = [
         { label: "Total", value: String(applications.length) },

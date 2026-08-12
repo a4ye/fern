@@ -43,12 +43,11 @@ body {
    `@starting-style` supplies the frame before opening. */
 dialog {
     opacity: 0;
-    scale: 0.96;
-    translate: 0 8px;
     transition:
         opacity 160ms ease-out,
         scale 160ms ease-out,
         translate 160ms ease-out,
+        transform 160ms ease-out,
         display 160ms allow-discrete,
         overlay 160ms allow-discrete;
 }
@@ -66,9 +65,29 @@ dialog[open]::backdrop {
     opacity: 1;
 }
 
-dialog[open] {
+/* Centred dialogs grow out of the middle. The drawer below is kept out of these
+   rules rather than resetting them: a `translate` of any kind, a zero one
+   included, makes the dialog the containing block for the fixed dropdowns
+   inside it, and a reset to `none` is an initial value the compiler drops. */
+dialog:not(.drawer) {
+    scale: 0.96;
+    translate: 0 8px;
+}
+
+dialog:not(.drawer)[open] {
     scale: 1;
     translate: 0 0;
+}
+
+/* The detail panel is pinned to the right edge, so it arrives from that edge
+   instead. `transform` rather than `translate`, so that the resting state can
+   be a plain `none` that leaves no containing block behind. */
+dialog.drawer {
+    transform: translateX(100%);
+}
+
+dialog.drawer[open] {
+    transform: none;
 }
 
 @starting-style {
@@ -77,9 +96,13 @@ dialog[open] {
         opacity: 0;
     }
 
-    dialog[open] {
+    dialog:not(.drawer)[open] {
         scale: 0.96;
         translate: 0 8px;
+    }
+
+    dialog.drawer[open] {
+        transform: translateX(100%);
     }
 }
 
@@ -116,12 +139,17 @@ dialog[open] {
 /* Movement is the part worth dropping here. The fades stay so that the close
    still ends in a transitionend, which is what unmounts a dialog. */
 @media (prefers-reduced-motion: reduce) {
-    dialog,
-    dialog[open],
+    dialog:not(.drawer),
+    dialog:not(.drawer)[open],
     .popup,
     .popup[data-open] {
         scale: 1;
         translate: 0 0;
+    }
+
+    dialog.drawer,
+    dialog.drawer[open] {
+        transform: none;
     }
 }
 

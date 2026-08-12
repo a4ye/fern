@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { formatPay } from "@/components/dashboard/data";
-import { parsePay } from "@/lib/pay";
+import { PARSED_CURRENCIES, parsePay } from "@/lib/pay";
 
 describe("parsePay", () => {
     it("reads a plain hourly rate", () => {
@@ -80,5 +80,20 @@ describe("parsePay", () => {
         const label = formatPay(parsed);
         expect(label).toBe("$120,000–$140,000/yr");
         expect(parsePay(label)).toEqual(parsed);
+    });
+
+    // A label printed in one of these used to come back as dollars, since "CA$"
+    // carries a "$".
+    it("reads back every currency it claims to understand", () => {
+        for (const payCurrency of PARSED_CURRENCIES) {
+            const fields = {
+                payMin: "120000.00",
+                payMax: "140000.00",
+                payCurrency,
+                payPeriod: "yearly" as const,
+                payNote: null,
+            };
+            expect(parsePay(formatPay(fields) as string)).toEqual(fields);
+        }
     });
 });

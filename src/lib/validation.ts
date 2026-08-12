@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
     APPLICATION_STATUSES,
     ARRANGEMENTS,
+    PAY_PERIODS,
     type ListStatus,
 } from "@/components/dashboard/data";
 
@@ -89,6 +90,73 @@ export const applicationSchema = z.object({
     ),
     url: urlSchema,
 });
+
+export const NOTES_MAX = 4000;
+
+// Amounts land in numeric(12, 2) columns, so they are kept as decimal strings
+// end to end rather than rounded through a float, and anything that is not a
+// plain number is rejected instead of being silently stored as nothing.
+const amountSchema = (label: string) =>
+    z
+        .string()
+        .nullish()
+        .transform((value) => value?.trim().replace(/,/g, "") ?? "")
+        .refine(
+            (value) => value === "" || /^\d{1,10}(\.\d{1,2})?$/.test(value),
+            {
+                message: `${label} must be a number, with at most two decimals.`,
+            },
+        )
+        .transform((value) => (value === "" ? null : value));
+
+// The detail panel writes every column an application has, which is more than
+// the table's own row exposes. Status is missing on purpose: it moves by
+// recording a step, never by saving the form.
+export const applicationDetailSchema = z
+    .object({
+        company: z
+            .string()
+            .trim()
+            .min(1, "Company is required.")
+            .max(
+                COMPANY_MAX,
+                `Company must be ${COMPANY_MAX} characters or fewer.`,
+            ),
+        role: optionalText("Role", ROLE_MAX),
+        location: optionalText("Location", LOCATION_MAX),
+        arrangement: z
+            .enum(ARRANGEMENTS, "Choose a valid arrangement.")
+            .nullable(),
+        appliedAt: optionalText("Applied date", 10).refine(
+            (value) => value === null || /^\d{4}-\d{2}-\d{2}$/.test(value),
+            "Applied date must be a real date.",
+        ),
+        url: urlSchema,
+        payMin: amountSchema("Minimum pay"),
+        payMax: amountSchema("Maximum pay"),
+        // The column is char(3), and the picker's list comes from the runtime's
+        // own currency data, which need not match byte for byte between the
+        // browser that offered the code and the server that stores it. The
+        // shape is what matters.
+        payCurrency: z
+            .string()
+            .trim()
+            .toUpperCase()
+            .regex(/^[A-Z]{3}$/, "Choose a valid currency."),
+        payPeriod: z.enum(PAY_PERIODS, "Choose a valid pay period.").nullable(),
+        bonus: amountSchema("Bonus"),
+        payNote: optionalText("Pay note", PAY_MAX),
+        notes: optionalText("Notes", NOTES_MAX),
+    })
+    // The column has the same check, so catching it here is the difference
+    // between a message and a failed write.
+    .refine(
+        (pay) =>
+            pay.payMin === null ||
+            pay.payMax === null ||
+            Number(pay.payMax) >= Number(pay.payMin),
+        "Maximum pay cannot be less than the minimum.",
+    );
 
 // Narrows a safeParse failure to a single message for display. Schemas above
 // validate one field at a time in practice, so the first issue is the relevant

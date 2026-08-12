@@ -48,17 +48,25 @@ export const SeasonPageSkeleton = () => (
             Lists
         </Link>
 
-        <div aria-hidden="true" className="mt-4 flex items-start gap-3">
-            <div className="min-w-0 flex-1">
-                <span className="skeleton block h-8 w-64 max-w-full" />
-                <span className="mt-2 flex h-5 items-center">
-                    <span className="skeleton h-3.5 w-96 max-w-full" />
-                </span>
-                <span className="skeleton mt-2 block h-5 w-16" />
+        <div aria-hidden="true" className="mt-4">
+            <div className="flex items-start gap-3">
+                <div className="min-w-0 flex-1">
+                    <span className="skeleton block h-8 w-64 max-w-full" />
+                    <span className="mt-2 flex h-5 items-center">
+                        <span className="skeleton h-3.5 w-96 max-w-full" />
+                    </span>
+                </div>
+                <div className="flex h-8 w-12 shrink-0 items-center justify-end">
+                    <span className="p-1">
+                        <span className="skeleton block size-4" />
+                    </span>
+                    <span className="p-1">
+                        <span className="skeleton block size-4" />
+                    </span>
+                </div>
             </div>
-            <div className="mt-1 flex shrink-0 items-center gap-2 p-1">
-                <span className="skeleton size-4" />
-                <span className="skeleton size-4" />
+            <div className="mt-2 flex h-8 items-center">
+                <span className="skeleton h-5 w-14" />
             </div>
         </div>
 
@@ -92,7 +100,10 @@ export const SeasonPageSkeleton = () => (
             <div className="max-h-[70vh] overflow-auto">
                 <ApplicationsHeaderRow
                     selectAll={
-                        <span aria-hidden="true" className="skeleton size-3.5" />
+                        <span
+                            aria-hidden="true"
+                            className="skeleton size-3.5"
+                        />
                     }
                 />
                 <ul aria-hidden="true">

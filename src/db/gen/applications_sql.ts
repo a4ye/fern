@@ -290,6 +290,88 @@ export async function updateApplication(client: Client, args: UpdateApplicationA
     });
 }
 
+export const updateApplicationFieldsQuery = `-- name: UpdateApplicationFields :exec
+update applications a
+set
+    company_name = $1,
+    role_title = $2,
+    status = $3::application_status,
+    url = $4,
+    location = $5,
+    arrangement = $6::work_arrangement,
+    applied_at = $7::date
+from lists l
+where a.list_id = l.id
+    and a.id = $8
+    and l.user_id = $9`;
+
+export interface UpdateApplicationFieldsArgs {
+    companyName: string;
+    roleTitle: string | null;
+    status: string;
+    url: string | null;
+    location: string | null;
+    arrangement: string | null;
+    appliedAt: Date | null;
+    applicationId: string;
+    userId: string;
+}
+
+export async function updateApplicationFields(client: Client, args: UpdateApplicationFieldsArgs): Promise<void> {
+    await client.query({
+        text: updateApplicationFieldsQuery,
+        values: [args.companyName, args.roleTitle, args.status, args.url, args.location, args.arrangement, args.appliedAt, args.applicationId, args.userId],
+        rowMode: "array"
+    });
+}
+
+export const updateApplicationDetailQuery = `-- name: UpdateApplicationDetail :exec
+update applications a
+set
+    company_name = $1,
+    role_title = $2,
+    url = $3,
+    location = $4,
+    arrangement = $5::work_arrangement,
+    applied_at = $6::date,
+    pay_min = $7::numeric,
+    pay_max = $8::numeric,
+    pay_currency = $9,
+    pay_period = $10::pay_period,
+    bonus_amount = $11::numeric,
+    pay_note = $12,
+    notes = $13
+from lists l
+where a.list_id = l.id
+    and a.id = $14
+    and l.user_id = $15`;
+
+export interface UpdateApplicationDetailArgs {
+    companyName: string;
+    roleTitle: string | null;
+    url: string | null;
+    location: string | null;
+    arrangement: string | null;
+    appliedAt: Date | null;
+    payMin: string | null;
+    payMax: string | null;
+    payCurrency: string;
+    payPeriod: string | null;
+    bonusAmount: string | null;
+    payNote: string | null;
+    notes: string | null;
+    applicationId: string;
+    userId: string;
+}
+
+export async function updateApplicationDetail(client: Client, args: UpdateApplicationDetailArgs): Promise<void> {
+    await client.query({
+        text: updateApplicationDetailQuery,
+        values: [args.companyName, args.roleTitle, args.url, args.location, args.arrangement, args.appliedAt, args.payMin, args.payMax, args.payCurrency, args.payPeriod, args.bonusAmount, args.payNote, args.notes, args.applicationId, args.userId],
+        rowMode: "array"
+    });
+}
+
 export const deleteApplicationQuery = `-- name: DeleteApplication :exec
 delete from applications a
 using lists l

@@ -15,7 +15,8 @@
         "db:migrate": "dbmate --env POSTGRES_URL --no-dump-schema up",
         "db:rollback": "dbmate --env POSTGRES_URL --no-dump-schema rollback",
         "db:generate": "sqlc generate",
-        "db:seed": "bun run db/seed.ts"
+        "db:seed": "bun run db/seed.ts",
+        "flags:sync": "bun run scripts/sync-flags.ts"
     },
     "dependencies": {
         "@ai-sdk/google": "^4.0.23",
@@ -33,6 +34,7 @@
         "zod": "^4.4.3"
     },
     "devDependencies": {
+        "@iconify-json/circle-flags": "^1.2.10",
         "@iconify-json/lucide": "^1.2.118",
         "@iconify-json/simple-icons": "^1.2.90",
         "@iconify/tailwind4": "^1.2.3",

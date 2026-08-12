@@ -47,7 +47,7 @@ export async function recentEventsForList(client: Client, args: RecentEventsForL
 }
 
 export const statusEventsForListQuery = `-- name: StatusEventsForList :many
-select e.application_id, e.from_status, e.to_status
+select e.id, e.application_id, e.from_status, e.to_status, e.occurred_at
 from application_events e
 join applications a on a.id = e.application_id
 where a.list_id = $1
@@ -58,9 +58,11 @@ export interface StatusEventsForListArgs {
 }
 
 export interface StatusEventsForListRow {
+    id: string;
     applicationId: string;
     fromStatus: string | null;
     toStatus: string | null;
+    occurredAt: Date;
 }
 
 export async function statusEventsForList(client: Client, args: StatusEventsForListArgs): Promise<StatusEventsForListRow[]> {
@@ -71,10 +73,71 @@ export async function statusEventsForList(client: Client, args: StatusEventsForL
     });
     return result.rows.map(row => {
         return {
-            applicationId: row[0],
-            fromStatus: row[1],
-            toStatus: row[2]
+            id: row[0],
+            applicationId: row[1],
+            fromStatus: row[2],
+            toStatus: row[3],
+            occurredAt: row[4]
         };
+    });
+}
+
+export const statusEventsForApplicationQuery = `-- name: StatusEventsForApplication :many
+select e.id, e.from_status, e.to_status, e.occurred_at
+from application_events e
+join applications a on a.id = e.application_id
+join lists l on l.id = a.list_id
+where e.application_id = $1 and l.user_id = $2
+order by e.occurred_at`;
+
+export interface StatusEventsForApplicationArgs {
+    applicationId: string;
+    userId: string;
+}
+
+export interface StatusEventsForApplicationRow {
+    id: string;
+    fromStatus: string | null;
+    toStatus: string | null;
+    occurredAt: Date;
+}
+
+export async function statusEventsForApplication(client: Client, args: StatusEventsForApplicationArgs): Promise<StatusEventsForApplicationRow[]> {
+    const result = await client.query({
+        text: statusEventsForApplicationQuery,
+        values: [args.applicationId, args.userId],
+        rowMode: "array"
+    });
+    return result.rows.map(row => {
+        return {
+            id: row[0],
+            fromStatus: row[1],
+            toStatus: row[2],
+            occurredAt: row[3]
+        };
+    });
+}
+
+export const deleteApplicationEventQuery = `-- name: DeleteApplicationEvent :exec
+delete from application_events e
+using applications a, lists l
+where e.application_id = a.id
+    and a.list_id = l.id
+    and e.id = $1
+    and e.application_id = $2
+    and l.user_id = $3`;
+
+export interface DeleteApplicationEventArgs {
+    eventId: string;
+    applicationId: string;
+    userId: string;
+}
+
+export async function deleteApplicationEvent(client: Client, args: DeleteApplicationEventArgs): Promise<void> {
+    await client.query({
+        text: deleteApplicationEventQuery,
+        values: [args.eventId, args.applicationId, args.userId],
+        rowMode: "array"
     });
 }
 

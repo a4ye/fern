@@ -104,6 +104,29 @@ describe("graphFrom", () => {
         expect(nameOf(graph, "interviewing-1")).toBe("Interview");
     });
 
+    test("a status logged again is a round of its own", () => {
+        // A second interview at the same company, which used to collapse into
+        // the first and leave the chart showing a single round.
+        const graph = graphFrom([
+            entry(
+                "not_applied",
+                "applied",
+                "interviewing",
+                "interviewing",
+                "rejected",
+            ),
+        ]);
+        expect(nameOf(graph, "interviewing-1")).toBe("Interview");
+        expect(nameOf(graph, "interviewing-2")).toBe("2nd Interview");
+        expect(
+            graph.links.some(
+                (link) =>
+                    link.from === "interviewing-1" &&
+                    link.to === "interviewing-2",
+            ),
+        ).toBe(true);
+    });
+
     test("journeys still at applied share one resting node", () => {
         // Different lengths, so these used to land on separate nodes a column
         // apart rather than merging.

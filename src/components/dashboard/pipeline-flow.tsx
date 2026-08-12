@@ -121,14 +121,12 @@ const LABEL: Record<ApplicationStatus, string> = {
 const restingLabel = (step: ApplicationStatus) =>
     step === "applied" ? "Awaiting reply" : STATUS_META[step].label;
 
-// The statuses an application has held, in order, collapsed so that a status
-// held twice in a row counts once. A status reached a second time is a separate
-// node from the first, so a loop back to an earlier stage needs no flattening.
+// The statuses an application has held, in order. A status held twice in a row
+// is a round of it logged again, so it keeps both steps and reads as a second
+// interview rather than one long one. Reaching a status again later works the
+// same way, so a loop back to an earlier stage needs no flattening either.
 const journeyOf = (entry: FlowEntry): ApplicationStatus[] => {
-    const steps: ApplicationStatus[] = [];
-    for (const status of entry.history) {
-        if (steps[steps.length - 1] !== status) steps.push(status);
-    }
+    const steps = [...entry.history];
 
     // Everything starts out not applied, so that status only says something
     // about an application that never left it.

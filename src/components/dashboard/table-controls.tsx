@@ -13,26 +13,27 @@ import { createPortal } from "react-dom";
 import {
     APPLICATION_STATUSES,
     ARRANGEMENTS,
+    MONTHS,
     STATUS_KEYWORDS,
     STATUS_META,
     arrangementLabel,
+    formatDay,
+    toDateInput,
     type ApplicationStatus,
     type Arrangement,
 } from "@/components/dashboard/data";
 import { searchScore } from "@/lib/fuzzy";
+import { CURRENCIES, currencyCountry, currencyName } from "@/lib/pay";
 
 // Bulk mode turns every cell of every row into a field, so borders on all of
 // them would be noise; cells read as plain text until hovered or focused. Rows
 // carry a fixed height, so swapping cells for fields never changes the shape of
 // the table.
+// The box is pulled out into the column gap by exactly its own padding, and it
+// rings itself with an outline rather than a border, so the text inside a field
+// lands on the same pixel as the read-only text it replaces.
 export const cellFieldClass =
-    "h-6 w-full min-w-0 border border-transparent bg-transparent px-1.5 text-xs text-ink transition-colors placeholder:text-muted hover:border-hairline focus:border-tile-border focus:bg-background focus:outline-none";
-
-// A single row being edited is an isolated form, so every field is drawn as one.
-// Without this the row shows a border on the focused cell alone and reads as
-// half-broken rather than editable.
-export const editFieldClass =
-    "h-7 w-full min-w-0 border border-hairline bg-background px-1.5 text-xs text-ink transition-colors placeholder:text-muted hover:border-tile-border focus:border-accent focus:outline-none";
+    "-mx-1 h-6 min-w-0 bg-transparent px-1 text-xs text-ink outline-1 outline-transparent transition-colors placeholder:text-muted hover:outline-hairline focus:bg-background focus:outline-tile-border";
 
 export const formInputClass =
     "w-full border border-hairline bg-background px-2.5 py-1.5 text-xs text-ink transition-colors placeholder:text-muted focus:border-accent focus:outline-none";
@@ -56,20 +57,27 @@ export const quietButtonClass =
     "inline-flex cursor-pointer items-center gap-1.5 text-xs text-sub transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 
 // `keywords` are searched but never shown, so an option can be found by what it
-// means as well as by what it is called.
+// means as well as by what it is called. `icon` is the source of a small image
+// drawn ahead of the label; a list where only some options carry one still
+// reserves the space on all of them, so the labels line up either way.
 export type Option<T> = {
     value: T;
     label: string;
     text?: string;
     keywords?: readonly string[];
+    icon?: string;
 };
 
-// "cell" sits on the table grid and stays invisible until touched, "edit"
-// matches the single-row editor, "form" the bordered inputs of the add panel.
+// "cell" sits on the table grid and stays invisible until touched, "form"
+// matches the bordered inputs of the add row and the detail panel.
 const FIELD_CLASS = {
     cell: cellFieldClass,
-    edit: editFieldClass,
     form: formInputClass,
+};
+
+const FIELD_OPEN_CLASS = {
+    cell: "bg-background outline-accent",
+    form: "border-accent bg-background",
 };
 
 export type FieldVariant = keyof typeof FIELD_CLASS;
@@ -84,24 +92,48 @@ type Placement = { left: number; width: number } & (
 );
 
 // Fixed to the viewport and portalled out of the table, which scrolls and would
-// otherwise clip the popup on the last rows.
-const placeFrom = (rect: DOMRect): { style: Placement; maxHeight: number } => {
-    const width = Math.max(rect.width, POPUP_MIN_WIDTH);
+// otherwise clip the popup on the last rows. A popup that grows with its
+// contents leaves `size` out and takes the height it is given back; one of a
+// fixed size passes its own and uses only the side it was put on.
+const placeFrom = (
+    rect: DOMRect,
+    size?: { width: number; height: number },
+): { style: Placement; maxHeight: number } => {
+    const width = size?.width ?? Math.max(rect.width, POPUP_MIN_WIDTH);
+    const wanted = size?.height ?? POPUP_MAX;
     const below = window.innerHeight - rect.bottom - GAP - EDGE;
     const above = rect.top - GAP - EDGE;
     const left = Math.min(rect.left, window.innerWidth - width - EDGE);
 
-    if (below < Math.min(POPUP_MAX, above)) {
+    if (below < Math.min(wanted, above)) {
         return {
             style: { left, width, bottom: window.innerHeight - rect.top + GAP },
-            maxHeight: Math.min(POPUP_MAX, above),
+            maxHeight: Math.min(wanted, above),
         };
     }
     return {
         style: { left, width, top: rect.bottom + GAP },
-        maxHeight: Math.min(POPUP_MAX, below),
+        maxHeight: Math.min(wanted, below),
     };
 };
+
+// Decoration beside a label, and the empty slot an option without one keeps so
+// that the labels stay in a column. A plain <img> rather than next/image: these
+// are a few hundred bytes of SVG each, nothing to optimise, and `lazy` is what
+// keeps a list of two hundred of them to the handful actually on screen.
+const OptionIcon = ({ src }: { src?: string }) =>
+    src ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={src} alt="" loading="lazy" className="size-4 shrink-0" />
+    ) : (
+        <span aria-hidden="true" className="size-4 shrink-0" />
+    );
+
+// An open modal dialog makes the rest of the document inert, so a popup sent to
+// the body would render but refuse every click. Inside one, it belongs to the
+// dialog.
+const popupHost = (trigger: HTMLElement | null): HTMLElement =>
+    trigger?.closest("dialog") ?? document.body;
 
 // A custom dropdown rather than a native <select>: the browser's native option
 // popup can't be styled to match the table. Passing `placeholder` turns it into
@@ -128,15 +160,19 @@ export const CellSelect = <T,>({
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState("");
     const [active, setActive] = useState(0);
-    const [placed, setPlaced] = useState<ReturnType<typeof placeFrom> | null>(
-        null,
-    );
+    const [placed, setPlaced] = useState<
+        (ReturnType<typeof placeFrom> & { host: HTMLElement }) | null
+    >(null);
     const triggerRef = useRef<HTMLButtonElement>(null);
     const popupRef = useRef<HTMLDivElement>(null);
     const searchRef = useRef<HTMLInputElement>(null);
     const listRef = useRef<HTMLUListElement>(null);
     const listId = useId();
     const current = options.find((option) => option.value === value);
+    // One list either draws glyphs or it does not, so the slot is reserved on
+    // every row of a list that has any. Options without one keep their label in
+    // line with the rest rather than sliding under the glyphs.
+    const iconic = options.some((option) => option.icon);
 
     const matches = useMemo(() => {
         if (!searchable || !query.trim()) return options;
@@ -152,7 +188,11 @@ export const CellSelect = <T,>({
 
     const place = useCallback(() => {
         const trigger = triggerRef.current;
-        if (trigger) setPlaced(placeFrom(trigger.getBoundingClientRect()));
+        if (!trigger) return;
+        setPlaced({
+            ...placeFrom(trigger.getBoundingClientRect()),
+            host: popupHost(trigger),
+        });
     }, []);
 
     const close = useCallback(() => {
@@ -176,6 +216,10 @@ export const CellSelect = <T,>({
         };
         const onKeyDown = (event: KeyboardEvent) => {
             if (event.key !== "Escape") return;
+            // Escape belongs to the dropdown while it is open. Closing a modal
+            // dialog is the browser's own default action for the same press, so
+            // without this one press would shut the panel behind it too.
+            event.preventDefault();
             close();
             triggerRef.current?.focus();
         };
@@ -217,6 +261,7 @@ export const CellSelect = <T,>({
         if (event.key === "Enter") {
             event.stopPropagation();
         } else if (event.key === "Escape" && open) {
+            event.preventDefault();
             event.stopPropagation();
             close();
         }
@@ -226,6 +271,7 @@ export const CellSelect = <T,>({
     // have to be stopped here too.
     const onPopupKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
         if (event.key === "Escape") {
+            event.preventDefault();
             event.stopPropagation();
             close();
             triggerRef.current?.focus();
@@ -260,12 +306,19 @@ export const CellSelect = <T,>({
                 aria-haspopup="listbox"
                 aria-expanded={open}
                 aria-label={label}
-                className={`${FIELD_CLASS[variant]} flex cursor-pointer items-center justify-between gap-1 text-left ${open ? "border-accent bg-background" : ""}`}
+                className={`${FIELD_CLASS[variant]} flex cursor-pointer items-center justify-between gap-1 text-left ${open ? FIELD_OPEN_CLASS[variant] : ""}`}
             >
-                <span
-                    className={`truncate ${placeholder ? "text-sub" : (current?.text ?? "")}`}
-                >
-                    {placeholder ?? current?.label ?? "Not set"}
+                <span className="flex min-w-0 items-center gap-2">
+                    {iconic && (
+                        <OptionIcon
+                            src={placeholder ? undefined : current?.icon}
+                        />
+                    )}
+                    <span
+                        className={`truncate ${placeholder ? "text-sub" : (current?.text ?? "")}`}
+                    >
+                        {placeholder ?? current?.label ?? "Not set"}
+                    </span>
                 </span>
                 <span
                     aria-hidden="true"
@@ -329,7 +382,7 @@ export const CellSelect = <T,>({
                                             type="button"
                                             onClick={() => select(option)}
                                             onMouseMove={() => setActive(index)}
-                                            className={`flex w-full cursor-pointer items-center px-2 py-1.5 text-left text-xs transition-colors ${
+                                            className={`flex w-full cursor-pointer items-center gap-2 px-2 py-1.5 text-left text-xs transition-colors ${
                                                 selected
                                                     ? "bg-accent-tint"
                                                     : highlighted
@@ -337,6 +390,9 @@ export const CellSelect = <T,>({
                                                       : "hover:bg-surface"
                                             }`}
                                         >
+                                            {iconic && (
+                                                <OptionIcon src={option.icon} />
+                                            )}
                                             <span
                                                 className={`truncate ${option.text ?? "text-ink"}`}
                                             >
@@ -353,7 +409,386 @@ export const CellSelect = <T,>({
                             )}
                         </ul>
                     </div>,
-                    document.body,
+                    placed.host,
+                )}
+        </div>
+    );
+};
+
+const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
+
+// Seven 32px cells and six weeks of them, plus the padding, the month bar and
+// the row of weekday letters.
+const CALENDAR_WIDTH = 250;
+const CALENDAR_HEIGHT = 288;
+
+// Dates are held as plain yyyy-mm-dd and read from their parts: `new Date(value)`
+// would take them as UTC midnight and land on the day before west of it.
+const parseDay = (value: string): Date | null => {
+    const [year, month, day] = value.split("-").map(Number);
+    if (!year || !month || !day) return null;
+    return new Date(year, month - 1, day);
+};
+
+const shiftDay = (date: Date, days: number) =>
+    new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
+
+const shiftMonth = (date: Date, months: number) =>
+    new Date(date.getFullYear(), date.getMonth() + months, 1);
+
+const shiftYear = (date: Date, years: number) =>
+    new Date(date.getFullYear() + years, date.getMonth(), 1);
+
+// Whether a yyyy-mm-dd falls in the given year and zero-based month.
+const inMonth = (date: string, year: number, month: number) =>
+    date.startsWith(`${year}-`) && Number(date.slice(5, 7)) === month + 1;
+
+const sameMonth = (first: Date, second: Date) =>
+    first.getFullYear() === second.getFullYear() &&
+    first.getMonth() === second.getMonth();
+
+// Always six weeks from the Sunday on or before the 1st, so paging through the
+// months never changes the height of the popup and the days either side of the
+// month stay in reach.
+const monthGrid = (view: Date): Date[] => {
+    const first = new Date(view.getFullYear(), view.getMonth(), 1);
+    const start = shiftDay(first, -first.getDay());
+    return Array.from({ length: 42 }, (_, index) => shiftDay(start, index));
+};
+
+// A row is seven days wide in the day grid and three months wide in the month
+// one, so the vertical arrows step by that much.
+const ARROW_STEP = {
+    days: { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 },
+    months: { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -3, ArrowDown: 3 },
+} satisfies Record<string, Record<string, number>>;
+
+type CalendarMode = keyof typeof ARROW_STEP;
+
+const pagerClass =
+    "flex size-7 cursor-pointer items-center justify-center text-muted transition-colors hover:bg-surface hover:text-ink focus-visible:outline-1 focus-visible:outline-accent";
+
+// A custom calendar rather than <input type="date">: the native field draws a
+// picker the page has no say over, in a typeface and a set of corners that are
+// not this one's. Clicking the day already held clears the field, which is the
+// same second press that backs out of any other choice here.
+export const DateField = ({
+    value,
+    onChange,
+    label,
+    className = "",
+    variant = "cell",
+}: {
+    value: string;
+    onChange: (value: string) => void;
+    label: string;
+    className?: string;
+    variant?: FieldVariant;
+}) => {
+    const [open, setOpen] = useState(false);
+    const [placed, setPlaced] = useState<
+        (ReturnType<typeof placeFrom> & { host: HTMLElement }) | null
+    >(null);
+    // The day the keyboard is on, and the month the grid draws around it.
+    const [cursor, setCursor] = useState(() => parseDay(value) ?? new Date());
+    const [mode, setMode] = useState<CalendarMode>("days");
+    const triggerRef = useRef<HTMLButtonElement>(null);
+    const popupRef = useRef<HTMLDivElement>(null);
+    const cursorRef = useRef<HTMLButtonElement>(null);
+
+    const today = toDateInput(new Date());
+    const cursorKey = toDateInput(cursor);
+    const days = mode === "days";
+
+    const place = useCallback(() => {
+        const trigger = triggerRef.current;
+        if (!trigger) return;
+        setPlaced({
+            ...placeFrom(trigger.getBoundingClientRect(), {
+                width: CALENDAR_WIDTH,
+                height: CALENDAR_HEIGHT,
+            }),
+            host: popupHost(trigger),
+        });
+    }, []);
+
+    const close = useCallback(() => setOpen(false), []);
+
+    useEffect(() => {
+        if (!open) return;
+        place();
+
+        const onPointerDown = (event: MouseEvent) => {
+            const target = event.target as Node;
+            if (
+                !triggerRef.current?.contains(target) &&
+                !popupRef.current?.contains(target)
+            ) {
+                close();
+            }
+        };
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key !== "Escape") return;
+            // Escape belongs to the calendar while it is open, and closing the
+            // dialog behind it is the browser's default for the same press.
+            event.preventDefault();
+            close();
+            triggerRef.current?.focus();
+        };
+
+        document.addEventListener("mousedown", onPointerDown);
+        document.addEventListener("keydown", onKeyDown);
+        window.addEventListener("scroll", place, true);
+        window.addEventListener("resize", place);
+        return () => {
+            document.removeEventListener("mousedown", onPointerDown);
+            document.removeEventListener("keydown", onKeyDown);
+            window.removeEventListener("scroll", place, true);
+            window.removeEventListener("resize", place);
+        };
+    }, [open, place, close]);
+
+    // Focus follows the cursor, so the arrows move it and the grid holds a
+    // single tab stop rather than forty two. The popup is placed in view
+    // already, and letting the focus scroll to it would shift the page under it.
+    useEffect(() => {
+        if (open && placed) cursorRef.current?.focus({ preventScroll: true });
+    }, [open, placed, mode, cursorKey]);
+
+    const select = (date: Date) => {
+        const picked = toDateInput(date);
+        onChange(picked === value ? "" : picked);
+        close();
+        triggerRef.current?.focus();
+    };
+
+    const openAt = () => {
+        setCursor(parseDay(value) ?? new Date());
+        setMode("days");
+        setOpen(true);
+    };
+
+    // The header steps by whatever the grid below it is showing, so the same
+    // pair of arrows walks months in one mode and years in the other.
+    const stepPage = (direction: number) =>
+        setCursor((current) =>
+            mode === "days"
+                ? shiftMonth(current, direction)
+                : shiftYear(current, direction),
+        );
+
+    // The row editor and the add panel read Enter as save and Escape as cancel,
+    // so neither may reach them from a control that owns both.
+    const onTriggerKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+        if (event.key === "Enter") {
+            event.stopPropagation();
+        } else if (event.key === "Escape" && open) {
+            event.preventDefault();
+            event.stopPropagation();
+            close();
+        }
+    };
+
+    // A portal bubbles to its React parent, so the keys the calendar owns are
+    // stopped here as well.
+    const onPopupKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+        if (event.key === "Escape") {
+            event.preventDefault();
+            event.stopPropagation();
+            close();
+            triggerRef.current?.focus();
+            return;
+        }
+        if (event.key === "Enter") {
+            event.stopPropagation();
+            return;
+        }
+        const step = (ARROW_STEP[mode] as Record<string, number>)[event.key];
+        if (step === undefined) return;
+        event.preventDefault();
+        event.stopPropagation();
+        setCursor((current) =>
+            mode === "days"
+                ? shiftDay(current, step)
+                : shiftMonth(current, step),
+        );
+    };
+
+    return (
+        <div className={`min-w-0 ${className}`}>
+            <button
+                ref={triggerRef}
+                type="button"
+                onClick={() => (open ? close() : openAt())}
+                onKeyDown={onTriggerKeyDown}
+                aria-haspopup="dialog"
+                aria-expanded={open}
+                aria-label={label}
+                className={`${FIELD_CLASS[variant]} group flex cursor-pointer items-center justify-between gap-1 text-left ${open ? FIELD_OPEN_CLASS[variant] : ""}`}
+            >
+                <span className={`truncate ${value ? "" : "text-muted"}`}>
+                    {value ? formatDay(value) : "Not set"}
+                </span>
+                {/* Repeated down every row of a bulk edit the glyph is the
+                    noisiest thing on the table, so in a cell it shows on the
+                    one being worked on. */}
+                <span
+                    aria-hidden="true"
+                    className={`icon-[lucide--calendar] size-3 shrink-0 text-muted transition-opacity ${
+                        variant === "cell" && !open
+                            ? "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100"
+                            : ""
+                    }`}
+                />
+            </button>
+            {placed &&
+                createPortal(
+                    <div
+                        ref={popupRef}
+                        onKeyDown={onPopupKeyDown}
+                        data-open={open || undefined}
+                        role="dialog"
+                        aria-label={label}
+                        style={placed.style}
+                        className="popup fixed z-50 flex-col gap-2 border border-hairline bg-background p-3 shadow-sm"
+                    >
+                        <div className="flex items-center justify-between">
+                            <button
+                                type="button"
+                                onClick={() => stepPage(-1)}
+                                aria-label={
+                                    days ? "Previous month" : "Previous year"
+                                }
+                                className={pagerClass}
+                            >
+                                <span
+                                    aria-hidden="true"
+                                    className="icon-[lucide--chevron-left] size-3.5"
+                                />
+                            </button>
+                            {/* The title is the way back out: it opens the
+                                months, and picking one or pressing it again
+                                returns to the days of that month. */}
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    setMode(days ? "months" : "days")
+                                }
+                                aria-expanded={!days}
+                                className="cursor-pointer px-2 text-sm font-medium text-ink transition-colors hover:text-accent focus-visible:outline-1 focus-visible:outline-accent"
+                            >
+                                {days && `${MONTHS[cursor.getMonth()]} `}
+                                {cursor.getFullYear()}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => stepPage(1)}
+                                aria-label={days ? "Next month" : "Next year"}
+                                className={pagerClass}
+                            >
+                                <span
+                                    aria-hidden="true"
+                                    className="icon-[lucide--chevron-right] size-3.5"
+                                />
+                            </button>
+                        </div>
+                        {days && (
+                            <div
+                                aria-hidden="true"
+                                className="grid grid-cols-7 border-b border-hairline pb-2"
+                            >
+                                {WEEKDAYS.map((letter, index) => (
+                                    <span
+                                        key={`${letter}${index}`}
+                                        className="text-center text-xs font-medium text-muted"
+                                    >
+                                        {letter}
+                                    </span>
+                                ))}
+                            </div>
+                        )}
+                        {!days && (
+                            <div className="grid grid-cols-3">
+                                {MONTHS.map((month, index) => {
+                                    const year = cursor.getFullYear();
+                                    const held = inMonth(value, year, index);
+                                    const monthClass = held
+                                        ? "bg-accent font-medium text-background"
+                                        : inMonth(today, year, index)
+                                          ? "bg-accent-tint font-medium text-ink"
+                                          : "text-ink hover:bg-surface";
+                                    return (
+                                        <button
+                                            key={month}
+                                            ref={
+                                                index === cursor.getMonth()
+                                                    ? cursorRef
+                                                    : undefined
+                                            }
+                                            type="button"
+                                            tabIndex={
+                                                index === cursor.getMonth()
+                                                    ? 0
+                                                    : -1
+                                            }
+                                            onClick={() => {
+                                                setCursor(
+                                                    new Date(
+                                                        cursor.getFullYear(),
+                                                        index,
+                                                        1,
+                                                    ),
+                                                );
+                                                setMode("days");
+                                            }}
+                                            aria-pressed={held}
+                                            className={`h-14 cursor-pointer text-xs transition-colors focus-visible:outline-1 focus-visible:outline-accent ${monthClass}`}
+                                        >
+                                            {month}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
+                        {days && (
+                            <div className="grid grid-cols-7">
+                                {monthGrid(cursor).map((date) => {
+                                    const key = toDateInput(date);
+                                    const outside = !sameMonth(date, cursor);
+                                    // The accent is lighter than the text around
+                                    // it, so today is a tinted plate rather than a
+                                    // tinted number, which would read as disabled.
+                                    const dayClass =
+                                        key === value
+                                            ? "bg-accent font-medium text-background"
+                                            : key === today
+                                              ? "bg-accent-tint font-medium text-ink"
+                                              : `hover:bg-surface ${outside ? "text-muted" : "text-ink"}`;
+                                    return (
+                                        <button
+                                            key={key}
+                                            ref={
+                                                key === cursorKey
+                                                    ? cursorRef
+                                                    : undefined
+                                            }
+                                            type="button"
+                                            tabIndex={
+                                                key === cursorKey ? 0 : -1
+                                            }
+                                            onClick={() => select(date)}
+                                            aria-pressed={key === value}
+                                            aria-label={formatDay(key)}
+                                            className={`h-8 cursor-pointer text-xs tabular-nums transition-colors focus-visible:outline-1 focus-visible:outline-accent ${dayClass}`}
+                                        >
+                                            {date.getDate()}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>,
+                    placed.host,
                 )}
         </div>
     );
@@ -366,6 +801,21 @@ export const STATUS_OPTIONS: Option<ApplicationStatus>[] =
         text: STATUS_META[status].text,
         keywords: STATUS_KEYWORDS[status],
     }));
+
+// Codes are what people recognise, so the currency's name is searchable rather
+// than shown, and the flag carries the recognition instead. The flags are files
+// under public/, written by `bun run flags:sync`, so a page that never opens
+// this list downloads none of them and one that does takes only the few it
+// draws.
+export const CURRENCY_OPTIONS: Option<string>[] = CURRENCIES.map((code) => {
+    const country = currencyCountry(code);
+    return {
+        value: code,
+        label: code,
+        keywords: [currencyName.of(code) ?? code],
+        icon: country ? `/flags/${country}.svg` : undefined,
+    };
+});
 
 export const ARRANGEMENT_OPTIONS: Option<Arrangement | null>[] = [
     { value: null, label: "Not set" },

@@ -92,6 +92,49 @@ where a.list_id = l.id
     and a.id = @application_id
     and l.user_id = @user_id;
 
+-- The same write with the pay columns left alone, for a quick edit that did not
+-- touch the pay box. Re-parsing an untouched box would flatten whatever the
+-- detail panel put in those columns, since one line of text cannot hold a
+-- range, a currency, a bonus and a note at once.
+-- name: UpdateApplicationFields :exec
+update applications a
+set
+    company_name = @company_name,
+    role_title = sqlc.narg('role_title'),
+    status = @status::application_status,
+    url = sqlc.narg('url'),
+    location = sqlc.narg('location'),
+    arrangement = sqlc.narg('arrangement')::work_arrangement,
+    applied_at = sqlc.narg('applied_at')::date
+from lists l
+where a.list_id = l.id
+    and a.id = @application_id
+    and l.user_id = @user_id;
+
+-- Every editable column, which is more than the row in the table can show. The
+-- status is left out on purpose: it only moves by recording a step, so saving
+-- the detail panel can never invent a transition.
+-- name: UpdateApplicationDetail :exec
+update applications a
+set
+    company_name = @company_name,
+    role_title = sqlc.narg('role_title'),
+    url = sqlc.narg('url'),
+    location = sqlc.narg('location'),
+    arrangement = sqlc.narg('arrangement')::work_arrangement,
+    applied_at = sqlc.narg('applied_at')::date,
+    pay_min = sqlc.narg('pay_min')::numeric,
+    pay_max = sqlc.narg('pay_max')::numeric,
+    pay_currency = @pay_currency,
+    pay_period = sqlc.narg('pay_period')::pay_period,
+    bonus_amount = sqlc.narg('bonus_amount')::numeric,
+    pay_note = sqlc.narg('pay_note'),
+    notes = sqlc.narg('notes')
+from lists l
+where a.list_id = l.id
+    and a.id = @application_id
+    and l.user_id = @user_id;
+
 -- name: DeleteApplication :exec
 delete from applications a
 using lists l

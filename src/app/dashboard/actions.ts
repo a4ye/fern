@@ -9,10 +9,12 @@ import {
     deleteApplication as deleteApplicationDb,
     deleteApplications as deleteApplicationsDb,
     deleteList as deleteListDb,
+    logStatusStep as logStatusStepDb,
+    removeStatusStep as removeStatusStepDb,
+    saveApplicationDetail as saveApplicationDetailDb,
     setApplicationsArrangement as setApplicationsArrangementDb,
     setApplicationsStatus as setApplicationsStatusDb,
     setListPinned,
-    updateApplication as updateApplicationDb,
     updateApplications as updateApplicationsDb,
     updateList as updateListDb,
 } from "@/db/dashboard";
@@ -20,9 +22,11 @@ import type {
     ApplicationStatus,
     Arrangement,
     ListStatus,
+    PayPeriod,
 } from "@/components/dashboard/data";
 import { scrapePosting, type ScrapedPosting } from "@/lib/job-scrape";
 import {
+    applicationDetailSchema,
     applicationSchema,
     firstIssue,
     listCreateSchema,
@@ -86,6 +90,22 @@ export type ApplicationDraft = {
     url: string | null;
 };
 
+export type ApplicationDetailDraft = {
+    company: string;
+    role: string | null;
+    location: string | null;
+    arrangement: Arrangement | null;
+    appliedAt: string | null;
+    url: string | null;
+    payMin: string | null;
+    payMax: string | null;
+    payCurrency: string;
+    payPeriod: PayPeriod | null;
+    bonus: string | null;
+    payNote: string | null;
+    notes: string | null;
+};
+
 export const addApplication = async (
     listId: string,
     input: ApplicationDraft,
@@ -104,29 +124,13 @@ export const addApplication = async (
     return { ok: true };
 };
 
-export const updateApplication = async (
-    listId: string,
-    applicationId: string,
-    input: ApplicationDraft,
-): Promise<ActionResult> => {
-    const session = await auth.api.getSession({ headers: await headers() });
-    if (!session) return { ok: false, error: NOT_SIGNED_IN };
-
-    const parsed = applicationSchema.safeParse(input);
-    if (!parsed.success) {
-        return { ok: false, error: firstIssue(parsed.error) };
-    }
-
-    await updateApplicationDb(session.user.id, applicationId, parsed.data);
-    revalidatePath(`/dashboard/${listId}`);
-    return { ok: true };
-};
-
 // Bulk save from the edit-all grid. One bad row rejects the whole batch, named
 // in the message, so a typo can't be silently dropped while its neighbours save.
+// `payTyped` marks the rows whose pay box was actually edited, which are the
+// only ones whose pay columns are rewritten from it.
 export const updateApplicationsBulk = async (
     listId: string,
-    rows: { id: string; input: ApplicationDraft }[],
+    rows: { id: string; input: ApplicationDraft; payTyped: boolean }[],
 ): Promise<ActionResult> => {
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session) return { ok: false, error: NOT_SIGNED_IN };
@@ -141,12 +145,62 @@ export const updateApplicationsBulk = async (
                 error: `${label}: ${firstIssue(parsed.error)}`,
             };
         }
-        parsedRows.push({ id: row.id, input: parsed.data });
+        parsedRows.push({
+            id: row.id,
+            input: parsed.data,
+            payTyped: row.payTyped,
+        });
     }
 
     await updateApplicationsDb(session.user.id, parsedRows);
     revalidatePath(`/dashboard/${listId}`);
     return { ok: true };
+};
+
+// The detail panel's save. Every column an application has, minus the status,
+// which only moves through logApplicationStatus below.
+export const saveApplicationDetail = async (
+    listId: string,
+    applicationId: string,
+    input: ApplicationDetailDraft,
+): Promise<ActionResult> => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) return { ok: false, error: NOT_SIGNED_IN };
+
+    const parsed = applicationDetailSchema.safeParse(input);
+    if (!parsed.success) {
+        return { ok: false, error: firstIssue(parsed.error) };
+    }
+
+    await saveApplicationDetailDb(session.user.id, applicationId, parsed.data);
+    revalidatePath(`/dashboard/${listId}`);
+    return { ok: true };
+};
+
+// Records a step in the history. The status the application already sits at is
+// a step like any other, which is how a second interview gets logged.
+export const logApplicationStatus = async (
+    listId: string,
+    applicationId: string,
+    status: ApplicationStatus,
+): Promise<void> => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) return;
+
+    await logStatusStepDb(session.user.id, applicationId, status);
+    revalidatePath(`/dashboard/${listId}`);
+};
+
+export const removeApplicationStep = async (
+    listId: string,
+    applicationId: string,
+    eventId: string,
+): Promise<void> => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) return;
+
+    await removeStatusStepDb(session.user.id, applicationId, eventId);
+    revalidatePath(`/dashboard/${listId}`);
 };
 
 export const setApplicationsStatus = async (

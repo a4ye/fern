@@ -342,6 +342,20 @@ const ARRANGEMENT_LABEL: Record<Arrangement, string> = {
 export const arrangementLabel = (arrangement: Arrangement): string =>
     ARRANGEMENT_LABEL[arrangement];
 
+const PERIOD_LABEL: Record<PayPeriod, string> = {
+    hourly: "Hourly",
+    weekly: "Weekly",
+    biweekly: "Biweekly",
+    monthly: "Monthly",
+    yearly: "Yearly",
+    one_time: "One time",
+};
+
+export const PAY_PERIODS = Object.keys(PERIOD_LABEL) as PayPeriod[];
+
+export const payPeriodLabel = (period: PayPeriod): string =>
+    PERIOD_LABEL[period];
+
 const PERIOD_SUFFIX: Record<PayPeriod, string> = {
     hourly: "/hr",
     weekly: "/wk",
@@ -376,20 +390,36 @@ export const parseListSort = (value: string | undefined): ListSort =>
         ? (value as ListSort)
         : "recent";
 
+// One step in an application's status history. The opening step is where the
+// application started out rather than a move anyone recorded, so it has no
+// event behind it and cannot be taken back on its own.
+export type StatusStep = {
+    id: string | null;
+    status: ApplicationStatus;
+    at: string | null;
+};
+
 export type ApplicationRow = {
     id: string;
     company: string;
     role: string | null;
     status: ApplicationStatus;
     // `pay` is the rendered label, which may come from the structured pay range;
-    // `payNote` is the free-text field the editor writes back to.
+    // `payNote` is the free-text field the quick editor writes back to. The
+    // amounts below are what the detail panel edits directly.
     pay: string | null;
     payNote: string | null;
+    payMin: string | null;
+    payMax: string | null;
+    payCurrency: string;
+    payPeriod: PayPeriod | null;
+    bonus: string | null;
     location: string | null;
     arrangement: Arrangement | null;
     appliedAt: string | null;
     url: string | null;
     notes: string | null;
+    history: StatusStep[];
     updated: string;
 };
 
@@ -501,7 +531,7 @@ export const formatPay = (input: {
     return `${base}${suffix}`;
 };
 
-const MONTHS = [
+export const MONTHS = [
     "Jan",
     "Feb",
     "Mar",

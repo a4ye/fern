@@ -11,16 +11,41 @@ type Row = {
     totalApplications: number;
 };
 
+type EventRow = {
+    id: string;
+    applicationId: string;
+    fromStatus: string | null;
+    toStatus: string | null;
+    occurredAt: Date;
+};
+
 let total = 0;
 let rows: Row[] = [];
+let applications: Record<string, unknown>[] = [];
+let statusEvents: EventRow[] = [];
 
 const countListsForUser = mock(async (..._args: unknown[]) => ({ total }));
 const listListsForUser = mock(async (..._args: unknown[]) => rows);
+const getListForUser = mock(async (..._args: unknown[]) => row());
+const listApplicationsForList = mock(
+    async (..._args: unknown[]) => applications,
+);
+const pipelineForList = mock(async (..._args: unknown[]) => []);
+const recentEventsForList = mock(async (..._args: unknown[]) => []);
+const statusEventsForList = mock(async (..._args: unknown[]) => statusEvents);
 
 mock.module("@/db/client", () => ({ getPool: () => ({}) }));
-mock.module("@/db/queries", () => ({ countListsForUser, listListsForUser }));
+mock.module("@/db/queries", () => ({
+    countListsForUser,
+    listListsForUser,
+    getListForUser,
+    listApplicationsForList,
+    pipelineForList,
+    recentEventsForList,
+    statusEventsForList,
+}));
 
-const { getListsForUser } = await import("@/db/dashboard");
+const { getListDetail, getListsForUser } = await import("@/db/dashboard");
 
 const row = (overrides: Partial<Row> = {}): Row => ({
     id: "list-1",
@@ -117,6 +142,96 @@ describe("getListsForUser", () => {
             pinned: false,
             description: "New grad roles",
         });
+    });
+});
+
+const application = (status: string) => ({
+    id: "app-1",
+    companyName: "Circleback",
+    roleTitle: "Backend",
+    status,
+    url: null,
+    location: null,
+    arrangement: null,
+    notes: null,
+    payMin: null,
+    payMax: null,
+    payCurrency: "USD",
+    payPeriod: null,
+    bonusAmount: null,
+    payNote: null,
+    appliedAt: null,
+    updatedAt: new Date("2026-08-01T12:00:00.000Z"),
+});
+
+const event = (
+    from: string | null,
+    to: string,
+    id = `event-${to}`,
+): EventRow => ({
+    id,
+    applicationId: "app-1",
+    fromStatus: from,
+    toStatus: to,
+    occurredAt: new Date("2026-08-04T12:00:00.000Z"),
+});
+
+const detail = async () => {
+    const loaded = await getListDetail("user-1", "list-1");
+    if (!loaded) throw new Error("expected a list");
+    return loaded;
+};
+
+describe("getListDetail", () => {
+    it("counts a status recorded twice as two steps of its own", async () => {
+        applications = [application("interviewing")];
+        statusEvents = [
+            event("applied", "interviewing", "first"),
+            event("interviewing", "interviewing", "second"),
+        ];
+        const { applications: loaded, flow } = await detail();
+
+        expect(loaded[0].history.map((step) => step.status)).toEqual([
+            "applied",
+            "interviewing",
+            "interviewing",
+        ]);
+        expect(flow[0].history).toEqual(loaded[0].history.map((s) => s.status));
+    });
+
+    it("leaves the opening step with no event to take back", async () => {
+        applications = [application("interviewing")];
+        statusEvents = [event("applied", "interviewing", "first")];
+        const { applications: loaded } = await detail();
+
+        expect(loaded[0].history.map((step) => step.id)).toEqual([
+            null,
+            "first",
+        ]);
+    });
+
+    it("gives an application that never moved a history of where it sits", async () => {
+        applications = [application("not_applied")];
+        statusEvents = [];
+        const { applications: loaded } = await detail();
+
+        expect(loaded[0].history).toEqual([
+            { id: null, status: "not_applied", at: null },
+        ]);
+    });
+
+    it("ends the history where the row is, even if no step recorded it", async () => {
+        // The bulk toolbar writes the event and the status separately, so a
+        // status that arrived some other way still has to close the trail.
+        applications = [application("rejected")];
+        statusEvents = [event("applied", "interviewing", "first")];
+        const { applications: loaded } = await detail();
+
+        expect(loaded[0].history.map((step) => step.status)).toEqual([
+            "applied",
+            "interviewing",
+            "rejected",
+        ]);
     });
 });
 

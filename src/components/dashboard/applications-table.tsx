@@ -6,19 +6,17 @@ import {
     useRef,
     useState,
     useTransition,
-    type KeyboardEvent as ReactKeyboardEvent,
-    type RefObject,
 } from "react";
 import {
     removeApplication,
     removeApplications,
     setApplicationsArrangement,
     setApplicationsStatus,
-    updateApplication,
     updateApplicationsBulk,
     type ApplicationDraft,
 } from "@/app/dashboard/actions";
 import { AddApplicationForm } from "@/components/dashboard/add-application-form";
+import { ApplicationPanel } from "@/components/dashboard/application-panel";
 import {
     APPLICATION_COLUMNS as COLUMNS,
     ApplicationsHeaderRow,
@@ -26,13 +24,13 @@ import {
 } from "@/components/dashboard/applications-columns";
 import {
     CellSelect,
+    DateField,
     STATUS_OPTIONS,
     ARRANGEMENT_OPTIONS,
     cellFieldClass,
     checkboxClass,
     dangerButtonClass,
     type Option,
-    editFieldClass,
     ghostButtonClass,
     primaryButtonClass,
     quietButtonClass,
@@ -47,13 +45,7 @@ import {
     type ApplicationStatus,
     type Arrangement,
 } from "@/components/dashboard/data";
-import {
-    COMPANY_MAX,
-    LOCATION_MAX,
-    PAY_MAX,
-    ROLE_MAX,
-    URL_MAX,
-} from "@/lib/validation";
+import { COMPANY_MAX, LOCATION_MAX, PAY_MAX, ROLE_MAX } from "@/lib/validation";
 
 type Draft = {
     company: string;
@@ -105,88 +97,73 @@ const Cell = ({
     </span>
 );
 
-// The eight editable fields, laid out on the shared grid. Used by the single-row
-// editor and every row of bulk edit mode, so the two stay aligned with each
-// other and with the read-only rows.
+// The quick-editable fields of one row, laid out on the shared grid so bulk
+// edit mode stays aligned with the read-only rows. Everything an application
+// holds beyond these is edited in the detail panel.
 const RowFields = ({
     draft,
     onChange,
-    firstFieldRef,
-    variant,
 }: {
     draft: Draft;
     onChange: <K extends keyof Draft>(key: K, value: Draft[K]) => void;
-    firstFieldRef?: RefObject<HTMLInputElement | null>;
-    variant: "cell" | "edit";
-}) => {
-    const fieldClass = variant === "edit" ? editFieldClass : cellFieldClass;
-    return (
-        <>
-            <input
-                ref={firstFieldRef}
-                value={draft.company}
-                onChange={(event) => onChange("company", event.target.value)}
-                placeholder="Company"
-                aria-label="Company"
-                maxLength={COMPANY_MAX}
-                className={fieldClass}
-            />
-            <input
-                value={draft.role}
-                onChange={(event) => onChange("role", event.target.value)}
-                placeholder="Role"
-                aria-label="Role"
-                maxLength={ROLE_MAX}
-                className={fieldClass}
-            />
-            <CellSelect
-                label="Status"
-                value={draft.status}
-                options={STATUS_OPTIONS}
-                onChange={(status) => onChange("status", status)}
-                variant={variant}
-                searchable
-            />
-            <input
-                value={draft.location}
-                onChange={(event) => onChange("location", event.target.value)}
-                placeholder="Location"
-                aria-label="Location"
-                maxLength={LOCATION_MAX}
-                className={fieldClass}
-            />
-            <CellSelect
-                label="Arrangement"
-                value={draft.arrangement}
-                options={ARRANGEMENT_OPTIONS}
-                onChange={(arrangement) => onChange("arrangement", arrangement)}
-                variant={variant}
-            />
-            <input
-                value={draft.pay}
-                onChange={(event) => onChange("pay", event.target.value)}
-                placeholder="120k-140k/yr"
-                aria-label="Pay"
-                maxLength={PAY_MAX}
-                className={fieldClass}
-            />
-            {/* The picker glyph repeated down every row is the noisiest thing
-                in bulk edit, so there it only shows on the cell being worked
-                on. The lone editing row can afford to always show it. */}
-            <input
-                type="date"
-                value={draft.appliedAt}
-                onChange={(event) => onChange("appliedAt", event.target.value)}
-                aria-label="Applied date"
-                className={`${fieldClass} col-span-2 ${
-                    variant === "cell"
-                        ? "[&::-webkit-calendar-picker-indicator]:opacity-0 focus:[&::-webkit-calendar-picker-indicator]:opacity-100 hover:[&::-webkit-calendar-picker-indicator]:opacity-100"
-                        : ""
-                }`}
-            />
-        </>
-    );
-};
+}) => (
+    <>
+        <input
+            value={draft.company}
+            onChange={(event) => onChange("company", event.target.value)}
+            placeholder="Company"
+            aria-label="Company"
+            maxLength={COMPANY_MAX}
+            className={cellFieldClass}
+        />
+        <input
+            value={draft.role}
+            onChange={(event) => onChange("role", event.target.value)}
+            placeholder="Role"
+            aria-label="Role"
+            maxLength={ROLE_MAX}
+            className={cellFieldClass}
+        />
+        {/* Status reads as a plate, whose own padding holds the label 8px in.
+                The field carries the same inset so the label stays put when the
+                row switches into edit mode. */}
+        <CellSelect
+            label="Status"
+            value={draft.status}
+            options={STATUS_OPTIONS}
+            onChange={(status) => onChange("status", status)}
+            className="pl-2"
+            searchable
+        />
+        <input
+            value={draft.location}
+            onChange={(event) => onChange("location", event.target.value)}
+            placeholder="Location"
+            aria-label="Location"
+            maxLength={LOCATION_MAX}
+            className={cellFieldClass}
+        />
+        <CellSelect
+            label="Arrangement"
+            value={draft.arrangement}
+            options={ARRANGEMENT_OPTIONS}
+            onChange={(arrangement) => onChange("arrangement", arrangement)}
+        />
+        <input
+            value={draft.pay}
+            onChange={(event) => onChange("pay", event.target.value)}
+            placeholder="120k-140k/yr"
+            aria-label="Pay"
+            maxLength={PAY_MAX}
+            className={cellFieldClass}
+        />
+        <DateField
+            label="Applied date"
+            value={draft.appliedAt}
+            onChange={(appliedAt) => onChange("appliedAt", appliedAt)}
+        />
+    </>
+);
 
 const ReadRow = ({
     app,
@@ -283,121 +260,23 @@ const ReadRow = ({
     );
 };
 
-const EditRow = ({
-    app,
-    onSave,
-    onCancel,
-}: {
-    app: ApplicationRow;
-    onSave: (draft: Draft) => Promise<string | null>;
-    onCancel: () => void;
-}) => {
-    const [draft, setDraft] = useState<Draft>(() => draftOf(app));
-    const [error, setError] = useState<string | null>(null);
-    const [saving, setSaving] = useState(false);
-    const companyRef = useRef<HTMLInputElement>(null);
-
-    useEffect(() => {
-        companyRef.current?.focus();
-    }, []);
-
-    const set = <K extends keyof Draft>(key: K, value: Draft[K]) =>
-        setDraft((current) => ({ ...current, [key]: value }));
-
-    const submit = async () => {
-        if (saving || !draft.company.trim()) return;
-        setSaving(true);
-        // The parent closes the row on success; on failure it stays open with
-        // the typed values and the reason.
-        const failure = await onSave(draft);
-        if (failure) {
-            setError(failure);
-            setSaving(false);
-        }
-    };
-
-    const onKeyDown = (event: ReactKeyboardEvent) => {
-        if (event.key === "Enter") {
-            event.preventDefault();
-            void submit();
-        } else if (event.key === "Escape") {
-            onCancel();
-        }
-    };
-
-    return (
-        <li
-            className="border-y border-hairline bg-surface"
-            onKeyDown={onKeyDown}
-        >
-            <div className={`${COLUMNS} ${ROW_HEIGHT} px-5`}>
-                <span />
-                <RowFields
-                    draft={draft}
-                    onChange={set}
-                    firstFieldRef={companyRef}
-                    variant="edit"
-                />
-            </div>
-            {/* Laid out on the table grid rather than as a free-floating row, so
-                the link field lines up under Company and the buttons under the
-                trailing columns. */}
-            <div className={`${COLUMNS} px-5 pb-3`}>
-                <span />
-                <div className="relative col-span-6">
-                    <span
-                        aria-hidden="true"
-                        className="icon-[lucide--link] pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted"
-                    />
-                    <input
-                        value={draft.url}
-                        onChange={(event) => set("url", event.target.value)}
-                        placeholder="Link to the posting"
-                        aria-label="Link to the posting"
-                        maxLength={URL_MAX}
-                        className={`${editFieldClass} pl-7`}
-                    />
-                </div>
-                <div className="col-span-3 flex items-center justify-end gap-1">
-                    <button
-                        type="button"
-                        onClick={onCancel}
-                        className={ghostButtonClass}
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        type="button"
-                        onClick={submit}
-                        disabled={!draft.company.trim() || saving}
-                        className={primaryButtonClass}
-                    >
-                        {saving ? "Saving" : "Save"}
-                    </button>
-                </div>
-            </div>
-            {error && (
-                <div className={`${COLUMNS} px-5 pb-3`}>
-                    <span />
-                    <p className="col-span-9 text-xs text-rose">{error}</p>
-                </div>
-            )}
-        </li>
-    );
-};
-
 const BulkRow = ({
     draft,
+    updated,
     onChange,
 }: {
     draft: Draft;
+    updated: string;
     onChange: <K extends keyof Draft>(key: K, value: Draft[K]) => void;
 }) => (
     <li
         className={`${COLUMNS} ${ROW_HEIGHT} border-b border-faint px-5 text-xs last:border-b-0`}
     >
         <span />
-        <RowFields draft={draft} onChange={onChange} variant="cell" />
+        <RowFields draft={draft} onChange={onChange} />
+        {/* Nothing here is editable, but the column keeps its reading so the
+                row does not trail off into empty space. */}
+        <Cell value={updated} className="text-muted" />
     </li>
 );
 
@@ -411,7 +290,7 @@ const DeleteRow = ({
     onCancel: () => void;
 }) => (
     <li
-        className={`${ROW_HEIGHT} flex min-w-[70rem] items-center gap-4 border-b border-faint bg-surface px-5 last:border-b-0`}
+        className={`${ROW_HEIGHT} flex min-w-[73rem] items-center gap-4 border-b border-faint bg-surface px-5 last:border-b-0`}
     >
         <p className="min-w-0 flex-1 truncate text-xs text-ink">
             Delete {label}? This cannot be undone.
@@ -488,7 +367,6 @@ export const ApplicationsTable = ({
         (
             state,
             action:
-                | { type: "edit"; id: string; draft: Draft }
                 | {
                       type: "status";
                       ids: Set<string>;
@@ -511,27 +389,9 @@ export const ApplicationsTable = ({
                         : app,
                 );
             }
-            if (action.type === "arrangement") {
-                return state.map((app) =>
-                    action.ids.has(app.id)
-                        ? { ...app, arrangement: action.arrangement }
-                        : app,
-                );
-            }
             return state.map((app) =>
-                app.id === action.id
-                    ? {
-                          ...app,
-                          company: action.draft.company.trim(),
-                          role: action.draft.role.trim() || null,
-                          status: action.draft.status,
-                          location: action.draft.location.trim() || null,
-                          arrangement: action.draft.arrangement,
-                          pay: action.draft.pay.trim() || null,
-                          payNote: action.draft.pay.trim() || null,
-                          appliedAt: action.draft.appliedAt || null,
-                          url: action.draft.url.trim() || null,
-                      }
+                action.ids.has(app.id)
+                    ? { ...app, arrangement: action.arrangement }
                     : app,
             );
         },
@@ -548,6 +408,10 @@ export const ApplicationsTable = ({
                 selected.size > 0 && !allSelected;
         }
     }, [selected, allSelected]);
+
+    // Looked up rather than held, so the panel redraws from the list when a
+    // saved change or a logged step comes back from the server.
+    const editing = optimisticApplications.find((app) => app.id === editingId);
 
     const clearStaged = () => {
         setStagedStatus(null);
@@ -579,22 +443,6 @@ export const ApplicationsTable = ({
                 ? new Set(optimisticApplications.map((app) => app.id))
                 : new Set(),
         );
-
-    const onSave = (id: string, draft: Draft): Promise<string | null> =>
-        new Promise((resolve) => {
-            // The optimistic edit lives inside the transition so it holds until
-            // the server responds; on failure the row reverts on its own.
-            startMutation(async () => {
-                applyOptimistic({ type: "edit", id, draft });
-                const result = await updateApplication(
-                    listId,
-                    id,
-                    asDraftInput(draft),
-                );
-                if (result.ok) setEditingId(null);
-                resolve(result.ok ? null : result.error);
-            });
-        });
 
     const onDelete = (id: string) => {
         setDeletingId(null);
@@ -649,6 +497,9 @@ export const ApplicationsTable = ({
             changed.map((row) => ({
                 id: row.app.id,
                 input: asDraftInput(row.draft),
+                // One line of text cannot hold everything the detail panel can
+                // put in the pay columns, so an untouched box leaves them be.
+                payTyped: row.draft.pay !== draftOf(row.app).pay,
             })),
         );
         setBulkSaving(false);
@@ -885,19 +736,10 @@ export const ApplicationsTable = ({
                                     <BulkRow
                                         key={app.id}
                                         draft={draft}
+                                        updated={app.updated}
                                         onChange={(key, value) =>
                                             setDraftField(app.id, key, value)
                                         }
-                                    />
-                                );
-                            }
-                            if (app.id === editingId) {
-                                return (
-                                    <EditRow
-                                        key={app.id}
-                                        app={app}
-                                        onSave={(next) => onSave(app.id, next)}
-                                        onCancel={() => setEditingId(null)}
                                     />
                                 );
                             }
@@ -926,6 +768,14 @@ export const ApplicationsTable = ({
                         })}
                     </ul>
                 </div>
+            )}
+
+            {editing && (
+                <ApplicationPanel
+                    listId={listId}
+                    app={editing}
+                    onClose={() => setEditingId(null)}
+                />
             )}
 
             {confirmingDelete && (
