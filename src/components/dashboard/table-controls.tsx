@@ -37,7 +37,7 @@ export const cellFieldClass =
     "-mx-1 h-6 min-w-0 bg-transparent px-1 text-xs text-ink outline-1 outline-transparent transition-colors placeholder:text-muted hover:outline-hairline focus:bg-background focus:outline-tile-border";
 
 export const formInputClass =
-    "w-full border border-hairline bg-background px-2.5 py-1.5 text-xs text-ink transition-colors placeholder:text-muted focus:border-accent focus:outline-none";
+    "w-full border border-hairline bg-background px-2.5 py-1.5 text-xs text-ink transition-colors placeholder:text-muted focus:border-accent focus:outline-none disabled:cursor-not-allowed disabled:opacity-50";
 
 export const checkboxClass =
     "size-3.5 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
@@ -148,6 +148,7 @@ export const CellSelect = <T,>({
     className = "",
     variant = "cell",
     searchable = false,
+    disabled = false,
 }: {
     value: T | null;
     options: Option<T>[];
@@ -157,6 +158,7 @@ export const CellSelect = <T,>({
     className?: string;
     variant?: FieldVariant;
     searchable?: boolean;
+    disabled?: boolean;
 }) => {
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState("");
@@ -304,6 +306,7 @@ export const CellSelect = <T,>({
                 type="button"
                 onClick={() => (open ? close() : setOpen(true))}
                 onKeyDown={onTriggerKeyDown}
+                disabled={disabled}
                 aria-haspopup="listbox"
                 aria-expanded={open}
                 aria-label={label}
@@ -488,12 +491,14 @@ export const DateField = ({
     label,
     className = "",
     variant = "cell",
+    disabled = false,
 }: {
     value: string;
     onChange: (value: string) => void;
     label: string;
     className?: string;
     variant?: FieldVariant;
+    disabled?: boolean;
 }) => {
     const [open, setOpen] = useState(false);
     const [placed, setPlaced] = useState<
@@ -646,6 +651,7 @@ export const DateField = ({
                 type="button"
                 onClick={() => (open ? close() : openAt())}
                 onKeyDown={onTriggerKeyDown}
+                disabled={disabled}
                 aria-haspopup="dialog"
                 aria-expanded={open}
                 aria-label={label}

@@ -16,6 +16,7 @@ import {
     formInputClass,
     ghostButtonClass,
     primaryButtonClass,
+    quietButtonClass,
 } from "@/components/dashboard/table-controls";
 import type {
     ApplicationStatus,
@@ -60,11 +61,21 @@ export const AddApplicationForm = ({
     const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
     const [missed, setMissed] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [isScraping, startScrape] = useTransition();
+    const [fetching, setFetching] = useState(false);
+    const [, startScrape] = useTransition();
     const [isSaving, startSave] = useTransition();
     const companyRef = useRef<HTMLInputElement>(null);
+    // A read that is no longer wanted cannot be called off once it is on its
+    // way, so each one carries a number and only the current one may write.
+    const fetchId = useRef(0);
+
+    const dropFetch = () => {
+        fetchId.current += 1;
+        setFetching(false);
+    };
 
     const reset = () => {
+        dropFetch();
         setUrl("");
         setDraft(EMPTY_DRAFT);
         setMissed(false);
@@ -78,8 +89,13 @@ export const AddApplicationForm = ({
     const scrape = (value: string) => {
         const link = value.trim();
         if (!link) return;
+        const id = fetchId.current + 1;
+        fetchId.current = id;
+        setFetching(true);
+        setMissed(false);
         startScrape(async () => {
             const found = await suggestFromUrl(link);
+            if (fetchId.current !== id) return;
             setDraft((current) => ({
                 ...current,
                 company: found.company ?? "",
@@ -89,8 +105,14 @@ export const AddApplicationForm = ({
                 pay: found.pay ?? "",
             }));
             setMissed(found.source === "none");
+            setFetching(false);
             companyRef.current?.focus();
         });
+    };
+
+    const skipFetch = () => {
+        dropFetch();
+        companyRef.current?.focus();
     };
 
     const onPaste = (event: ClipboardEvent<HTMLInputElement>) => {
@@ -135,11 +157,22 @@ export const AddApplicationForm = ({
     const onUrlKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
         if (event.key === "Enter") {
             event.preventDefault();
+            // Enter here reads the link; the row is saved from the fields
+            // below, so the press must not reach the form's own handler.
+            event.stopPropagation();
             scrape(url);
         } else if (event.key === "Escape") {
             reset();
         }
     };
+
+    // A save error is the more urgent of the two and answers the press the user
+    // just made, so it takes the line.
+    const note =
+        error ??
+        (missed
+            ? "Couldn't read that link. Fill the fields in manually."
+            : null);
 
     return (
         <div
@@ -160,22 +193,28 @@ export const AddApplicationForm = ({
                     aria-label="Job posting link"
                     autoFocus
                     maxLength={URL_MAX}
-                    className={`${formInputClass} py-1.5 pl-8`}
+                    className={`${formInputClass} py-1.5 pl-8 ${fetching ? "pr-16" : ""}`}
                 />
-                {isScraping && (
-                    <span
-                        aria-hidden="true"
-                        className="icon-[lucide--loader-circle] absolute top-1/2 right-2.5 size-3.5 -translate-y-1/2 animate-spin text-muted"
-                    />
+                {fetching && (
+                    <div className="absolute top-1/2 right-2.5 flex -translate-y-1/2 items-center gap-2">
+                        <span
+                            aria-hidden="true"
+                            className="icon-[lucide--loader-circle] size-3.5 animate-spin text-muted"
+                        />
+                        <button
+                            type="button"
+                            onClick={skipFetch}
+                            className={quietButtonClass}
+                        >
+                            Skip
+                        </button>
+                    </div>
                 )}
             </div>
 
-            {missed && (
-                <p className="mt-2 text-xs text-muted">
-                    Couldn&apos;t read that link. Fill the fields in manually.
-                </p>
-            )}
-
+            {/* The fields are held while a link is being read, since the answer
+                lands on all of them at once and would take anything typed in
+                the meantime with it. Skip gives them straight back. */}
             <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                 <input
                     ref={companyRef}
@@ -184,6 +223,7 @@ export const AddApplicationForm = ({
                     placeholder="Company"
                     aria-label="Company"
                     maxLength={COMPANY_MAX}
+                    disabled={fetching}
                     className={formInputClass}
                 />
                 <input
@@ -192,6 +232,7 @@ export const AddApplicationForm = ({
                     placeholder="Role"
                     aria-label="Role"
                     maxLength={ROLE_MAX}
+                    disabled={fetching}
                     className={formInputClass}
                 />
                 <CellSelect
@@ -201,6 +242,7 @@ export const AddApplicationForm = ({
                     onChange={(status) => set("status", status)}
                     variant="form"
                     searchable
+                    disabled={fetching}
                 />
                 <input
                     value={draft.location}
@@ -208,6 +250,7 @@ export const AddApplicationForm = ({
                     placeholder="Location"
                     aria-label="Location"
                     maxLength={LOCATION_MAX}
+                    disabled={fetching}
                     className={formInputClass}
                 />
                 <CellSelect
@@ -216,6 +259,7 @@ export const AddApplicationForm = ({
                     options={ARRANGEMENT_OPTIONS}
                     onChange={(arrangement) => set("arrangement", arrangement)}
                     variant="form"
+                    disabled={fetching}
                 />
                 <input
                     value={draft.pay}
@@ -223,6 +267,7 @@ export const AddApplicationForm = ({
                     placeholder="Pay, e.g. 120k-140k/yr"
                     aria-label="Pay"
                     maxLength={PAY_MAX}
+                    disabled={fetching}
                     className={formInputClass}
                 />
                 <DateField
@@ -230,11 +275,21 @@ export const AddApplicationForm = ({
                     value={draft.appliedAt}
                     onChange={(appliedAt) => set("appliedAt", appliedAt)}
                     variant="form"
+                    disabled={fetching}
                 />
             </div>
 
             <div className="mt-3 flex items-center justify-end gap-3">
-                {error && <p className="mr-auto text-xs text-rose">{error}</p>}
+                {/* Both the miss and a failed save speak from the button row,
+                    whose height the buttons already set, so saying anything
+                    never moves the fields above it. */}
+                {note && (
+                    <p
+                        className={`mr-auto min-w-0 truncate text-xs ${error ? "text-rose" : "text-muted"}`}
+                    >
+                        {note}
+                    </p>
+                )}
                 <button
                     type="button"
                     onClick={reset}
@@ -245,7 +300,7 @@ export const AddApplicationForm = ({
                 <button
                     type="button"
                     onClick={save}
-                    disabled={!draft.company.trim() || isSaving}
+                    disabled={!draft.company.trim() || fetching || isSaving}
                     className={primaryButtonClass}
                 >
                     Add
