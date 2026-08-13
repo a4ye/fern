@@ -3,6 +3,7 @@ import {
     APPLICATION_STATUSES,
     ARRANGEMENTS,
     PAY_PERIODS,
+    toDateInput,
     type ListStatus,
 } from "@/components/dashboard/data";
 
@@ -70,6 +71,48 @@ export const urlSchema = optionalText("Link", URL_MAX).refine(
     "Link must be a http:// or https:// address.",
 );
 
+// A date column takes real days only, so a shape check on its own would leave
+// 2026-02-31 to fail on the write. Reading the parts back proves the day exists,
+// since Date rolls an overflowing one into the month after.
+const isRealDay = (value: string): boolean => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+    const [year, month, day] = value.split("-").map(Number);
+    const date = new Date(year, month - 1, day);
+    return (
+        date.getFullYear() === year &&
+        date.getMonth() === month - 1 &&
+        date.getDate() === day
+    );
+};
+
+// An applied date records something that already happened, so the future is out.
+// The floor is what keeps a calendar paged far enough back, or an import that
+// misread a year, from landing in one nobody was applying in.
+export const APPLIED_MIN_YEAR = 1990;
+export const APPLIED_MIN = `${APPLIED_MIN_YEAR}-01-01`;
+
+// yyyy-mm-dd compares as text the way it does as a date. The ceiling is tomorrow
+// rather than today because the day is picked against the browser's clock, which
+// can be a day ahead of the server's.
+const latestApplied = (): string => {
+    const now = new Date();
+    return toDateInput(
+        new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1),
+    );
+};
+
+const appliedAtSchema = optionalText("Applied date", 10)
+    .refine(
+        (value) => value === null || isRealDay(value),
+        "Applied date must be a real date.",
+    )
+    .refine(
+        (value) =>
+            value === null ||
+            (value >= APPLIED_MIN && value <= latestApplied()),
+        `Applied date must fall between ${APPLIED_MIN_YEAR} and today.`,
+    );
+
 export const applicationSchema = z.object({
     company: z
         .string()
@@ -84,18 +127,22 @@ export const applicationSchema = z.object({
     location: optionalText("Location", LOCATION_MAX),
     arrangement: z.enum(ARRANGEMENTS, "Choose a valid arrangement.").nullable(),
     pay: optionalText("Pay", PAY_MAX),
-    appliedAt: optionalText("Applied date", 10).refine(
-        (value) => value === null || /^\d{4}-\d{2}-\d{2}$/.test(value),
-        "Applied date must be a real date.",
-    ),
+    appliedAt: appliedAtSchema,
     url: urlSchema,
 });
 
 export const NOTES_MAX = 4000;
 
+// What an amount field accepts before it stops taking keys: ten digits and two
+// decimals, plus room for the grouping commas people type, which the schema
+// strips back out.
+export const AMOUNT_INPUT_MAX = 16;
+
 // Amounts land in numeric(12, 2) columns, so they are kept as decimal strings
 // end to end rather than rounded through a float, and anything that is not a
-// plain number is rejected instead of being silently stored as nothing.
+// plain number is rejected instead of being silently stored as nothing. Ten
+// digits ahead of the point is the column's own ceiling, which AMOUNT_MAX holds
+// the free-text pay parser to as well.
 const amountSchema = (label: string) =>
     z
         .string()
@@ -127,10 +174,7 @@ export const applicationDetailSchema = z
         arrangement: z
             .enum(ARRANGEMENTS, "Choose a valid arrangement.")
             .nullable(),
-        appliedAt: optionalText("Applied date", 10).refine(
-            (value) => value === null || /^\d{4}-\d{2}-\d{2}$/.test(value),
-            "Applied date must be a real date.",
-        ),
+        appliedAt: appliedAtSchema,
         url: urlSchema,
         payMin: amountSchema("Minimum pay"),
         payMax: amountSchema("Maximum pay"),

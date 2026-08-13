@@ -290,6 +290,15 @@ const readAmounts = (value: string): number[] => {
 
 const asNumeric = (amount: number): string => amount.toFixed(2);
 
+// numeric(12, 2) holds ten digits ahead of the point, and a parse that reads
+// more than that has misread the text rather than found a salary: "99999999m"
+// is a typo, not a wage. Measured after rounding, since that is the value the
+// column is handed.
+export const AMOUNT_MAX = 9_999_999_999.99;
+
+const overflows = (amount: number): boolean =>
+    Number(asNumeric(amount)) > AMOUNT_MAX;
+
 // numeric(12, 2) comes back as "120000.00", which is not what anyone wants to
 // see in a number field, so the editor shows the shortest form of the same
 // amount.
@@ -311,8 +320,9 @@ export const parsePay = (input: string | null): PayFields => {
     const { period, rest } = readPeriod(raw);
     const amounts = readAmounts(rest);
 
-    // No amount to work with, so the text is worth more than a failed parse.
-    if (amounts.length === 0) {
+    // No amount to work with, or none the column could hold, so the text is
+    // worth more than a failed parse.
+    if (amounts.length === 0 || amounts.some(overflows)) {
         return {
             payMin: null,
             payMax: null,

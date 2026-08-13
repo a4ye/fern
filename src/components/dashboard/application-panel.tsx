@@ -32,6 +32,7 @@ import {
 } from "@/components/dashboard/data";
 import { payAmountInput } from "@/lib/pay";
 import {
+    AMOUNT_INPUT_MAX,
     COMPANY_MAX,
     LOCATION_MAX,
     NOTES_MAX,
@@ -384,6 +385,7 @@ export const ApplicationPanel = ({
                                     inputMode="decimal"
                                     placeholder="Min"
                                     aria-label="Minimum pay"
+                                    maxLength={AMOUNT_INPUT_MAX}
                                     className={`${fieldClass} tabular-nums`}
                                 />
                                 <span className="shrink-0 text-xs text-muted">
@@ -397,6 +399,7 @@ export const ApplicationPanel = ({
                                     inputMode="decimal"
                                     placeholder="Max"
                                     aria-label="Maximum pay"
+                                    maxLength={AMOUNT_INPUT_MAX}
                                     className={`${fieldClass} tabular-nums`}
                                 />
                             </div>
@@ -432,6 +435,7 @@ export const ApplicationPanel = ({
                                 }
                                 inputMode="decimal"
                                 placeholder="Signing or annual bonus"
+                                maxLength={AMOUNT_INPUT_MAX}
                                 className={`${fieldClass} tabular-nums`}
                             />
                         </Field>

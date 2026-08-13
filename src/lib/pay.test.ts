@@ -169,6 +169,18 @@ describe("parsePay", () => {
         });
     });
 
+    it("keeps an amount too large for the column as a note", () => {
+        expect(parsePay("99999999m")).toEqual({
+            payMin: null,
+            payMax: null,
+            payCurrency: "USD",
+            payPeriod: null,
+            payNote: "99999999m",
+        });
+        expect(parsePay("9999999999.99").payMin).toBe("9999999999.99");
+        expect(parsePay("120k - 99999999m").payMin).toBeNull();
+    });
+
     it("collapses a range whose ends are equal", () => {
         expect(parsePay("$50-$50/hr").payMax).toBeNull();
     });

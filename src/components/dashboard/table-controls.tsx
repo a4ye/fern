@@ -24,6 +24,7 @@ import {
 } from "@/components/dashboard/data";
 import { searchScore } from "@/lib/fuzzy";
 import { CURRENCIES, currencyCountry, currencyName } from "@/lib/pay";
+import { APPLIED_MIN, APPLIED_MIN_YEAR } from "@/lib/validation";
 
 // Bulk mode turns every cell of every row into a field, so borders on all of
 // them would be noise; cells read as plain text until hovered or focused. Rows
@@ -433,6 +434,15 @@ const parseDay = (value: string): Date | null => {
 const shiftDay = (date: Date, days: number) =>
     new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
 
+// The field records a day that has already happened, so the calendar offers
+// nothing past today and nothing before the floor the server enforces, and the
+// keyboard cursor is held inside the same window: focus does not land on a
+// disabled button, it goes nowhere at all.
+const APPLIED_FLOOR = new Date(APPLIED_MIN_YEAR, 0, 1);
+
+const clampDay = (date: Date, latest: Date): Date =>
+    date > latest ? latest : date < APPLIED_FLOOR ? APPLIED_FLOOR : date;
+
 const shiftMonth = (date: Date, months: number) =>
     new Date(date.getFullYear(), date.getMonth() + months, 1);
 
@@ -466,7 +476,7 @@ const ARROW_STEP = {
 type CalendarMode = keyof typeof ARROW_STEP;
 
 const pagerClass =
-    "flex size-7 cursor-pointer items-center justify-center text-muted transition-colors hover:bg-surface hover:text-ink focus-visible:outline-1 focus-visible:outline-accent";
+    "flex size-7 cursor-pointer items-center justify-center text-muted transition-colors hover:bg-surface hover:text-ink focus-visible:outline-1 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted";
 
 // A custom calendar rather than <input type="date">: the native field draws a
 // picker the page has no say over, in a typeface and a set of corners that are
@@ -496,9 +506,21 @@ export const DateField = ({
     const popupRef = useRef<HTMLDivElement>(null);
     const cursorRef = useRef<HTMLButtonElement>(null);
 
-    const today = toDateInput(new Date());
+    const now = new Date();
+    const todayDate = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+    );
+    const today = toDateInput(todayDate);
     const cursorKey = toDateInput(cursor);
     const days = mode === "days";
+    const atLatest = days
+        ? sameMonth(cursor, todayDate)
+        : cursor.getFullYear() === todayDate.getFullYear();
+    const atFloor = days
+        ? sameMonth(cursor, APPLIED_FLOOR)
+        : cursor.getFullYear() === APPLIED_MIN_YEAR;
 
     const place = useCallback(() => {
         const trigger = triggerRef.current;
@@ -562,8 +584,11 @@ export const DateField = ({
         triggerRef.current?.focus();
     };
 
+    const moveCursor = (step: (current: Date) => Date) =>
+        setCursor((current) => clampDay(step(current), todayDate));
+
     const openAt = () => {
-        setCursor(parseDay(value) ?? new Date());
+        setCursor(clampDay(parseDay(value) ?? todayDate, todayDate));
         setMode("days");
         setOpen(true);
     };
@@ -571,7 +596,7 @@ export const DateField = ({
     // The header steps by whatever the grid below it is showing, so the same
     // pair of arrows walks months in one mode and years in the other.
     const stepPage = (direction: number) =>
-        setCursor((current) =>
+        moveCursor((current) =>
             mode === "days"
                 ? shiftMonth(current, direction)
                 : shiftYear(current, direction),
@@ -607,7 +632,7 @@ export const DateField = ({
         if (step === undefined) return;
         event.preventDefault();
         event.stopPropagation();
-        setCursor((current) =>
+        moveCursor((current) =>
             mode === "days"
                 ? shiftDay(current, step)
                 : shiftMonth(current, step),
@@ -656,6 +681,7 @@ export const DateField = ({
                             <button
                                 type="button"
                                 onClick={() => stepPage(-1)}
+                                disabled={atFloor}
                                 aria-label={
                                     days ? "Previous month" : "Previous year"
                                 }
@@ -683,6 +709,7 @@ export const DateField = ({
                             <button
                                 type="button"
                                 onClick={() => stepPage(1)}
+                                disabled={atLatest}
                                 aria-label={days ? "Next month" : "Next year"}
                                 className={pagerClass}
                             >
@@ -712,11 +739,15 @@ export const DateField = ({
                                 {MONTHS.map((month, index) => {
                                     const year = cursor.getFullYear();
                                     const held = inMonth(value, year, index);
-                                    const monthClass = held
-                                        ? "bg-accent font-medium text-background"
-                                        : inMonth(today, year, index)
-                                          ? "bg-accent-tint font-medium text-ink"
-                                          : "text-ink hover:bg-surface";
+                                    const ahead =
+                                        new Date(year, index, 1) > todayDate;
+                                    const monthClass = ahead
+                                        ? "text-muted opacity-40"
+                                        : held
+                                          ? "bg-accent font-medium text-background"
+                                          : inMonth(today, year, index)
+                                            ? "bg-accent-tint font-medium text-ink"
+                                            : "text-ink hover:bg-surface";
                                     return (
                                         <button
                                             key={month}
@@ -732,17 +763,19 @@ export const DateField = ({
                                                     : -1
                                             }
                                             onClick={() => {
-                                                setCursor(
-                                                    new Date(
-                                                        cursor.getFullYear(),
-                                                        index,
-                                                        1,
-                                                    ),
+                                                moveCursor(
+                                                    () =>
+                                                        new Date(
+                                                            year,
+                                                            index,
+                                                            1,
+                                                        ),
                                                 );
                                                 setMode("days");
                                             }}
+                                            disabled={ahead}
                                             aria-pressed={held}
-                                            className={`h-14 cursor-pointer text-xs transition-colors focus-visible:outline-1 focus-visible:outline-accent ${monthClass}`}
+                                            className={`h-14 cursor-pointer text-xs transition-colors focus-visible:outline-1 focus-visible:outline-accent disabled:cursor-not-allowed ${monthClass}`}
                                         >
                                             {month}
                                         </button>
@@ -755,15 +788,18 @@ export const DateField = ({
                                 {monthGrid(cursor).map((date) => {
                                     const key = toDateInput(date);
                                     const outside = !sameMonth(date, cursor);
+                                    const blocked =
+                                        key > today || key < APPLIED_MIN;
                                     // The accent is lighter than the text around
                                     // it, so today is a tinted plate rather than a
                                     // tinted number, which would read as disabled.
-                                    const dayClass =
-                                        key === value
-                                            ? "bg-accent font-medium text-background"
-                                            : key === today
-                                              ? "bg-accent-tint font-medium text-ink"
-                                              : `hover:bg-surface ${outside ? "text-muted" : "text-ink"}`;
+                                    const dayClass = blocked
+                                        ? "text-muted opacity-40"
+                                        : key === value
+                                          ? "bg-accent font-medium text-background"
+                                          : key === today
+                                            ? "bg-accent-tint font-medium text-ink"
+                                            : `hover:bg-surface ${outside ? "text-muted" : "text-ink"}`;
                                     return (
                                         <button
                                             key={key}
@@ -777,9 +813,10 @@ export const DateField = ({
                                                 key === cursorKey ? 0 : -1
                                             }
                                             onClick={() => select(date)}
+                                            disabled={blocked}
                                             aria-pressed={key === value}
                                             aria-label={formatDay(key)}
-                                            className={`h-8 cursor-pointer text-xs tabular-nums transition-colors focus-visible:outline-1 focus-visible:outline-accent ${dayClass}`}
+                                            className={`h-8 cursor-pointer text-xs tabular-nums transition-colors focus-visible:outline-1 focus-visible:outline-accent disabled:cursor-not-allowed ${dayClass}`}
                                         >
                                             {date.getDate()}
                                         </button>
