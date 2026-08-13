@@ -488,29 +488,28 @@ export type EmailSyncPanel = {
     suggestions: EmailSuggestion[];
 };
 
-const moneyFormatters = new Map<string, Intl.NumberFormat>();
+const WHOLE_AMOUNT = new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 0,
+});
+
+const CENT_AMOUNT = new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+});
 
 // Salaries read better whole, but cents are the whole point of an hourly rate
-// like $32.50, so they are kept only when the amount actually has them.
-const formatMoney = (amount: number, currency: string): string => {
-    const cents = !Number.isInteger(amount);
-    const key = `${currency}:${cents}`;
-    let formatter = moneyFormatters.get(key);
-    if (!formatter) {
-        formatter = new Intl.NumberFormat("en-US", {
-            style: "currency",
-            currency,
-            minimumFractionDigits: cents ? 2 : 0,
-            maximumFractionDigits: cents ? 2 : 0,
-        });
-        moneyFormatters.set(key, formatter);
-    }
-    return formatter.format(amount);
-};
+// like 32.50, so they are kept only when the amount actually has them.
+const formatAmount = (amount: number): string =>
+    Number.isInteger(amount)
+        ? WHOLE_AMOUNT.format(amount)
+        : CENT_AMOUNT.format(amount);
 
-// Renders a pay range into a compact label, e.g. "$9,000/mo" or
-// "$9,000–$11,000/mo". Falls back to the free-text pay note when no amounts are
-// set. Uses an en dash for the range, never an em dash.
+// Renders a pay range into a compact label, e.g. "USD 9,000/mo" or
+// "USD 9,000–11,000/mo". The currency is named by its ISO code rather than a
+// symbol: four currencies write themselves "$", and the ones with no symbol in
+// this locale fall back to the code anyway, so codes are the only form every
+// row can share. A range names it once. Falls back to the free-text pay note
+// when no amounts are set. Uses an en dash for the range, never an em dash.
 export const formatPay = (input: {
     payMin: string | null;
     payMax: string | null;
@@ -526,9 +525,9 @@ export const formatPay = (input: {
     const suffix = input.payPeriod ? PERIOD_SUFFIX[input.payPeriod] : "";
     const base =
         min !== null && max !== null && max !== min
-            ? `${formatMoney(min, currency)}–${formatMoney(max, currency)}`
-            : formatMoney((min ?? max) as number, currency);
-    return `${base}${suffix}`;
+            ? `${formatAmount(min)}–${formatAmount(max)}`
+            : formatAmount((min ?? max) as number);
+    return `${currency} ${base}${suffix}`;
 };
 
 export const MONTHS = [

@@ -10,6 +10,7 @@ import {
 import { addApplication, suggestFromUrl } from "@/app/dashboard/actions";
 import {
     CellSelect,
+    DateField,
     STATUS_OPTIONS,
     ARRANGEMENT_OPTIONS,
     formInputClass,
@@ -224,12 +225,11 @@ export const AddApplicationForm = ({
                     maxLength={PAY_MAX}
                     className={formInputClass}
                 />
-                <input
-                    type="date"
+                <DateField
+                    label="Applied date"
                     value={draft.appliedAt}
-                    onChange={(event) => set("appliedAt", event.target.value)}
-                    aria-label="Applied date"
-                    className={formInputClass}
+                    onChange={(appliedAt) => set("appliedAt", appliedAt)}
+                    variant="form"
                 />
             </div>
 

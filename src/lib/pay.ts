@@ -48,93 +48,244 @@ export const currencyCountry = (code: string): string | null => {
     return (code === "EUR" ? "eu" : code.slice(0, 2)).toLowerCase();
 };
 
-// The far smaller set the free-text parser will read as a currency. Codes are
-// ordinary words often enough (ALL, TOP, TRY, CUP, MAD) that matching all 200
-// of them would read "120k all in" as Albanian lek.
-export const PARSED_CURRENCIES = [
-    "USD",
-    "CAD",
-    "EUR",
-    "GBP",
-    "AUD",
-    "NZD",
-    "INR",
-    "JPY",
-    "CHF",
-    "SEK",
-    "SGD",
-    "HKD",
-    "MXN",
-    "BRL",
-    "CNY",
-];
+// Codes that are also ordinary English words, which is why a code cannot simply
+// be matched case-insensitively: "120k all in" would be paid in Albanian lek.
+// Written in capitals a code is deliberate, so these are read only that way.
+const WORD_CODES = new Set([
+    "ALL",
+    "BAM",
+    "BAN",
+    "BOB",
+    "COP",
+    "CUP",
+    "GEL",
+    "MAD",
+    "MOP",
+    "PEN",
+    "RUB",
+    "TOP",
+    "TRY",
+]);
 
-const CURRENCY_CODES = new RegExp(
-    `\\b(${PARSED_CURRENCIES.join("|")})\\b`,
+// Every live currency is understood. Capitals are taken at their word; anything
+// else has to be a code that could not have been meant as English.
+const CODE_UPPERCASE = new RegExp(`\\b(${CURRENCIES.join("|")})\\b`);
+
+const CODE_ANY_CASE = new RegExp(
+    `\\b(${CURRENCIES.filter((code) => !WORD_CODES.has(code)).join("|")})\\b`,
     "i",
 );
 
-// Taken from the same formatter that renders a pay label rather than written
-// out by hand, so whatever a label is printed with is read back as the currency
-// it was printed for. Longest first, or the "$" in "CA$" claims it for USD.
-const SYMBOL_CURRENCY: [string, string][] = PARSED_CURRENCIES.map(
-    (currency): [string, string] => [
-        new Intl.NumberFormat("en-US", { style: "currency", currency })
-            .format(0)
-            .replace(/[\d\s.,]/g, ""),
+const glyphOf = (
+    currency: string,
+    currencyDisplay: "symbol" | "narrowSymbol",
+): string =>
+    new Intl.NumberFormat("en-US", {
+        style: "currency",
         currency,
-    ],
-).sort(([one], [two]) => two.length - one.length);
+        currencyDisplay,
+    })
+        .format(0)
+        .replace(/[\d\s.,]/g, "");
 
-// Longest phrasings first so "biweekly" is not swallowed by "weekly" and
-// "per year" is not matched as "yearly" after the string has been cut up.
+// Glyphs come from the same formatter that prints a label rather than a list
+// written out by hand, so whatever a label is printed with is read back as the
+// currency it was printed for. Two kinds are dropped: a glyph shared by several
+// currencies, which identifies none of them, and a plain-ASCII one ("kr", "R"),
+// which would be found inside ordinary words. Those are left to the codes.
+const claimGlyphs = (
+    display: "symbol" | "narrowSymbol",
+    claimed: Map<string, string>,
+): void => {
+    const owners = new Map<string, string[]>();
+    for (const currency of CURRENCIES) {
+        const glyph = glyphOf(currency, display);
+        if (!glyph || claimed.has(glyph)) continue;
+        owners.set(glyph, [...(owners.get(glyph) ?? []), currency]);
+    }
+    for (const [glyph, currencies] of owners) {
+        if (currencies.length === 1 && /[^A-Za-z]/.test(glyph)) {
+            claimed.set(glyph, currencies[0]);
+        }
+    }
+};
+
+// The printed form is claimed first so that "$" stays the dollar it is printed
+// for, and the narrow forms only fill in currencies it left unspelled.
+const GLYPH_CURRENCY: [string, string][] = (() => {
+    const claimed = new Map<string, string>();
+    claimGlyphs("symbol", claimed);
+    claimGlyphs("narrowSymbol", claimed);
+    // Longest first, or the "$" in "CA$" claims it for USD.
+    return [...claimed].sort(([one], [two]) => two.length - one.length);
+})();
+
+// A period is written three ways, and a posting picks whichever it likes: as an
+// adjective ("hourly"), as a unit behind a connector ("per hour", "an hour",
+// "each year", "per yr"), or as a slash unit, which may carry a space because
+// "100 CAD / hr" is how a person types it. Trailing "(?!\w)" rather than "\b"
+// so a form ending in a dot ("p.a.") still terminates.
+const periodPattern = (words: string, units: string): RegExp =>
+    new RegExp(
+        `\\b(?:${words})(?!\\w)` +
+            `|\\b(?:per|an?|each|every)[-\\s]*(?:${units})(?!\\w)` +
+            `|\\/\\s*(?:${units})(?!\\w)`,
+        "i",
+    );
+
 const PERIOD_PATTERNS: [RegExp, PayPeriod][] = [
     [
-        /\b(bi-?weekly|every\s*two\s*weeks)\b|\/\s*2\s*(wk|weeks?)\b/i,
+        periodPattern(
+            "bi-?weekly|fortnightly",
+            "fortnights?|(?:2|two)\\s*w(?:ee)?ks?",
+        ),
         "biweekly",
     ],
-    [/\b(per\s*hour|hourly|an\s*hour)\b|\/\s*(hr|hour)\b/i, "hourly"],
-    [/\b(per\s*week|weekly|a\s*week)\b|\/\s*(wk|week)\b/i, "weekly"],
-    [/\b(per\s*month|monthly|a\s*month)\b|\/\s*(mo|month)\b/i, "monthly"],
+    // The bare letters are what makes "$45 p/h" work, since the slash branch
+    // finds the "/h" inside it. "a" is deliberately not one of them: "N/A" is a
+    // likelier thing to find in a pay field than "120,000/a".
+    [periodPattern("hourly", "hours?|hrs?|h"), "hourly"],
+    [periodPattern("weekly", "weeks?|wks?|w"), "weekly"],
+    [periodPattern("monthly|pcm", "months?|mos?|mths?|m"), "monthly"],
     [
-        /\b(per\s*annum|per\s*year|yearly|annually|annual|a\s*year)\b|\/\s*(yr|year)\b/i,
+        periodPattern(
+            "yearly|annually|annual|p\\.?a\\.?|p\\/a",
+            "years?|yrs?|annum|y",
+        ),
         "yearly",
     ],
-    [/\b(one[-\s]?time|lump\s*sum|flat)\b/i, "one_time"],
+    // The only one with no unit to put behind a slash.
+    [/\b(?:one[-\s]?time|lump\s*sum|flat)(?!\w)/i, "one_time"],
 ];
 
 const MULTIPLIER: Record<string, number> = { k: 1_000, m: 1_000_000 };
 
 const readCurrency = (value: string): string => {
-    const code = value.match(CURRENCY_CODES);
+    const capitals = value.match(CODE_UPPERCASE);
+    if (capitals) return capitals[1];
+    const code = value.match(CODE_ANY_CASE);
     if (code) return code[1].toUpperCase();
-    for (const [symbol, currency] of SYMBOL_CURRENCY) {
-        if (symbol && value.includes(symbol)) return currency;
+    for (const [glyph, currency] of GLYPH_CURRENCY) {
+        if (value.includes(glyph)) return currency;
     }
     return DEFAULT_CURRENCY;
 };
 
 // Returns the period plus the text with the period words removed, so a token
 // like "/2wk" cannot later be mistaken for the amount 2.
+//
+// The earliest phrasing in the string wins, not the first pattern in the list:
+// "120,000 yearly, paid biweekly" is an annual salary, and whichever period the
+// amount was written next to is the one it was quoted in. A tie goes to the
+// longer match, which is what keeps "bi-weekly" from reading as "weekly".
 const readPeriod = (
     value: string,
 ): { period: PayPeriod | null; rest: string } => {
+    let best: { period: PayPeriod; text: string; at: number } | null = null;
     for (const [pattern, period] of PERIOD_PATTERNS) {
         const match = value.match(pattern);
-        if (match) return { period, rest: value.replace(match[0], " ") };
+        if (match?.index === undefined) continue;
+        const closer = !best || match.index < best.at;
+        const longer =
+            best &&
+            match.index === best.at &&
+            match[0].length > best.text.length;
+        if (closer || longer) {
+            best = { period, text: match[0], at: match.index };
+        }
     }
-    return { period: null, rest: value };
+    if (!best) return { period: null, rest: value };
+    return { period: best.period, rest: value.replace(best.text, " ") };
 };
 
-const readAmounts = (value: string): number[] => {
-    const amounts: number[] = [];
-    for (const match of value.matchAll(/(\d[\d,]*(?:\.\d+)?)\s*([kKmM])?/g)) {
-        const base = Number(match[1].replace(/,/g, ""));
-        if (!Number.isFinite(base)) continue;
-        const suffix = match[2]?.toLowerCase();
-        amounts.push(suffix ? base * MULTIPLIER[suffix] : base);
+// Much of the world groups thousands with spaces, so "120 000" is one amount
+// rather than 120 followed by 000. Runs until it settles, since each pass joins
+// one group and "1 200 000" has two.
+const joinGroups = (value: string): string => {
+    let joined = value;
+    let previous = "";
+    while (joined !== previous) {
+        previous = joined;
+        joined = joined.replace(/(\d)\s(\d{3})(?!\d)/g, "$1$2");
     }
-    return amounts;
+    return joined;
+};
+
+// Half the world writes 120,000.50 and the other half writes 120.000,50, so a
+// dot is not reliably a decimal point. Within one number, whichever separator
+// comes last is the decimal one; a lone separator with exactly three digits
+// behind it is grouping, and anything else is a decimal point.
+const normalizeNumber = (number: string): string => {
+    const last = Math.max(number.lastIndexOf("."), number.lastIndexOf(","));
+    if (last === -1) return number;
+
+    const digits = number.replace(/[.,]/g, "");
+    const decimals = number.length - last - 1;
+    // Both kinds present means the last one is the decimal point whatever it
+    // is. On its own, three digits behind it makes it a thousands separator.
+    const mixed = number.includes(".") && number.includes(",");
+    if (!mixed && decimals === 3) return digits;
+    return `${digits.slice(0, digits.length - decimals)}.${digits.slice(digits.length - decimals)}`;
+};
+
+const normalizeSeparators = (value: string): string =>
+    value.replace(/\d[\d.,]*\d/g, normalizeNumber);
+
+// A US posting lists the retirement plan beside the salary often enough that
+// "401k" would otherwise be read as four hundred thousand.
+const PLAN_TOKENS = /\b40[13]\s*\(?[kb]\)?(?!\w)/gi;
+
+// Two amounts are a range only when something actually joins them: a dash, a
+// tilde, or a joining word. A comma, a plus or any prose in between means the
+// second number is a different thing altogether, as in "$120k base + 15% bonus"
+// or "$120,000/yr, 401k match". Currency written between the two ends is not
+// prose, so it is dropped before the gap is judged.
+const CURRENCY_NOISE = new RegExp(`\\b(?:${CURRENCIES.join("|")})\\b`, "gi");
+
+const RANGE_JOIN =
+    /^[^\p{L}\d]*(?:[-–—~]|\bto\b|\band\b|\buntil\b)[^\p{L}\d]*$/iu;
+
+const joinsRange = (gap: string): boolean =>
+    RANGE_JOIN.test(gap.replace(CURRENCY_NOISE, " "));
+
+const readAmounts = (value: string): number[] => {
+    const text = normalizeSeparators(joinGroups(value)).replace(
+        PLAN_TOKENS,
+        " ",
+    );
+    const found: {
+        value: number;
+        end: number;
+        start: number;
+        scale: number;
+    }[] = [];
+    for (const match of text.matchAll(/(\d+(?:\.\d+)?)\s*([kKmM])?/g)) {
+        const base = Number(match[1]);
+        if (!Number.isFinite(base)) continue;
+        const end = match.index + match[0].length;
+        // A percentage is a share of something else, never the pay itself, as
+        // in "20% target bonus" sitting beside the salary.
+        if (text[end] === "%") continue;
+        const scale = match[2] ? MULTIPLIER[match[2].toLowerCase()] : 1;
+        found.push({
+            value: base * scale,
+            start: match.index,
+            end,
+            scale,
+        });
+    }
+
+    const [first, second] = found;
+    if (!first) return [];
+    if (!second || !joinsRange(text.slice(first.end, second.start))) {
+        return [first.value];
+    }
+
+    // In "120-140k" the suffix is written once but meant for both ends, and
+    // nobody is offered 120 dollars to 140,000. An end already past the
+    // multiplier carries its own scale and is left alone.
+    const carried = first.value < second.scale ? second.scale : 1;
+    return [first.value * carried, second.value];
 };
 
 const asNumeric = (amount: number): string => amount.toFixed(2);
