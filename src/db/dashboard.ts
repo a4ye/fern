@@ -245,9 +245,25 @@ export const logStatusStep = async (
     await gen.setApplicationStatus(pool, { applicationId, userId, status });
 };
 
+// The detail panel's staged history edits, applied on save. Drops come first so
+// a step removed and re-recorded in the same edit still ends up last, which is
+// where the application is left sitting.
+export const applyStatusStepEdits = async (
+    userId: string,
+    applicationId: string,
+    edits: { removed: string[]; added: ApplicationStatus[] },
+): Promise<void> => {
+    for (const eventId of edits.removed) {
+        await removeStatusStep(userId, applicationId, eventId);
+    }
+    for (const status of edits.added) {
+        await logStatusStep(userId, applicationId, status);
+    }
+};
+
 // Takes back a recorded step, so removing the one just logged is an undo. The
-// application is left where the last remaining step put it, or, when that was
-// the only step, back where the step came from.
+// application is left where the last remaining step put it, and with no steps
+// left there is nothing saying it ever moved, so it goes back to the start.
 export const removeStatusStep = async (
     userId: string,
     applicationId: string,
@@ -258,21 +274,16 @@ export const removeStatusStep = async (
         applicationId,
         userId,
     });
-    const removed = steps.find((step) => step.id === eventId);
-    if (!removed) return;
+    if (!steps.some((step) => step.id === eventId)) return;
 
     await gen.deleteApplicationEvent(pool, { eventId, applicationId, userId });
 
     const remaining = steps.filter((step) => step.id !== eventId);
-    const status =
-        remaining[remaining.length - 1]?.toStatus ?? removed.fromStatus;
-    if (status) {
-        await gen.setApplicationStatus(pool, {
-            applicationId,
-            userId,
-            status,
-        });
-    }
+    await gen.setApplicationStatus(pool, {
+        applicationId,
+        userId,
+        status: remaining[remaining.length - 1]?.toStatus ?? "not_applied",
+    });
 };
 
 export const setApplicationsStatus = async (

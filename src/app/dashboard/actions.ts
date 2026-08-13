@@ -9,8 +9,7 @@ import {
     deleteApplication as deleteApplicationDb,
     deleteApplications as deleteApplicationsDb,
     deleteList as deleteListDb,
-    logStatusStep as logStatusStepDb,
-    removeStatusStep as removeStatusStepDb,
+    applyStatusStepEdits as applyStatusStepEditsDb,
     saveApplicationDetail as saveApplicationDetailDb,
     setApplicationsArrangement as setApplicationsArrangementDb,
     setApplicationsStatus as setApplicationsStatusDb,
@@ -31,6 +30,7 @@ import {
     firstIssue,
     listCreateSchema,
     listUpdateSchema,
+    stepEditsSchema,
     type ActionResult,
 } from "@/lib/validation";
 
@@ -88,6 +88,13 @@ export type ApplicationDraft = {
     pay: string | null;
     appliedAt: string | null;
     url: string | null;
+};
+
+// What the panel stages while it is open: the ids of recorded steps it dropped,
+// and the statuses it queued, in the order they were added.
+export type ApplicationStepEdits = {
+    removed: string[];
+    added: ApplicationStatus[];
 };
 
 export type ApplicationDetailDraft = {
@@ -157,12 +164,15 @@ export const updateApplicationsBulk = async (
     return { ok: true };
 };
 
-// The detail panel's save. Every column an application has, minus the status,
-// which only moves through logApplicationStatus below.
+// The detail panel's save: every column an application has, plus the history
+// edits staged beside them. Recording a step is how the status moves, and the
+// status the application already sits at is a step like any other, which is how
+// a second interview gets logged.
 export const saveApplicationDetail = async (
     listId: string,
     applicationId: string,
     input: ApplicationDetailDraft,
+    steps: ApplicationStepEdits,
 ): Promise<ActionResult> => {
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session) return { ok: false, error: NOT_SIGNED_IN };
@@ -172,35 +182,19 @@ export const saveApplicationDetail = async (
         return { ok: false, error: firstIssue(parsed.error) };
     }
 
+    const parsedSteps = stepEditsSchema.safeParse(steps);
+    if (!parsedSteps.success) {
+        return { ok: false, error: firstIssue(parsedSteps.error) };
+    }
+
     await saveApplicationDetailDb(session.user.id, applicationId, parsed.data);
+    await applyStatusStepEditsDb(
+        session.user.id,
+        applicationId,
+        parsedSteps.data,
+    );
     revalidatePath(`/dashboard/${listId}`);
     return { ok: true };
-};
-
-// Records a step in the history. The status the application already sits at is
-// a step like any other, which is how a second interview gets logged.
-export const logApplicationStatus = async (
-    listId: string,
-    applicationId: string,
-    status: ApplicationStatus,
-): Promise<void> => {
-    const session = await auth.api.getSession({ headers: await headers() });
-    if (!session) return;
-
-    await logStatusStepDb(session.user.id, applicationId, status);
-    revalidatePath(`/dashboard/${listId}`);
-};
-
-export const removeApplicationStep = async (
-    listId: string,
-    applicationId: string,
-    eventId: string,
-): Promise<void> => {
-    const session = await auth.api.getSession({ headers: await headers() });
-    if (!session) return;
-
-    await removeStatusStepDb(session.user.id, applicationId, eventId);
-    revalidatePath(`/dashboard/${listId}`);
 };
 
 export const setApplicationsStatus = async (

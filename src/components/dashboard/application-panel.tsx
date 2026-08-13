@@ -1,9 +1,7 @@
 "use client";
 
-import { useState, useTransition, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
-    logApplicationStatus,
-    removeApplicationStep,
     saveApplicationDetail,
     type ApplicationDetailDraft,
 } from "@/app/dashboard/actions";
@@ -29,6 +27,7 @@ import {
     type ApplicationStatus,
     type Arrangement,
     type PayPeriod,
+    type StatusStep,
 } from "@/components/dashboard/data";
 import { payAmountInput } from "@/lib/pay";
 import {
@@ -153,9 +152,10 @@ export const ApplicationPanel = ({
     const { ref: dialogRef, close } = useModalDialog();
     const [draft, setDraft] = useState<Draft>(() => draftOf(app));
     const [staged, setStaged] = useState<ApplicationStatus | null>(null);
+    const [added, setAdded] = useState<ApplicationStatus[]>([]);
+    const [removed, setRemoved] = useState<string[]>([]);
     const [error, setError] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
-    const [logging, startLogging] = useTransition();
 
     const set = <K extends keyof Draft>(key: K, value: Draft[K]) =>
         setDraft((current) => ({ ...current, [key]: value }));
@@ -171,6 +171,7 @@ export const ApplicationPanel = ({
                 listId,
                 app.id,
                 asDetail(draft),
+                { removed, added },
             );
             if (result.ok) {
                 dismiss();
@@ -185,19 +186,35 @@ export const ApplicationPanel = ({
         setSaving(false);
     };
 
-    const logStep = () => {
+    const stageStep = () => {
         if (!staged) return;
-        const status = staged;
+        setAdded((queued) => [...queued, staged]);
         setStaged(null);
-        startLogging(async () => {
-            await logApplicationStatus(listId, app.id, status);
-        });
     };
 
-    const removeStep = (eventId: string) =>
-        startLogging(async () => {
-            await removeApplicationStep(listId, app.id, eventId);
-        });
+    // Only recorded changes are listed, so every row has a date and can be
+    // taken back. The steps with no event behind them are where the row sat
+    // before anything was recorded, which is not something anyone did. Steps
+    // staged in this panel join them at the end, where saving will put them.
+    const rows = [
+        ...app.history
+            .filter((step): step is StatusStep & { id: string } =>
+                step.id === null ? false : !removed.includes(step.id),
+            )
+            .map((step) => ({
+                key: step.id,
+                label: STATUS_META[step.status].label,
+                when: step.at ? formatEdited(step.at) : "",
+                drop: () => setRemoved((dropped) => [...dropped, step.id]),
+            })),
+        ...added.map((status, index) => ({
+            key: `staged-${index}`,
+            label: STATUS_META[status].label,
+            when: "Not saved",
+            drop: () =>
+                setAdded((queued) => queued.filter((_, at) => at !== index)),
+        })),
+    ];
 
     return (
         <dialog
@@ -313,45 +330,37 @@ export const ApplicationPanel = ({
                     </Section>
 
                     <Section title="Status">
-                        {/* Every step it has been through, oldest first. Adding
-                            the status it already holds is what makes a second
-                            interview a round of its own rather than a no-op. */}
-                        <ol className="mb-3 space-y-1">
-                            {app.history.map((step, index) => (
-                                <li
-                                    key={step.id ?? `opening-${index}`}
-                                    className="group flex h-6 items-center gap-3 text-xs"
-                                >
-                                    <span className="truncate text-ink">
-                                        {STATUS_META[step.status].label}
-                                    </span>
-                                    <span className="ml-auto shrink-0 text-muted tabular-nums">
-                                        {step.at ? formatEdited(step.at) : ""}
-                                    </span>
-                                    <span className="flex w-4 shrink-0 justify-end">
-                                        {step.id && (
-                                            <button
-                                                type="button"
-                                                onClick={() =>
-                                                    removeStep(
-                                                        step.id as string,
-                                                    )
-                                                }
-                                                disabled={logging}
-                                                aria-label={`Remove ${STATUS_META[step.status].label} step`}
-                                                title="Remove this step"
-                                                className="cursor-pointer text-muted opacity-0 transition-[color,opacity] group-hover:opacity-100 hover:text-rose focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                                            >
-                                                <span
-                                                    aria-hidden="true"
-                                                    className="icon-[lucide--x] block size-3.5"
-                                                />
-                                            </button>
-                                        )}
-                                    </span>
-                                </li>
-                            ))}
-                        </ol>
+                        {rows.length > 0 && (
+                            <ol className="mb-3 divide-y divide-faint border-y border-faint">
+                                {rows.map((row, index) => (
+                                    <li
+                                        key={row.key}
+                                        className="group flex h-8 items-center gap-3 text-xs"
+                                    >
+                                        <span
+                                            className={`min-w-0 truncate ${index === rows.length - 1 ? "font-medium text-ink" : "text-sub"}`}
+                                        >
+                                            {row.label}
+                                        </span>
+                                        <span className="ml-auto shrink-0 text-muted tabular-nums">
+                                            {row.when}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={row.drop}
+                                            aria-label={`Remove ${row.label} step`}
+                                            title="Remove this step"
+                                            className="shrink-0 cursor-pointer text-muted opacity-0 transition-[color,opacity] group-hover:opacity-100 hover:text-rose focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                                        >
+                                            <span
+                                                aria-hidden="true"
+                                                className="icon-[lucide--x] block size-3.5"
+                                            />
+                                        </button>
+                                    </li>
+                                ))}
+                            </ol>
+                        )}
                         <div className="flex items-center gap-2">
                             <CellSelect
                                 label="Status to record"
@@ -365,8 +374,8 @@ export const ApplicationPanel = ({
                             />
                             <button
                                 type="button"
-                                onClick={logStep}
-                                disabled={!staged || logging}
+                                onClick={stageStep}
+                                disabled={!staged}
                                 className={secondaryButtonClass}
                             >
                                 Add

@@ -23,6 +23,7 @@ let total = 0;
 let rows: Row[] = [];
 let applications: Record<string, unknown>[] = [];
 let statusEvents: EventRow[] = [];
+let applicationEvents: EventRow[] = [];
 
 const countListsForUser = mock(async (..._args: unknown[]) => ({ total }));
 const listListsForUser = mock(async (..._args: unknown[]) => rows);
@@ -33,6 +34,15 @@ const listApplicationsForList = mock(
 const pipelineForList = mock(async (..._args: unknown[]) => []);
 const recentEventsForList = mock(async (..._args: unknown[]) => []);
 const statusEventsForList = mock(async (..._args: unknown[]) => statusEvents);
+const statusEventsForApplication = mock(
+    async (..._args: unknown[]) => applicationEvents,
+);
+const deleteApplicationEvent = mock(async (..._args: unknown[]) => undefined);
+const setApplicationStatus = mock(async (..._args: unknown[]) => undefined);
+const getApplicationForUser = mock(async (..._args: unknown[]) =>
+    application("applied"),
+);
+const insertApplicationEvent = mock(async (..._args: unknown[]) => undefined);
 
 mock.module("@/db/client", () => ({ getPool: () => ({}) }));
 mock.module("@/db/queries", () => ({
@@ -43,9 +53,19 @@ mock.module("@/db/queries", () => ({
     pipelineForList,
     recentEventsForList,
     statusEventsForList,
+    statusEventsForApplication,
+    deleteApplicationEvent,
+    setApplicationStatus,
+    getApplicationForUser,
+    insertApplicationEvent,
 }));
 
-const { getListDetail, getListsForUser } = await import("@/db/dashboard");
+const {
+    applyStatusStepEdits,
+    getListDetail,
+    getListsForUser,
+    removeStatusStep,
+} = await import("@/db/dashboard");
 
 const row = (overrides: Partial<Row> = {}): Row => ({
     id: "list-1",
@@ -71,8 +91,12 @@ const queryArgs = () => listListsForUser.mock.calls[0]?.[1];
 beforeEach(() => {
     total = 0;
     rows = [];
+    applicationEvents = [];
     countListsForUser.mockClear();
     listListsForUser.mockClear();
+    deleteApplicationEvent.mockClear();
+    setApplicationStatus.mockClear();
+    insertApplicationEvent.mockClear();
 });
 
 describe("getListsForUser", () => {
@@ -232,6 +256,85 @@ describe("getListDetail", () => {
             "interviewing",
             "rejected",
         ]);
+    });
+});
+
+describe("removeStatusStep", () => {
+    const statusWritten = () =>
+        (setApplicationStatus.mock.calls[0]?.[1] as { status: string }).status;
+
+    it("goes back to not applied once the last recorded step is gone", async () => {
+        // The row was added mid pipeline, so the step it came from was never
+        // recorded and there is nothing left saying it ever moved.
+        applicationEvents = [event("interviewing", "offer", "only")];
+        await removeStatusStep("user-1", "app-1", "only");
+
+        expect(deleteApplicationEvent).toHaveBeenCalledTimes(1);
+        expect(statusWritten()).toBe("not_applied");
+    });
+
+    it("leaves the application where the remaining steps put it", async () => {
+        applicationEvents = [
+            event("applied", "interviewing", "first"),
+            event("interviewing", "offer", "second"),
+        ];
+        await removeStatusStep("user-1", "app-1", "second");
+
+        expect(statusWritten()).toBe("interviewing");
+    });
+
+    it("ignores an event that is not the application's", async () => {
+        applicationEvents = [event("applied", "interviewing", "first")];
+        await removeStatusStep("user-1", "app-1", "someone-elses");
+
+        expect(deleteApplicationEvent).not.toHaveBeenCalled();
+        expect(setApplicationStatus).not.toHaveBeenCalled();
+    });
+});
+
+describe("applyStatusStepEdits", () => {
+    const lastStatusWritten = () => {
+        const calls = setApplicationStatus.mock.calls;
+        return (calls[calls.length - 1]?.[1] as { status: string }).status;
+    };
+
+    it("drops the steps it was given before recording the new ones", async () => {
+        // Both in one save, so the removal's fallback must not be what the
+        // application is left sitting at.
+        applicationEvents = [event("applied", "interviewing", "first")];
+        await applyStatusStepEdits("user-1", "app-1", {
+            removed: ["first"],
+            added: ["offer_in_progress"],
+        });
+
+        expect(deleteApplicationEvent).toHaveBeenCalledTimes(1);
+        expect(insertApplicationEvent).toHaveBeenCalledTimes(1);
+        expect(lastStatusWritten()).toBe("offer_in_progress");
+    });
+
+    it("records queued steps in the order they were added", async () => {
+        await applyStatusStepEdits("user-1", "app-1", {
+            removed: [],
+            added: ["interviewing", "offer_in_progress"],
+        });
+
+        expect(
+            insertApplicationEvent.mock.calls.map(
+                (call) => (call[1] as { toStatus: string }).toStatus,
+            ),
+        ).toEqual(["interviewing", "offer_in_progress"]);
+        expect(lastStatusWritten()).toBe("offer_in_progress");
+    });
+
+    it("writes nothing when there is nothing staged", async () => {
+        await applyStatusStepEdits("user-1", "app-1", {
+            removed: [],
+            added: [],
+        });
+
+        expect(deleteApplicationEvent).not.toHaveBeenCalled();
+        expect(insertApplicationEvent).not.toHaveBeenCalled();
+        expect(setApplicationStatus).not.toHaveBeenCalled();
     });
 });
 

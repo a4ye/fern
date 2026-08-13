@@ -202,6 +202,13 @@ export const applicationDetailSchema = z
         "Maximum pay cannot be less than the minimum.",
     );
 
+// The detail panel stages its history edits and sends them with the form, so
+// the steps it drops and the ones it records arrive as part of the same save.
+export const stepEditsSchema = z.object({
+    removed: z.array(z.string()),
+    added: z.array(z.enum(APPLICATION_STATUSES, "Choose a valid status.")),
+});
+
 // Narrows a safeParse failure to a single message for display. Schemas above
 // validate one field at a time in practice, so the first issue is the relevant
 // one.
