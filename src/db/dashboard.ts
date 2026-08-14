@@ -106,8 +106,7 @@ const parseDateInput = (value: string | null): Date | null => {
     return new Date(year, month - 1, day);
 };
 
-// The column set shared by insert and update, minus pay, which only some of
-// them write.
+// The columns an update writes, minus pay, which only some of them write.
 const columnsFrom = (input: ApplicationInput) => ({
     companyName: input.company,
     roleTitle: input.role,
@@ -121,13 +120,25 @@ const columnsFrom = (input: ApplicationInput) => ({
 export const createApplication = async (
     userId: string,
     listId: string,
-    input: ApplicationInput,
+    input: ApplicationDetail & { status: ApplicationStatus },
 ): Promise<boolean> => {
     const row = await gen.createApplication(getPool(), {
         userId,
         listId,
-        ...columnsFrom(input),
-        ...parsePay(input.pay),
+        companyName: input.company,
+        roleTitle: input.role,
+        status: input.status,
+        url: input.url,
+        location: input.location,
+        arrangement: input.arrangement,
+        appliedAt: parseDateInput(input.appliedAt),
+        payMin: input.payMin,
+        payMax: input.payMax,
+        payCurrency: input.payCurrency,
+        payPeriod: input.payPeriod,
+        bonusAmount: input.bonus,
+        payNote: input.payNote,
+        notes: input.notes,
     });
     return row !== null;
 };

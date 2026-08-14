@@ -1,7 +1,8 @@
 -- name: CreateApplication :one
 insert into applications (
     list_id, position, company_name, role_title, status, url, location,
-    arrangement, applied_at, pay_min, pay_max, pay_currency, pay_period, pay_note
+    arrangement, applied_at, pay_min, pay_max, pay_currency, pay_period,
+    bonus_amount, pay_note, notes
 )
 select
     l.id,
@@ -20,7 +21,9 @@ select
     sqlc.narg('pay_max')::numeric,
     @pay_currency,
     sqlc.narg('pay_period')::pay_period,
-    sqlc.narg('pay_note')
+    sqlc.narg('bonus_amount')::numeric,
+    sqlc.narg('pay_note'),
+    sqlc.narg('notes')
 from lists l
 where l.id = @list_id and l.user_id = @user_id
 returning id;

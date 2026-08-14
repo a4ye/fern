@@ -12,7 +12,7 @@ export type PayFields = {
     payNote: string | null;
 };
 
-const DEFAULT_CURRENCY = "USD";
+export const DEFAULT_CURRENCY = "USD";
 
 export const currencyName = new Intl.DisplayNames(["en"], {
     type: "currency",

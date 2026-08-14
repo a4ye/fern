@@ -156,51 +156,57 @@ const amountSchema = (label: string) =>
         )
         .transform((value) => (value === "" ? null : value));
 
-// The detail panel writes every column an application has, which is more than
-// the table's own row exposes. Status is missing on purpose: it moves by
-// recording a step, never by saving the form.
-export const applicationDetailSchema = z
-    .object({
-        company: z
-            .string()
-            .trim()
-            .min(1, "Company is required.")
-            .max(
-                COMPANY_MAX,
-                `Company must be ${COMPANY_MAX} characters or fewer.`,
-            ),
-        role: optionalText("Role", ROLE_MAX),
-        location: optionalText("Location", LOCATION_MAX),
-        arrangement: z
-            .enum(ARRANGEMENTS, "Choose a valid arrangement.")
-            .nullable(),
-        appliedAt: appliedAtSchema,
-        url: urlSchema,
-        payMin: amountSchema("Minimum pay"),
-        payMax: amountSchema("Maximum pay"),
-        // The column is char(3), and the picker's list comes from the runtime's
-        // own currency data, which need not match byte for byte between the
-        // browser that offered the code and the server that stores it. The
-        // shape is what matters.
-        payCurrency: z
-            .string()
-            .trim()
-            .toUpperCase()
-            .regex(/^[A-Z]{3}$/, "Choose a valid currency."),
-        payPeriod: z.enum(PAY_PERIODS, "Choose a valid pay period.").nullable(),
-        bonus: amountSchema("Bonus"),
-        payNote: optionalText("Pay note", PAY_MAX),
-        notes: optionalText("Notes", NOTES_MAX),
-    })
-    // The column has the same check, so catching it here is the difference
-    // between a message and a failed write.
-    .refine(
-        (pay) =>
-            pay.payMin === null ||
-            pay.payMax === null ||
-            Number(pay.payMax) >= Number(pay.payMin),
-        "Maximum pay cannot be less than the minimum.",
-    );
+// Every column an application has, which is more than the table's own row
+// exposes. Status is not among them: the detail panel moves it by recording a
+// step, and the create form below adds it back as the one it starts at.
+const applicationDetailFields = z.object({
+    company: z
+        .string()
+        .trim()
+        .min(1, "Company is required.")
+        .max(
+            COMPANY_MAX,
+            `Company must be ${COMPANY_MAX} characters or fewer.`,
+        ),
+    role: optionalText("Role", ROLE_MAX),
+    location: optionalText("Location", LOCATION_MAX),
+    arrangement: z.enum(ARRANGEMENTS, "Choose a valid arrangement.").nullable(),
+    appliedAt: appliedAtSchema,
+    url: urlSchema,
+    payMin: amountSchema("Minimum pay"),
+    payMax: amountSchema("Maximum pay"),
+    // The column is char(3), and the picker's list comes from the runtime's own
+    // currency data, which need not match byte for byte between the browser
+    // that offered the code and the server that stores it. The shape is what
+    // matters.
+    payCurrency: z
+        .string()
+        .trim()
+        .toUpperCase()
+        .regex(/^[A-Z]{3}$/, "Choose a valid currency."),
+    payPeriod: z.enum(PAY_PERIODS, "Choose a valid pay period.").nullable(),
+    bonus: amountSchema("Bonus"),
+    payNote: optionalText("Pay note", PAY_MAX),
+    notes: optionalText("Notes", NOTES_MAX),
+});
+
+// The column has the same check, so catching it here is the difference between
+// a message and a failed write.
+const payOrdered = (pay: { payMin: string | null; payMax: string | null }) =>
+    pay.payMin === null ||
+    pay.payMax === null ||
+    Number(pay.payMax) >= Number(pay.payMin);
+
+const PAY_ORDER_MESSAGE = "Maximum pay cannot be less than the minimum.";
+
+export const applicationDetailSchema = applicationDetailFields.refine(
+    payOrdered,
+    PAY_ORDER_MESSAGE,
+);
+
+export const applicationCreateSchema = applicationDetailFields
+    .extend({ status: z.enum(APPLICATION_STATUSES, "Choose a valid status.") })
+    .refine(payOrdered, PAY_ORDER_MESSAGE);
 
 // The detail panel stages its history edits and sends them with the form, so
 // the steps it drops and the ones it records arrive as part of the same save.

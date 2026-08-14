@@ -7,7 +7,8 @@ interface Client {
 export const createApplicationQuery = `-- name: CreateApplication :one
 insert into applications (
     list_id, position, company_name, role_title, status, url, location,
-    arrangement, applied_at, pay_min, pay_max, pay_currency, pay_period, pay_note
+    arrangement, applied_at, pay_min, pay_max, pay_currency, pay_period,
+    bonus_amount, pay_note, notes
 )
 select
     l.id,
@@ -26,9 +27,11 @@ select
     $9::numeric,
     $10,
     $11::pay_period,
-    $12
+    $12::numeric,
+    $13,
+    $14
 from lists l
-where l.id = $13 and l.user_id = $14
+where l.id = $15 and l.user_id = $16
 returning id`;
 
 export interface CreateApplicationArgs {
@@ -43,7 +46,9 @@ export interface CreateApplicationArgs {
     payMax: string | null;
     payCurrency: string;
     payPeriod: string | null;
+    bonusAmount: string | null;
     payNote: string | null;
+    notes: string | null;
     listId: string;
     userId: string;
 }
@@ -55,7 +60,7 @@ export interface CreateApplicationRow {
 export async function createApplication(client: Client, args: CreateApplicationArgs): Promise<CreateApplicationRow | null> {
     const result = await client.query({
         text: createApplicationQuery,
-        values: [args.companyName, args.roleTitle, args.status, args.url, args.location, args.arrangement, args.appliedAt, args.payMin, args.payMax, args.payCurrency, args.payPeriod, args.payNote, args.listId, args.userId],
+        values: [args.companyName, args.roleTitle, args.status, args.url, args.location, args.arrangement, args.appliedAt, args.payMin, args.payMax, args.payCurrency, args.payPeriod, args.bonusAmount, args.payNote, args.notes, args.listId, args.userId],
         rowMode: "array"
     });
     if (result.rows.length !== 1) {

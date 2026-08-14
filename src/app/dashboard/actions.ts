@@ -25,6 +25,7 @@ import type {
 } from "@/components/dashboard/data";
 import { scrapePosting, type ScrapedPosting } from "@/lib/job-scrape";
 import {
+    applicationCreateSchema,
     applicationDetailSchema,
     applicationSchema,
     firstIssue,
@@ -113,14 +114,20 @@ export type ApplicationDetailDraft = {
     notes: string | null;
 };
 
+// The create form writes every column the detail panel does, plus the status
+// the application starts at.
+export type NewApplicationDraft = ApplicationDetailDraft & {
+    status: ApplicationStatus;
+};
+
 export const addApplication = async (
     listId: string,
-    input: ApplicationDraft,
+    input: NewApplicationDraft,
 ): Promise<ActionResult> => {
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session) return { ok: false, error: NOT_SIGNED_IN };
 
-    const parsed = applicationSchema.safeParse(input);
+    const parsed = applicationCreateSchema.safeParse(input);
     if (!parsed.success) {
         return { ok: false, error: firstIssue(parsed.error) };
     }
