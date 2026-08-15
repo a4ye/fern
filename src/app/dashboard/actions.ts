@@ -236,6 +236,7 @@ export const updateApplicationsBulk = async (
         parsedTimeZone.data,
     );
     revalidatePath(`/dashboard/${listId}`);
+    revalidatePath("/dashboard");
     return { ok: true };
 };
 
@@ -276,6 +277,7 @@ export const saveApplicationDetail = async (
         parsedTimeZone.data,
     );
     revalidatePath(`/dashboard/${listId}`);
+    revalidatePath("/dashboard");
     return { ok: true };
 };
 
@@ -298,6 +300,7 @@ export const setApplicationsStatus = async (
         parsedTimeZone.data,
     );
     revalidatePath(`/dashboard/${listId}`);
+    revalidatePath("/dashboard");
 };
 
 export const setApplicationsArrangement = async (
@@ -314,6 +317,7 @@ export const setApplicationsArrangement = async (
         arrangement,
     );
     revalidatePath(`/dashboard/${listId}`);
+    revalidatePath("/dashboard");
 };
 
 export const removeApplication = async (

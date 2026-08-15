@@ -17,6 +17,7 @@ const db = {
     updateApplication: spy(),
     updateApplications: spy(),
     saveApplicationDetailAndSteps: spy(),
+    getApplicationExtras: spy(),
     deleteApplication: spy(),
     deleteApplications: spy(),
     setApplicationsStatus: spy(),
@@ -43,9 +44,13 @@ mock.module("@/db/job-import", () => ({
 }));
 
 const {
+    addApplication,
     createList,
+    saveApplicationDetail,
     updateList,
+    updateApplicationsBulk,
     deleteList,
+    setApplicationsArrangement,
     setApplicationsStatus,
     suggestFromUrl,
     togglePin,
@@ -217,7 +222,7 @@ describe("setApplicationsStatus", () => {
             "applied",
             "America/Toronto",
         ]);
-        expect(revalidated()).toContain("/dashboard/list-1");
+        expect(revalidated()).toEqual(["/dashboard/list-1", "/dashboard"]);
     });
 
     it("rejects an invalid time zone before writing", async () => {
@@ -230,5 +235,71 @@ describe("setApplicationsStatus", () => {
 
         expect(db.setApplicationsStatus).not.toHaveBeenCalled();
         expect(revalidatePath).not.toHaveBeenCalled();
+    });
+});
+
+describe("application write revalidation", () => {
+    const quickEdit = {
+        company: "Acme",
+        role: null,
+        status: "applied" as const,
+        location: null,
+        arrangement: null,
+        pay: null,
+        appliedAt: null,
+        url: null,
+    };
+    const detailEdit = {
+        company: "Acme",
+        role: null,
+        location: null,
+        arrangement: null,
+        appliedAt: null,
+        url: null,
+        payMin: null,
+        payMax: null,
+        payCurrency: "CAD",
+        payPeriod: null,
+        bonus: null,
+        payNote: null,
+        notes: null,
+    };
+
+    it("refreshes the list detail and overview after creating an application", async () => {
+        await addApplication(
+            "list-1",
+            { ...detailEdit, status: "not_applied" },
+            "America/Toronto",
+        );
+
+        expect(revalidated()).toEqual(["/dashboard/list-1", "/dashboard"]);
+    });
+
+    it("refreshes the list detail and overview after bulk editing applications", async () => {
+        await updateApplicationsBulk(
+            "list-1",
+            [{ id: "app-1", input: quickEdit, payTyped: false }],
+            "America/Toronto",
+        );
+
+        expect(revalidated()).toEqual(["/dashboard/list-1", "/dashboard"]);
+    });
+
+    it("refreshes the list detail and overview after editing application details", async () => {
+        await saveApplicationDetail(
+            "list-1",
+            "app-1",
+            detailEdit,
+            { removed: [], added: [] },
+            "America/Toronto",
+        );
+
+        expect(revalidated()).toEqual(["/dashboard/list-1", "/dashboard"]);
+    });
+
+    it("refreshes the list detail and overview after changing arrangement", async () => {
+        await setApplicationsArrangement("list-1", ["app-1"], "remote");
+
+        expect(revalidated()).toEqual(["/dashboard/list-1", "/dashboard"]);
     });
 });
