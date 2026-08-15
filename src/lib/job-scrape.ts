@@ -177,23 +177,33 @@ const fromJsonLd = (html: string): ScrapedPosting | null => {
     return null;
 };
 
+// Attributes are read out of the tag separately because Next.js emits `content`
+// before `property`, and a single pattern would have to fix one order or other.
 const metaContent = (html: string, property: string): string | null => {
-    const pattern = new RegExp(
-        `<meta[^>]*(?:property|name)=["']${property}["'][^>]*content=["']([^"']*)["']`,
-        "i",
-    );
-    return asString(html.match(pattern)?.[1] ?? null);
+    for (const [tag] of html.matchAll(/<meta\s[^>]*>/gi)) {
+        const key = tag.match(/(?:property|name)=["']([^"']*)["']/i)?.[1];
+        if (key?.toLowerCase() !== property) continue;
+        return asString(tag.match(/content=["']([^"']*)["']/i)?.[1] ?? null);
+    }
+    return null;
 };
+
+// Simplify reposts other boards' listings and packs both fields into the one
+// title. Its og:site_name is the aggregator, so the company has to come from
+// here or the employer would be recorded as "Simplify Jobs".
+const SIMPLIFY_TITLE = /^(.*) @ (.*) \| Simplify$/;
 
 const fromOpenGraph = (html: string): ScrapedPosting => {
     const title = metaContent(html, "og:title");
     const site = metaContent(html, "og:site_name");
     if (!title && !site) return EMPTY;
+    const simplify = title?.match(SIMPLIFY_TITLE);
+    const role = simplify?.[1] ?? title;
     return {
-        role: title,
-        company: site,
+        role,
+        company: simplify?.[2] ?? site,
         location: null,
-        arrangement: arrangementFromText(title),
+        arrangement: arrangementFromText(role),
         pay: null,
         source: "opengraph",
     };

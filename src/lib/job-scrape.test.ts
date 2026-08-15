@@ -75,4 +75,24 @@ describe("parsePosting", () => {
         expect(posting.company).toBe("Acme");
         expect(posting.source).toBe("opengraph");
     });
+
+    it("reads OpenGraph tags that put content before property", () => {
+        const html = `<html><head>
+            <meta content="Data Intern" property="og:title" data-next-head=""/>
+            <meta content="Acme" property="og:site_name"/>
+        </head></html>`;
+        const posting = parsePosting(html);
+        expect(posting.role).toBe("Data Intern");
+        expect(posting.company).toBe("Acme");
+    });
+
+    it("splits the employer out of a Simplify OpenGraph title", () => {
+        const html = `<html><head>
+            <meta content="Tourism Assistant Intern @ University of Pikeville | Simplify" property="og:title"/>
+            <meta content="Simplify Jobs" property="og:site_name"/>
+        </head></html>`;
+        const posting = parsePosting(html);
+        expect(posting.role).toBe("Tourism Assistant Intern");
+        expect(posting.company).toBe("University of Pikeville");
+    });
 });
