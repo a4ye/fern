@@ -98,9 +98,28 @@ export const Section = ({
 // place, however long its name is.
 const LABEL_CLASS = "w-24 shrink-0 text-xs text-sub";
 
-const Field = ({ label, children }: { label: string; children: ReactNode }) => (
+// Company is the only field the schemas insist on, so the mark appears once
+// rather than every other row carrying an "optional" of its own.
+const RequiredMark = () => (
+    <span aria-hidden="true" title="Required" className="ml-0.5 text-accent">
+        *
+    </span>
+);
+
+const Field = ({
+    label,
+    required = false,
+    children,
+}: {
+    label: string;
+    required?: boolean;
+    children: ReactNode;
+}) => (
     <label className="flex items-center gap-4">
-        <span className={LABEL_CLASS}>{label}</span>
+        <span className={LABEL_CLASS}>
+            {label}
+            {required && <RequiredMark />}
+        </span>
         {children}
     </label>
 );
@@ -120,28 +139,29 @@ export const PickerField = ({
     </div>
 );
 
-// `linkField` lets the create drawer put its own control on the Link row, where
-// a pasted address also fills the rest of the form in.
+// `omitLink` is for the create drawer, which asks for the link first in a row
+// of its own rather than as one field among these.
 export const BasicsFields = ({
     draft,
     set,
     disabled = false,
-    linkField,
+    omitLink = false,
     companyRef,
 }: {
     draft: ApplicationFields;
     set: SetField;
     disabled?: boolean;
-    linkField?: ReactNode;
+    omitLink?: boolean;
     companyRef?: RefObject<HTMLInputElement | null>;
 }) => (
     <Section title="Basics">
-        <Field label="Company">
+        <Field label="Company" required>
             <input
                 ref={companyRef}
                 value={draft.company}
                 onChange={(event) => set("company", event.target.value)}
                 maxLength={COMPANY_MAX}
+                required
                 disabled={disabled}
                 className={fieldClass}
             />
@@ -155,7 +175,7 @@ export const BasicsFields = ({
                 className={fieldClass}
             />
         </Field>
-        {linkField ?? (
+        {!omitLink && (
             <Field label="Link">
                 <input
                     value={draft.url}

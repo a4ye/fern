@@ -16,20 +16,20 @@ import {
     EMPTY_FIELDS,
     NotesField,
     PayFields,
-    PickerField,
     Section,
     type ApplicationFields,
 } from "@/components/dashboard/application-form";
 import {
     CellSelect,
     STATUS_OPTIONS,
-    formInputClass,
     quietButtonClass,
 } from "@/components/dashboard/table-controls";
 import { useModalDialog } from "@/components/dashboard/use-modal-dialog";
 import type { ApplicationStatus } from "@/components/dashboard/data";
 import { parsePay, payAmountInput } from "@/lib/pay";
 import { URL_MAX } from "@/lib/validation";
+
+const LINK_INPUT_ID = "add-application-link";
 
 export const AddApplicationForm = ({
     listId,
@@ -147,11 +147,59 @@ export const AddApplicationForm = ({
         <Drawer dialogRef={dialogRef} onDismiss={dismiss}>
             <DrawerHeader
                 title="New application"
-                subtitle="Paste a link and the rest fills in."
+                subtitle="Start with the posting link."
                 onDismiss={dismiss}
             />
 
             <div className="min-h-0 flex-1 overflow-y-auto">
+                {/* The link leads, on a plate of its own, because a pasted one
+                    answers most of the form below and typing first throws that
+                    work away. */}
+                <section className="border-b border-hairline bg-surface px-5 py-5">
+                    <label
+                        htmlFor={LINK_INPUT_ID}
+                        className="block text-sm font-medium text-ink"
+                    >
+                        Paste a job posting link
+                    </label>
+                    <div className="relative mt-3">
+                        <span
+                            aria-hidden="true"
+                            className="icon-[lucide--link] pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted"
+                        />
+                        <input
+                            id={LINK_INPUT_ID}
+                            value={draft.url}
+                            onChange={(event) => set("url", event.target.value)}
+                            onPaste={onPaste}
+                            onKeyDown={onLinkKeyDown}
+                            placeholder="https://"
+                            autoFocus
+                            maxLength={URL_MAX}
+                            className={`w-full border border-hairline bg-background py-2.5 pl-9 text-sm text-ink transition-colors placeholder:text-muted focus:border-accent focus:outline-none ${fetching ? "pr-20" : "pr-3"}`}
+                        />
+                        {fetching && (
+                            <div className="absolute top-1/2 right-3 flex -translate-y-1/2 items-center gap-2">
+                                <span
+                                    aria-hidden="true"
+                                    className="icon-[lucide--loader-circle] size-3.5 animate-spin text-muted"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={skipFetch}
+                                    className={quietButtonClass}
+                                >
+                                    Skip
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                    <p className="mt-2 text-xs text-sub">
+                        The company, role, location, and pay fill themselves in.
+                        No link? Fill the fields in below.
+                    </p>
+                </section>
+
                 {/* The fields are held while a link is being read, since the
                     answer lands on all of them at once and would take anything
                     typed in the meantime with it. Skip gives them back. */}
@@ -160,40 +208,7 @@ export const AddApplicationForm = ({
                     set={set}
                     disabled={fetching}
                     companyRef={companyRef}
-                    linkField={
-                        <PickerField label="Link">
-                            <div className="relative flex-1">
-                                <input
-                                    value={draft.url}
-                                    onChange={(event) =>
-                                        set("url", event.target.value)
-                                    }
-                                    onPaste={onPaste}
-                                    onKeyDown={onLinkKeyDown}
-                                    placeholder="Paste a job posting link"
-                                    aria-label="Link"
-                                    autoFocus
-                                    maxLength={URL_MAX}
-                                    className={`${formInputClass} ${fetching ? "pr-16" : ""}`}
-                                />
-                                {fetching && (
-                                    <div className="absolute top-1/2 right-2.5 flex -translate-y-1/2 items-center gap-2">
-                                        <span
-                                            aria-hidden="true"
-                                            className="icon-[lucide--loader-circle] size-3.5 animate-spin text-muted"
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={skipFetch}
-                                            className={quietButtonClass}
-                                        >
-                                            Skip
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-                        </PickerField>
-                    }
+                    omitLink
                 />
 
                 <Section title="Status">
