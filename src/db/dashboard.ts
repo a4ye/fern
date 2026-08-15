@@ -1,4 +1,5 @@
-import { getPool } from "@/db/client";
+import type { PoolClient } from "@neondatabase/serverless";
+import { getPool, withTransaction } from "@/db/client";
 import * as gen from "@/db/queries";
 import {
     ACTIVE_STATUSES,
@@ -151,14 +152,14 @@ export const createApplication = async (
 // when it was only sitting there would flatten a range, currency and note the
 // detail panel had set.
 const updateApplication = async (
+    client: PoolClient,
     userId: string,
     applicationId: string,
     input: ApplicationInput,
     payTyped: boolean,
     timeZone: string,
 ): Promise<void> => {
-    const pool = getPool();
-    const current = await gen.getApplicationForUser(pool, {
+    const current = await gen.getApplicationForUser(client, {
         applicationId,
         userId,
     });
@@ -170,16 +171,16 @@ const updateApplication = async (
         ...columnsFrom(input, timeZone),
     };
     if (payTyped) {
-        await gen.updateApplication(pool, {
+        await gen.updateApplication(client, {
             ...columns,
             ...parsePay(input.pay),
         });
     } else {
-        await gen.updateApplicationFields(pool, columns);
+        await gen.updateApplicationFields(client, columns);
     }
 
     if (current.status !== input.status) {
-        await gen.insertApplicationEvent(pool, {
+        await gen.insertApplicationEvent(client, {
             applicationId,
             fromStatus: current.status,
             toStatus: input.status,
@@ -192,17 +193,24 @@ export const updateApplications = async (
     userId: string,
     rows: { id: string; input: ApplicationInput; payTyped: boolean }[],
     timeZone: string,
-): Promise<void> => {
-    for (const row of rows) {
-        await updateApplication(
-            userId,
-            row.id,
-            row.input,
-            row.payTyped,
-            timeZone,
+): Promise<void> =>
+    withTransaction(async (client) => {
+        // A stable lock order prevents two overlapping bulk edits from taking
+        // the same application locks in opposite orders.
+        const orderedRows = [...rows].sort((left, right) =>
+            left.id.localeCompare(right.id),
         );
-    }
-};
+        for (const row of orderedRows) {
+            await updateApplication(
+                client,
+                userId,
+                row.id,
+                row.input,
+                row.payTyped,
+                timeZone,
+            );
+        }
+    });
 
 // Everything the detail panel edits. Amounts are decimal strings, since that is
 // how numeric columns arrive and leave, and rounding them through a float would
@@ -223,12 +231,13 @@ export type ApplicationDetail = {
     notes: string | null;
 };
 
-export const saveApplicationDetail = async (
+const saveApplicationDetailWithClient = async (
+    client: PoolClient,
     userId: string,
     applicationId: string,
     detail: ApplicationDetail,
 ): Promise<void> => {
-    await gen.updateApplicationDetail(getPool(), {
+    await gen.updateApplicationDetail(client, {
         applicationId,
         userId,
         companyName: detail.company,
@@ -247,29 +256,38 @@ export const saveApplicationDetail = async (
     });
 };
 
+export const saveApplicationDetail = async (
+    userId: string,
+    applicationId: string,
+    detail: ApplicationDetail,
+): Promise<void> =>
+    withTransaction((client) =>
+        saveApplicationDetailWithClient(client, userId, applicationId, detail),
+    );
+
 // Records a step in the history and leaves the application sitting at it. The
 // status it already holds is a valid step: that is how a second interview is
 // logged, and the chart draws it as a round of its own.
-export const logStatusStep = async (
+const logStatusStepWithClient = async (
+    client: PoolClient,
     userId: string,
     applicationId: string,
     status: ApplicationStatus,
     timeZone: string,
 ): Promise<void> => {
-    const pool = getPool();
-    const current = await gen.getApplicationForUser(pool, {
+    const current = await gen.getApplicationForUser(client, {
         applicationId,
         userId,
     });
     if (!current) return;
 
-    await gen.insertApplicationEvent(pool, {
+    await gen.insertApplicationEvent(client, {
         applicationId,
         fromStatus: current.status,
         toStatus: status,
         note: null,
     });
-    await gen.setApplicationStatus(pool, {
+    await gen.setApplicationStatus(client, {
         applicationId,
         userId,
         status,
@@ -277,22 +295,126 @@ export const logStatusStep = async (
     });
 };
 
+export const logStatusStep = async (
+    userId: string,
+    applicationId: string,
+    status: ApplicationStatus,
+    timeZone: string,
+): Promise<void> =>
+    withTransaction((client) =>
+        logStatusStepWithClient(
+            client,
+            userId,
+            applicationId,
+            status,
+            timeZone,
+        ),
+    );
+
+const removeStatusStepWithClient = async (
+    client: PoolClient,
+    userId: string,
+    applicationId: string,
+    eventId: string,
+    timeZone: string,
+): Promise<void> => {
+    const steps = await gen.statusEventsForApplication(client, {
+        applicationId,
+        userId,
+    });
+    if (!steps.some((step) => step.id === eventId)) return;
+
+    await gen.deleteApplicationEvent(client, {
+        eventId,
+        applicationId,
+        userId,
+    });
+
+    const remaining = steps.filter((step) => step.id !== eventId);
+    await gen.setApplicationStatus(client, {
+        applicationId,
+        userId,
+        status: remaining[remaining.length - 1]?.toStatus ?? "not_applied",
+        timeZone,
+    });
+};
+
 // The detail panel's staged history edits, applied on save. Drops come first so
 // a step removed and re-recorded in the same edit still ends up last, which is
 // where the application is left sitting.
-export const applyStatusStepEdits = async (
+const applyStatusStepEditsWithClient = async (
+    client: PoolClient,
     userId: string,
     applicationId: string,
     edits: { removed: string[]; added: ApplicationStatus[] },
     timeZone: string,
 ): Promise<void> => {
+    // Lock the application before touching its history so another request
+    // cannot add a step between reading the history and updating the status.
+    const application = await gen.getApplicationForUser(client, {
+        applicationId,
+        userId,
+    });
+    if (!application) return;
+
     for (const eventId of edits.removed) {
-        await removeStatusStep(userId, applicationId, eventId, timeZone);
+        await removeStatusStepWithClient(
+            client,
+            userId,
+            applicationId,
+            eventId,
+            timeZone,
+        );
     }
     for (const status of edits.added) {
-        await logStatusStep(userId, applicationId, status, timeZone);
+        await logStatusStepWithClient(
+            client,
+            userId,
+            applicationId,
+            status,
+            timeZone,
+        );
     }
 };
+
+export const applyStatusStepEdits = async (
+    userId: string,
+    applicationId: string,
+    edits: { removed: string[]; added: ApplicationStatus[] },
+    timeZone: string,
+): Promise<void> =>
+    withTransaction((client) =>
+        applyStatusStepEditsWithClient(
+            client,
+            userId,
+            applicationId,
+            edits,
+            timeZone,
+        ),
+    );
+
+export const saveApplicationDetailAndSteps = async (
+    userId: string,
+    applicationId: string,
+    detail: ApplicationDetail,
+    edits: { removed: string[]; added: ApplicationStatus[] },
+    timeZone: string,
+): Promise<void> =>
+    withTransaction(async (client) => {
+        await saveApplicationDetailWithClient(
+            client,
+            userId,
+            applicationId,
+            detail,
+        );
+        await applyStatusStepEditsWithClient(
+            client,
+            userId,
+            applicationId,
+            edits,
+            timeZone,
+        );
+    });
 
 // Takes back a recorded step, so removing the one just logged is an undo. The
 // application is left where the last remaining step put it, and with no steps
@@ -302,36 +424,37 @@ export const removeStatusStep = async (
     applicationId: string,
     eventId: string,
     timeZone: string,
-): Promise<void> => {
-    const pool = getPool();
-    const steps = await gen.statusEventsForApplication(pool, {
-        applicationId,
-        userId,
+): Promise<void> =>
+    withTransaction(async (client) => {
+        const application = await gen.getApplicationForUser(client, {
+            applicationId,
+            userId,
+        });
+        if (!application) return;
+        await removeStatusStepWithClient(
+            client,
+            userId,
+            applicationId,
+            eventId,
+            timeZone,
+        );
     });
-    if (!steps.some((step) => step.id === eventId)) return;
-
-    await gen.deleteApplicationEvent(pool, { eventId, applicationId, userId });
-
-    const remaining = steps.filter((step) => step.id !== eventId);
-    await gen.setApplicationStatus(pool, {
-        applicationId,
-        userId,
-        status: remaining[remaining.length - 1]?.toStatus ?? "not_applied",
-        timeZone,
-    });
-};
 
 export const setApplicationsStatus = async (
     userId: string,
     applicationIds: string[],
     status: ApplicationStatus,
     timeZone: string,
-): Promise<void> => {
-    const pool = getPool();
-    const args = { applicationIds, userId, status, timeZone };
-    await gen.insertStatusEvents(pool, args);
-    await gen.setApplicationsStatus(pool, args);
-};
+): Promise<void> =>
+    withTransaction(async (client) => {
+        const args = { applicationIds, userId, status, timeZone };
+        await gen.lockApplicationsForUser(client, {
+            applicationIds,
+            userId,
+        });
+        await gen.insertStatusEvents(client, args);
+        await gen.setApplicationsStatus(client, args);
+    });
 
 export const setApplicationsArrangement = async (
     userId: string,

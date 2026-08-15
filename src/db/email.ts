@@ -1,4 +1,4 @@
-import { getPool } from "@/db/client";
+import { getPool, withTransaction } from "@/db/client";
 import * as gen from "@/db/queries";
 import {
     STATUS_META,
@@ -104,43 +104,45 @@ export const applySuggestion = async (
     userId: string,
     suggestionId: string,
     timeZone: string,
-): Promise<boolean> => {
-    const pool = getPool();
-    const suggestion = await gen.getSuggestionForUser(pool, {
-        id: suggestionId,
-        userId,
-    });
-    if (!suggestion) return false;
+): Promise<boolean> =>
+    withTransaction(async (client) => {
+        // Locking the pending suggestion makes concurrent Apply/Dismiss clicks
+        // resolve it exactly once.
+        const suggestion = await gen.getSuggestionForUser(client, {
+            id: suggestionId,
+            userId,
+        });
+        if (!suggestion) return false;
 
-    const application = await gen.getApplicationForUser(pool, {
-        applicationId: suggestion.applicationId,
-        userId,
-    });
-    if (!application) return false;
-
-    const toStatus = suggestion.suggestedStatus;
-    if (isStatus(application.status) && application.status !== toStatus) {
-        await gen.setApplicationStatus(pool, {
+        const application = await gen.getApplicationForUser(client, {
             applicationId: suggestion.applicationId,
             userId,
-            status: toStatus,
-            timeZone,
         });
-        await gen.insertApplicationEvent(pool, {
-            applicationId: suggestion.applicationId,
-            fromStatus: application.status,
-            toStatus,
-            note: "Detected from email",
-        });
-    }
+        if (!application) return false;
 
-    await gen.setSuggestionState(pool, {
-        id: suggestionId,
-        userId,
-        state: "accepted",
+        const toStatus = suggestion.suggestedStatus;
+        if (isStatus(application.status) && application.status !== toStatus) {
+            await gen.setApplicationStatus(client, {
+                applicationId: suggestion.applicationId,
+                userId,
+                status: toStatus,
+                timeZone,
+            });
+            await gen.insertApplicationEvent(client, {
+                applicationId: suggestion.applicationId,
+                fromStatus: application.status,
+                toStatus,
+                note: "Detected from email",
+            });
+        }
+
+        await gen.setSuggestionState(client, {
+            id: suggestionId,
+            userId,
+            state: "accepted",
+        });
+        return true;
     });
-    return true;
-};
 
 export const dismissSuggestion = async (
     userId: string,

@@ -229,7 +229,8 @@ export const getApplicationForUserQuery = `-- name: GetApplicationForUser :one
 select a.id, a.status
 from applications a
 join lists l on l.id = a.list_id
-where a.id = $1 and l.user_id = $2`;
+where a.id = $1 and l.user_id = $2
+for update of a`;
 
 export interface GetApplicationForUserArgs {
     applicationId: string;
@@ -255,6 +256,36 @@ export async function getApplicationForUser(client: Client, args: GetApplication
         id: row[0],
         status: row[1]
     };
+}
+
+export const lockApplicationsForUserQuery = `-- name: LockApplicationsForUser :many
+select a.id
+from applications a
+join lists l on l.id = a.list_id
+where a.id = any($1::uuid[]) and l.user_id = $2
+order by a.id
+for update of a`;
+
+export interface LockApplicationsForUserArgs {
+    applicationIds: string[];
+    userId: string;
+}
+
+export interface LockApplicationsForUserRow {
+    id: string;
+}
+
+export async function lockApplicationsForUser(client: Client, args: LockApplicationsForUserArgs): Promise<LockApplicationsForUserRow[]> {
+    const result = await client.query({
+        text: lockApplicationsForUserQuery,
+        values: [args.applicationIds, args.userId],
+        rowMode: "array"
+    });
+    return result.rows.map(row => {
+        return {
+            id: row[0]
+        };
+    });
 }
 
 export const updateApplicationQuery = `-- name: UpdateApplication :exec

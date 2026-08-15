@@ -126,7 +126,8 @@ export async function listPendingSuggestions(client: Client, args: ListPendingSu
 export const getSuggestionForUserQuery = `-- name: GetSuggestionForUser :one
 select id, application_id, suggested_status, current_status
 from email_suggestions
-where id = $1 and user_id = $2 and state = 'pending'`;
+where id = $1 and user_id = $2 and state = 'pending'
+for update`;
 
 export interface GetSuggestionForUserArgs {
     id: string;
@@ -161,7 +162,7 @@ export async function getSuggestionForUser(client: Client, args: GetSuggestionFo
 export const setSuggestionStateQuery = `-- name: SetSuggestionState :exec
 update email_suggestions
 set state = $1::email_suggestion_state
-where id = $2 and user_id = $3`;
+where id = $2 and user_id = $3 and state = 'pending'`;
 
 export interface SetSuggestionStateArgs {
     state: string;

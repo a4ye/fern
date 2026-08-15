@@ -9,8 +9,7 @@ import {
     deleteApplication as deleteApplicationDb,
     deleteApplications as deleteApplicationsDb,
     deleteList as deleteListDb,
-    applyStatusStepEdits as applyStatusStepEditsDb,
-    saveApplicationDetail as saveApplicationDetailDb,
+    saveApplicationDetailAndSteps as saveApplicationDetailDb,
     setApplicationsArrangement as setApplicationsArrangementDb,
     setApplicationsStatus as setApplicationsStatusDb,
     setListPinned,
@@ -256,10 +255,10 @@ export const saveApplicationDetail = async (
         return { ok: false, error: firstIssue(parsedSteps.error) };
     }
 
-    await saveApplicationDetailDb(session.user.id, applicationId, parsed.data);
-    await applyStatusStepEditsDb(
+    await saveApplicationDetailDb(
         session.user.id,
         applicationId,
+        parsed.data,
         parsedSteps.data,
         parsedTimeZone.data,
     );

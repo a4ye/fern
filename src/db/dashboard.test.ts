@@ -25,6 +25,7 @@ let applications: Record<string, unknown>[] = [];
 let statusEvents: EventRow[] = [];
 let applicationEvents: EventRow[] = [];
 const TIME_ZONE = "America/Toronto";
+const transactionClient = { transaction: true };
 
 const countListsForUser = mock(async (..._args: unknown[]) => ({ total }));
 const listListsForUser = mock(async (..._args: unknown[]) => rows);
@@ -40,12 +41,35 @@ const statusEventsForApplication = mock(
 );
 const deleteApplicationEvent = mock(async (..._args: unknown[]) => undefined);
 const setApplicationStatus = mock(async (..._args: unknown[]) => undefined);
+const updateApplicationDetail = mock(async (..._args: unknown[]) => undefined);
+const updateApplicationFields = mock(async (..._args: unknown[]) => undefined);
+const lockApplicationsForUser = mock(async (..._args: unknown[]) => []);
+const insertStatusEvents = mock(async (..._args: unknown[]) => undefined);
+const setApplicationsStatus = mock(async (..._args: unknown[]) => undefined);
 const getApplicationForUser = mock(async (..._args: unknown[]) =>
     application("applied"),
 );
 const insertApplicationEvent = mock(async (..._args: unknown[]) => undefined);
+const suggestion = {
+    id: "suggestion-1",
+    applicationId: "app-1",
+    suggestedStatus: "interviewing",
+    currentStatus: "applied",
+};
+const getSuggestionForUser = mock(
+    async (..._args: unknown[]): Promise<typeof suggestion | null> =>
+        suggestion,
+);
+const setSuggestionState = mock(async (..._args: unknown[]) => undefined);
+const withTransaction = mock(
+    async (operation: (client: object) => Promise<unknown>) =>
+        operation(transactionClient),
+);
 
-mock.module("@/db/client", () => ({ getPool: () => ({}) }));
+mock.module("@/db/client", () => ({
+    getPool: () => ({}),
+    withTransaction,
+}));
 mock.module("@/db/queries", () => ({
     countListsForUser,
     listListsForUser,
@@ -57,8 +81,15 @@ mock.module("@/db/queries", () => ({
     statusEventsForApplication,
     deleteApplicationEvent,
     setApplicationStatus,
+    updateApplicationDetail,
+    updateApplicationFields,
+    lockApplicationsForUser,
+    insertStatusEvents,
+    setApplicationsStatus,
     getApplicationForUser,
     insertApplicationEvent,
+    getSuggestionForUser,
+    setSuggestionState,
 }));
 
 const {
@@ -66,7 +97,11 @@ const {
     getListDetail,
     getListsForUser,
     removeStatusStep,
+    saveApplicationDetailAndSteps,
+    setApplicationsStatus: setApplicationsStatusDb,
+    updateApplications,
 } = await import("@/db/dashboard");
+const { applySuggestion } = await import("@/db/email");
 
 const row = (overrides: Partial<Row> = {}): Row => ({
     id: "list-1",
@@ -97,7 +132,16 @@ beforeEach(() => {
     listListsForUser.mockClear();
     deleteApplicationEvent.mockClear();
     setApplicationStatus.mockClear();
+    updateApplicationDetail.mockClear();
+    updateApplicationFields.mockClear();
+    lockApplicationsForUser.mockClear();
+    insertStatusEvents.mockClear();
+    setApplicationsStatus.mockClear();
+    getApplicationForUser.mockClear();
     insertApplicationEvent.mockClear();
+    getSuggestionForUser.mockClear();
+    setSuggestionState.mockClear();
+    withTransaction.mockClear();
 });
 
 describe("getListsForUser", () => {
@@ -272,6 +316,10 @@ describe("removeStatusStep", () => {
 
         expect(deleteApplicationEvent).toHaveBeenCalledTimes(1);
         expect(statusWritten()).toBe("not_applied");
+        expect(withTransaction).toHaveBeenCalledTimes(1);
+        expect(deleteApplicationEvent.mock.calls[0]?.[0]).toBe(
+            transactionClient,
+        );
     });
 
     it("leaves the application where the remaining steps put it", async () => {
@@ -316,6 +364,14 @@ describe("applyStatusStepEdits", () => {
         expect(deleteApplicationEvent).toHaveBeenCalledTimes(1);
         expect(insertApplicationEvent).toHaveBeenCalledTimes(1);
         expect(lastStatusWritten()).toBe("offer_in_progress");
+        expect(withTransaction).toHaveBeenCalledTimes(1);
+        expect(
+            [
+                ...deleteApplicationEvent.mock.calls,
+                ...insertApplicationEvent.mock.calls,
+                ...setApplicationStatus.mock.calls,
+            ].every((call) => call[0] === transactionClient),
+        ).toBe(true);
     });
 
     it("records queued steps in the order they were added", async () => {
@@ -355,6 +411,128 @@ describe("applyStatusStepEdits", () => {
         expect(deleteApplicationEvent).not.toHaveBeenCalled();
         expect(insertApplicationEvent).not.toHaveBeenCalled();
         expect(setApplicationStatus).not.toHaveBeenCalled();
+    });
+});
+
+describe("compound application writes", () => {
+    const input = {
+        company: "Acme",
+        role: null,
+        status: "interviewing" as const,
+        location: null,
+        arrangement: null,
+        pay: null,
+        appliedAt: null,
+        url: null,
+    };
+
+    it("saves every bulk-edited row in one transaction", async () => {
+        await updateApplications(
+            "user-1",
+            [
+                { id: "app-b", input, payTyped: false },
+                { id: "app-a", input, payTyped: false },
+            ],
+            TIME_ZONE,
+        );
+
+        expect(withTransaction).toHaveBeenCalledTimes(1);
+        expect(
+            updateApplicationFields.mock.calls.map(
+                (call) => (call[1] as { applicationId: string }).applicationId,
+            ),
+        ).toEqual(["app-a", "app-b"]);
+        expect(
+            [
+                ...updateApplicationFields.mock.calls,
+                ...insertApplicationEvent.mock.calls,
+            ].every((call) => call[0] === transactionClient),
+        ).toBe(true);
+    });
+
+    it("saves detail fields and staged history in one transaction", async () => {
+        await saveApplicationDetailAndSteps(
+            "user-1",
+            "app-1",
+            {
+                company: "Acme",
+                role: null,
+                location: null,
+                arrangement: null,
+                appliedAt: null,
+                url: null,
+                payMin: null,
+                payMax: null,
+                payCurrency: "CAD",
+                payPeriod: null,
+                bonus: null,
+                payNote: null,
+                notes: null,
+            },
+            { removed: [], added: ["interviewing"] },
+            TIME_ZONE,
+        );
+
+        expect(withTransaction).toHaveBeenCalledTimes(1);
+        expect(updateApplicationDetail.mock.calls[0]?.[0]).toBe(
+            transactionClient,
+        );
+        expect(insertApplicationEvent.mock.calls[0]?.[0]).toBe(
+            transactionClient,
+        );
+        expect(setApplicationStatus.mock.calls[0]?.[0]).toBe(transactionClient);
+    });
+
+    it("locks a bulk selection before writing history and status", async () => {
+        await setApplicationsStatusDb(
+            "user-1",
+            ["app-1", "app-2"],
+            "rejected",
+            TIME_ZONE,
+        );
+
+        expect(withTransaction).toHaveBeenCalledTimes(1);
+        expect(lockApplicationsForUser.mock.calls[0]?.[0]).toBe(
+            transactionClient,
+        );
+        expect(insertStatusEvents.mock.calls[0]?.[0]).toBe(transactionClient);
+        expect(setApplicationsStatus.mock.calls[0]?.[0]).toBe(
+            transactionClient,
+        );
+    });
+});
+
+describe("applySuggestion", () => {
+    it("updates status, history, and suggestion state in one transaction", async () => {
+        expect(
+            await applySuggestion("user-1", "suggestion-1", "America/Toronto"),
+        ).toBe(true);
+
+        expect(withTransaction).toHaveBeenCalledTimes(1);
+        expect(
+            [
+                ...getSuggestionForUser.mock.calls,
+                ...getApplicationForUser.mock.calls,
+                ...setApplicationStatus.mock.calls,
+                ...insertApplicationEvent.mock.calls,
+                ...setSuggestionState.mock.calls,
+            ].every((call) => call[0] === transactionClient),
+        ).toBe(true);
+        expect(setSuggestionState.mock.calls[0]?.[1]).toMatchObject({
+            id: "suggestion-1",
+            state: "accepted",
+        });
+    });
+
+    it("does not write when another request already resolved it", async () => {
+        getSuggestionForUser.mockImplementationOnce(async () => null);
+
+        expect(
+            await applySuggestion("user-1", "suggestion-1", "America/Toronto"),
+        ).toBe(false);
+        expect(setApplicationStatus).not.toHaveBeenCalled();
+        expect(insertApplicationEvent).not.toHaveBeenCalled();
+        expect(setSuggestionState).not.toHaveBeenCalled();
     });
 });
 

@@ -40,12 +40,13 @@ order by s.email_received_at desc;
 -- name: GetSuggestionForUser :one
 select id, application_id, suggested_status, current_status
 from email_suggestions
-where id = @id and user_id = @user_id and state = 'pending';
+where id = @id and user_id = @user_id and state = 'pending'
+for update;
 
 -- name: SetSuggestionState :exec
 update email_suggestions
 set state = @state::email_suggestion_state
-where id = @id and user_id = @user_id;
+where id = @id and user_id = @user_id and state = 'pending';
 
 -- name: CountPendingSuggestions :one
 select count(*)::int as total

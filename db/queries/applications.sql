@@ -79,7 +79,18 @@ order by a.updated_at desc;
 select a.id, a.status
 from applications a
 join lists l on l.id = a.list_id
-where a.id = @application_id and l.user_id = @user_id;
+where a.id = @application_id and l.user_id = @user_id
+for update of a;
+
+-- Locks a bulk selection in a stable order before its status history and
+-- current status are changed together.
+-- name: LockApplicationsForUser :many
+select a.id
+from applications a
+join lists l on l.id = a.list_id
+where a.id = any(@application_ids::uuid[]) and l.user_id = @user_id
+order by a.id
+for update of a;
 
 -- name: UpdateApplication :exec
 update applications a
