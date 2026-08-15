@@ -1,7 +1,8 @@
 // Extracts application fields from a job posting URL. Greenhouse links use its
-// public JSON API; every other host is fetched and parsed for schema.org
-// JobPosting JSON-LD, then OpenGraph tags. Company falls back to the ATS URL
-// slug. All fields are best-effort suggestions, never certain.
+// public JSON API; every other host is fetched and parsed for Simplify's page
+// data, then schema.org JobPosting JSON-LD, then OpenGraph tags. Company falls
+// back to the ATS URL slug. All fields are best-effort suggestions, never
+// certain.
 
 import type { Arrangement } from "@/components/dashboard/data";
 
@@ -11,7 +12,11 @@ export type ScrapedPosting = {
     location: string | null;
     arrangement: Arrangement | null;
     pay: string | null;
-    source: "json-ld" | "opengraph" | "greenhouse" | "none";
+    source: "json-ld" | "opengraph" | "greenhouse" | "simplify" | "none";
+    // The employer's own posting, where the link given was an aggregator's.
+    // Offered to the user rather than swapped in: it is a third party's claim
+    // about where the listing came from, and only they can vouch for it.
+    employerUrl: string | null;
 };
 
 const EMPTY: ScrapedPosting = {
@@ -21,6 +26,7 @@ const EMPTY: ScrapedPosting = {
     arrangement: null,
     pay: null,
     source: "none",
+    employerUrl: null,
 };
 
 const NAMED_ENTITIES: Record<string, string> = {
@@ -172,9 +178,76 @@ const fromJsonLd = (html: string): ScrapedPosting | null => {
             arrangement: readArrangement(posting, location),
             pay: readPay(posting),
             source: "json-ld",
+            employerUrl: null,
         };
     }
     return null;
+};
+
+// Simplify is an aggregator: it reposts other boards' listings behind its own
+// page, which carries the whole posting as Next.js page data. That is richer
+// and cleaner than the JSON-LD it sometimes also emits, and it is there on the
+// postings that emit none, so it is read first.
+const nextPageData = (html: string): unknown => {
+    const match = html.match(
+        /<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/i,
+    );
+    if (!match) return null;
+    try {
+        return JSON.parse(match[1]);
+    } catch {
+        return null;
+    }
+};
+
+const dig = (root: unknown, ...keys: string[]): unknown => {
+    let node = root;
+    for (const key of keys) {
+        if (!isObject(node)) return null;
+        node = node[key];
+    }
+    return node;
+};
+
+// Confirmed against live postings: 1 pays hourly and 4 pays yearly. The codes
+// between are left unlabelled rather than guessed, so the amount reaches the
+// user without a period instead of with the wrong one.
+const SIMPLIFY_PERIOD: Record<number, string> = { 1: "/hr", 4: "/yr" };
+
+const simplifyPay = (posting: JsonObject): string | null => {
+    const min = asNumeric(posting["min_salary"]);
+    const max = asNumeric(posting["max_salary"]);
+    const amount = min && max && min !== max ? `${min}-${max}` : (min ?? max);
+    if (!amount) return null;
+    const period = posting["salary_period"];
+    const unit =
+        typeof period === "number" ? (SIMPLIFY_PERIOD[period] ?? "") : "";
+    return (
+        [asString(posting["currency_type"]), amount].filter(Boolean).join(" ") +
+        unit
+    );
+};
+
+const fromSimplify = (html: string): ScrapedPosting | null => {
+    const posting = dig(nextPageData(html), "props", "pageProps", "jobPosting");
+    if (!isObject(posting)) return null;
+
+    const role = asString(posting["title"]);
+    const company = asString(dig(posting, "job", "company", "name"));
+    if (!role && !company) return null;
+
+    const places = posting["locations"];
+    const place = Array.isArray(places) ? places[0] : places;
+    const location = isObject(place) ? asString(place["value"]) : null;
+    return {
+        role,
+        company,
+        location,
+        arrangement: arrangementFromText(location),
+        pay: simplifyPay(posting),
+        source: "simplify",
+        employerUrl: null,
+    };
 };
 
 // Attributes are read out of the tag separately because Next.js emits `content`
@@ -206,11 +279,12 @@ const fromOpenGraph = (html: string): ScrapedPosting => {
         arrangement: arrangementFromText(role),
         pay: null,
         source: "opengraph",
+        employerUrl: null,
     };
 };
 
 export const parsePosting = (html: string): ScrapedPosting =>
-    fromJsonLd(html) ?? fromOpenGraph(html);
+    fromSimplify(html) ?? fromJsonLd(html) ?? fromOpenGraph(html);
 
 const titleCase = (slug: string): string =>
     slug
@@ -262,7 +336,58 @@ const fromGreenhouse = async (
         arrangement: arrangementFromText(location),
         pay: null,
         source: "greenhouse",
+        employerUrl: null,
     };
+};
+
+const USER_AGENT = "Mozilla/5.0 (compatible; JobTracker/1.0)";
+
+// The posting id in a /p/<uuid>/<slug> link, which is also the id its click
+// endpoint answers to.
+const simplifyId = (url: URL): string | null => {
+    if (!/(^|\.)simplify\.jobs$/.test(url.hostname)) return null;
+    const [section, id] = url.pathname.split("/").filter(Boolean);
+    return section === "p" && id ? id : null;
+};
+
+// Marks the aggregator stamps on the link it hands back, so the employer's own
+// address is stored rather than one crediting the referral.
+// The address comes from a third party and ends up in an href, so a non-web
+// scheme is dropped here rather than offered.
+const cleanReferral = (raw: string): string | null => {
+    let url: URL;
+    try {
+        url = new URL(raw);
+    } catch {
+        return null;
+    }
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    if (/(^|\.)simplify\.jobs$/.test(url.hostname)) return null;
+    for (const param of [...url.searchParams.keys()]) {
+        const normalized = param.toLowerCase();
+        if (normalized === "gh_src" || normalized.startsWith("utm_"))
+            url.searchParams.delete(param);
+    }
+    return url.toString();
+};
+
+// Asks where the listing was reposted from without following the answer: a
+// posting that has since closed redirects on to a careers index, which loses
+// the job the hop was meant to find.
+const resolveSimplify = async (id: string): Promise<string | null> => {
+    try {
+        const response = await fetch(`https://simplify.jobs/jobs/click/${id}`, {
+            redirect: "manual",
+            headers: { "user-agent": USER_AGENT },
+            signal: AbortSignal.timeout(8000),
+        });
+        if (response.status < 300 || response.status >= 400) return null;
+        const location = response.headers.get("location");
+        return location ? cleanReferral(location) : null;
+    } catch {
+        // Nothing to offer, so the link the user pasted stands as it is.
+        return null;
+    }
 };
 
 export const scrapePosting = async (
@@ -274,6 +399,12 @@ export const scrapePosting = async (
     } catch {
         return EMPTY;
     }
+    if (url.protocol !== "http:" && url.protocol !== "https:") return EMPTY;
+
+    // Started before the page is read so the two reads overlap; it resolves to
+    // null rather than rejecting, so it is safe to leave running.
+    const simplify = simplifyId(url);
+    const employerUrl = simplify ? resolveSimplify(simplify) : null;
 
     const greenhouse = greenhouseIds(url);
     let result = greenhouse
@@ -283,17 +414,21 @@ export const scrapePosting = async (
     // Non-Greenhouse hosts, or a Greenhouse API miss, fall back to page parsing.
     // A network/parse failure here degrades to empty fields the user fills in.
     if (!result || result.source === "none") {
-        const response = await fetch(rawUrl, {
-            headers: {
-                "user-agent": "Mozilla/5.0 (compatible; JobTracker/1.0)",
-            },
-            signal: AbortSignal.timeout(8000),
-        });
-        result = response.ok ? parsePosting(await response.text()) : EMPTY;
+        try {
+            const response = await fetch(rawUrl, {
+                headers: { "user-agent": USER_AGENT },
+                signal: AbortSignal.timeout(8000),
+            });
+            result = response.ok ? parsePosting(await response.text()) : EMPTY;
+        } catch {
+            result = EMPTY;
+        }
     }
 
     // Fill a missing company from the URL slug (fixes Greenhouse page fallback).
-    return result.company
-        ? result
-        : { ...result, company: companyFromUrl(url) };
+    return {
+        ...result,
+        company: result.company ?? companyFromUrl(url),
+        employerUrl: employerUrl ? await employerUrl : null,
+    };
 };

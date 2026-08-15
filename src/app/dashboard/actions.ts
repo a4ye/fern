@@ -65,6 +65,7 @@ const EMPTY_SUGGESTION: ScrapedPosting = {
     arrangement: null,
     pay: null,
     source: "none",
+    employerUrl: null,
 };
 
 export const suggestFromUrl = async (url: string): Promise<ScrapedPosting> => {

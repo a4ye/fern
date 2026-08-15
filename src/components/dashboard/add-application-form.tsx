@@ -30,6 +30,16 @@ import { parsePay, payAmountInput } from "@/lib/pay";
 import { URL_MAX } from "@/lib/validation";
 
 const LINK_INPUT_ID = "add-application-link";
+const LINK_CHOICE_BUTTON_CLASS =
+    "inline-flex h-10 shrink-0 cursor-pointer items-center px-3 text-xs font-medium transition-[background-color,color,scale] active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+
+const employerHost = (raw: string): string => {
+    try {
+        return new URL(raw).hostname.replace(/^www\./, "");
+    } catch {
+        return "Employer website";
+    }
+};
 
 export const AddApplicationForm = ({
     listId,
@@ -42,6 +52,9 @@ export const AddApplicationForm = ({
     const [draft, setDraft] = useState<ApplicationFields>(EMPTY_FIELDS);
     const [status, setStatus] = useState<ApplicationStatus>("not_applied");
     const [missed, setMissed] = useState(false);
+    // An aggregator link reads well but records the wrong page, so the
+    // employer's own is offered here for the user to accept or leave.
+    const [employerUrl, setEmployerUrl] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [fetching, setFetching] = useState(false);
     const [, startScrape] = useTransition();
@@ -73,6 +86,7 @@ export const AddApplicationForm = ({
         fetchId.current = id;
         setFetching(true);
         setMissed(false);
+        setEmployerUrl(null);
         startScrape(async () => {
             const found = await suggestFromUrl(url);
             if (fetchId.current !== id) return;
@@ -92,9 +106,21 @@ export const AddApplicationForm = ({
                 payNote: pay.payNote ?? "",
             }));
             setMissed(found.source === "none");
+            setEmployerUrl(
+                found.employerUrl && found.employerUrl !== url
+                    ? found.employerUrl
+                    : null,
+            );
             setFetching(false);
             companyRef.current?.focus();
         });
+    };
+
+    // The fields stay as they are: they were read from the aggregator's copy of
+    // the posting, which is the fuller one, and only the link is in question.
+    const acceptEmployerUrl = () => {
+        if (employerUrl) set("url", employerUrl);
+        setEmployerUrl(null);
     };
 
     const skipFetch = () => {
@@ -109,6 +135,14 @@ export const AddApplicationForm = ({
             set("url", pasted);
             scrape(pasted);
         }
+    };
+
+    const onLinkChange = (value: string) => {
+        // Editing the source link invalidates both an in-flight read and any
+        // employer link proposed for the previous value.
+        dropFetch();
+        set("url", value);
+        setEmployerUrl(null);
     };
 
     const onLinkKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -170,7 +204,9 @@ export const AddApplicationForm = ({
                         <input
                             id={LINK_INPUT_ID}
                             value={draft.url}
-                            onChange={(event) => set("url", event.target.value)}
+                            onChange={(event) =>
+                                onLinkChange(event.target.value)
+                            }
                             onPaste={onPaste}
                             onKeyDown={onLinkKeyDown}
                             placeholder="https://"
@@ -194,10 +230,63 @@ export const AddApplicationForm = ({
                             </div>
                         )}
                     </div>
-                    <p className="mt-2 text-xs text-sub">
-                        The company, role, location, and pay fill themselves in.
-                        No link? Fill the fields in below.
-                    </p>
+                    {employerUrl ? (
+                        <div className="mt-3 bg-background px-3 py-3 shadow-sm">
+                            <div
+                                role="status"
+                                className="flex items-start gap-3"
+                            >
+                                <span
+                                    aria-hidden="true"
+                                    className="flex size-8 shrink-0 items-center justify-center bg-accent-tint-soft text-accent-deep"
+                                >
+                                    <span className="icon-[lucide--external-link] size-4" />
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                    <p className="text-balance text-sm font-medium text-ink">
+                                        Employer link available
+                                    </p>
+                                    <p className="mt-0.5 text-pretty text-xs text-sub">
+                                        Replace the Simplify URL with the source
+                                        listing?
+                                    </p>
+                                    <p
+                                        title={employerUrl}
+                                        className="mt-2 flex min-w-0 items-start gap-1.5 text-xs font-medium text-accent-deep"
+                                    >
+                                        <span
+                                            aria-hidden="true"
+                                            className="icon-[lucide--globe-2] mt-px size-3.5 shrink-0"
+                                        />
+                                        <span className="break-words">
+                                            {employerHost(employerUrl)}
+                                        </span>
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="mt-3 flex justify-end gap-1 border-t border-faint pt-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setEmployerUrl(null)}
+                                    className={`${LINK_CHOICE_BUTTON_CLASS} text-sub hover:bg-surface hover:text-ink`}
+                                >
+                                    Keep Simplify
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={acceptEmployerUrl}
+                                    className={`${LINK_CHOICE_BUTTON_CLASS} bg-accent text-background hover:bg-accent-deep`}
+                                >
+                                    Use original link
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <p className="mt-2 text-xs text-sub">
+                            The company, role, location, and pay fill themselves
+                            in. No link? Fill the fields in below.
+                        </p>
+                    )}
                 </section>
 
                 {/* The fields are held while a link is being read, since the
