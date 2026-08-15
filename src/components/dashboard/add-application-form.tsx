@@ -1,6 +1,7 @@
 "use client";
 
 import {
+    useLayoutEffect,
     useRef,
     useState,
     useTransition,
@@ -60,9 +61,16 @@ export const AddApplicationForm = ({
     const [, startScrape] = useTransition();
     const [saving, setSaving] = useState(false);
     const companyRef = useRef<HTMLInputElement>(null);
+    const scrollRef = useRef<HTMLDivElement>(null);
     // A read that is no longer wanted cannot be called off once it is on its
     // way, so each one carries a number and only the current one may write.
     const fetchId = useRef(0);
+
+    // A newly opened create drawer always begins with its link field in view,
+    // regardless of the scroll position from the previous visit.
+    useLayoutEffect(() => {
+        scrollRef.current?.scrollTo({ top: 0 });
+    }, []);
 
     const dropFetch = () => {
         fetchId.current += 1;
@@ -185,7 +193,7 @@ export const AddApplicationForm = ({
                 onDismiss={dismiss}
             />
 
-            <div className="min-h-0 flex-1 overflow-y-auto">
+            <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
                 {/* The link leads, on a plate of its own, because a pasted one
                     answers most of the form below and typing first throws that
                     work away. */}
