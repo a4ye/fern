@@ -13,6 +13,7 @@ import {
 import { classifyEmails } from "@/lib/email/classify";
 import { createGmailProvider } from "@/lib/email/gmail";
 import { EmailAuthError } from "@/lib/email/types";
+import { timeZoneSchema } from "@/lib/validation";
 
 const MAX_EMAILS = 25;
 const NEWER_THAN_DAYS = 30;
@@ -132,11 +133,17 @@ export const syncInbox = async (): Promise<SyncResult> => {
     }
 };
 
-export const acceptSuggestion = async (suggestionId: string): Promise<void> => {
+export const acceptSuggestion = async (
+    suggestionId: string,
+    timeZone: string,
+): Promise<void> => {
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session) return;
 
-    await applySuggestion(session.user.id, suggestionId);
+    const parsedTimeZone = timeZoneSchema.safeParse(timeZone);
+    if (!parsedTimeZone.success) return;
+
+    await applySuggestion(session.user.id, suggestionId, parsedTimeZone.data);
     revalidatePath("/dashboard", "layout");
 };
 

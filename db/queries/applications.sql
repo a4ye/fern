@@ -16,7 +16,13 @@ select
     sqlc.narg('url'),
     sqlc.narg('location'),
     sqlc.narg('arrangement')::work_arrangement,
-    sqlc.narg('applied_at')::date,
+    coalesce(
+        sqlc.narg('applied_at')::date,
+        case
+            when @status::application_status = 'applied'
+            then (current_timestamp at time zone @time_zone::text)::date
+        end
+    ),
     sqlc.narg('pay_min')::numeric,
     sqlc.narg('pay_max')::numeric,
     @pay_currency,
@@ -84,7 +90,14 @@ set
     url = sqlc.narg('url'),
     location = sqlc.narg('location'),
     arrangement = sqlc.narg('arrangement')::work_arrangement,
-    applied_at = sqlc.narg('applied_at')::date,
+    applied_at = case
+        when a.applied_at is null
+            and a.status <> 'applied'
+            and @status::application_status = 'applied'
+            and sqlc.narg('applied_at')::date is null
+        then (current_timestamp at time zone @time_zone::text)::date
+        else sqlc.narg('applied_at')::date
+    end,
     pay_min = sqlc.narg('pay_min')::numeric,
     pay_max = sqlc.narg('pay_max')::numeric,
     pay_currency = @pay_currency,
@@ -108,7 +121,14 @@ set
     url = sqlc.narg('url'),
     location = sqlc.narg('location'),
     arrangement = sqlc.narg('arrangement')::work_arrangement,
-    applied_at = sqlc.narg('applied_at')::date
+    applied_at = case
+        when a.applied_at is null
+            and a.status <> 'applied'
+            and @status::application_status = 'applied'
+            and sqlc.narg('applied_at')::date is null
+        then (current_timestamp at time zone @time_zone::text)::date
+        else sqlc.narg('applied_at')::date
+    end
 from lists l
 where a.list_id = l.id
     and a.id = @application_id
@@ -165,7 +185,16 @@ where a.id = any(@application_ids::uuid[])
 
 -- name: SetApplicationsStatus :exec
 update applications a
-set status = @status::application_status
+set
+    status = @status::application_status,
+    applied_at = case
+        when @status::application_status = 'applied'
+        then coalesce(
+            a.applied_at,
+            (current_timestamp at time zone @time_zone::text)::date
+        )
+        else a.applied_at
+    end
 from lists l
 where a.list_id = l.id
     and a.id = any(@application_ids::uuid[])
@@ -181,7 +210,16 @@ where a.list_id = l.id
 
 -- name: SetApplicationStatus :exec
 update applications a
-set status = @status::application_status
+set
+    status = @status::application_status,
+    applied_at = case
+        when @status::application_status = 'applied'
+        then coalesce(
+            a.applied_at,
+            (current_timestamp at time zone @time_zone::text)::date
+        )
+        else a.applied_at
+    end
 from lists l
 where a.list_id = l.id
     and a.id = @application_id

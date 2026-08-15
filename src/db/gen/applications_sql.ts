@@ -22,16 +22,22 @@ select
     $4,
     $5,
     $6::work_arrangement,
-    $7::date,
-    $8::numeric,
+    coalesce(
+        $7::date,
+        case
+            when $3::application_status = 'applied'
+            then (current_timestamp at time zone $8::text)::date
+        end
+    ),
     $9::numeric,
-    $10,
-    $11::pay_period,
-    $12::numeric,
-    $13,
-    $14
+    $10::numeric,
+    $11,
+    $12::pay_period,
+    $13::numeric,
+    $14,
+    $15
 from lists l
-where l.id = $15 and l.user_id = $16
+where l.id = $16 and l.user_id = $17
 returning id`;
 
 export interface CreateApplicationArgs {
@@ -42,6 +48,7 @@ export interface CreateApplicationArgs {
     location: string | null;
     arrangement: string | null;
     appliedAt: Date | null;
+    timeZone: string;
     payMin: string | null;
     payMax: string | null;
     payCurrency: string;
@@ -60,7 +67,7 @@ export interface CreateApplicationRow {
 export async function createApplication(client: Client, args: CreateApplicationArgs): Promise<CreateApplicationRow | null> {
     const result = await client.query({
         text: createApplicationQuery,
-        values: [args.companyName, args.roleTitle, args.status, args.url, args.location, args.arrangement, args.appliedAt, args.payMin, args.payMax, args.payCurrency, args.payPeriod, args.bonusAmount, args.payNote, args.notes, args.listId, args.userId],
+        values: [args.companyName, args.roleTitle, args.status, args.url, args.location, args.arrangement, args.appliedAt, args.timeZone, args.payMin, args.payMax, args.payCurrency, args.payPeriod, args.bonusAmount, args.payNote, args.notes, args.listId, args.userId],
         rowMode: "array"
     });
     if (result.rows.length !== 1) {
@@ -259,16 +266,23 @@ set
     url = $4,
     location = $5,
     arrangement = $6::work_arrangement,
-    applied_at = $7::date,
-    pay_min = $8::numeric,
-    pay_max = $9::numeric,
-    pay_currency = $10,
-    pay_period = $11::pay_period,
-    pay_note = $12
+    applied_at = case
+        when a.applied_at is null
+            and a.status <> 'applied'
+            and $3::application_status = 'applied'
+            and $7::date is null
+        then (current_timestamp at time zone $8::text)::date
+        else $7::date
+    end,
+    pay_min = $9::numeric,
+    pay_max = $10::numeric,
+    pay_currency = $11,
+    pay_period = $12::pay_period,
+    pay_note = $13
 from lists l
 where a.list_id = l.id
-    and a.id = $13
-    and l.user_id = $14`;
+    and a.id = $14
+    and l.user_id = $15`;
 
 export interface UpdateApplicationArgs {
     companyName: string;
@@ -278,6 +292,7 @@ export interface UpdateApplicationArgs {
     location: string | null;
     arrangement: string | null;
     appliedAt: Date | null;
+    timeZone: string;
     payMin: string | null;
     payMax: string | null;
     payCurrency: string;
@@ -290,7 +305,7 @@ export interface UpdateApplicationArgs {
 export async function updateApplication(client: Client, args: UpdateApplicationArgs): Promise<void> {
     await client.query({
         text: updateApplicationQuery,
-        values: [args.companyName, args.roleTitle, args.status, args.url, args.location, args.arrangement, args.appliedAt, args.payMin, args.payMax, args.payCurrency, args.payPeriod, args.payNote, args.applicationId, args.userId],
+        values: [args.companyName, args.roleTitle, args.status, args.url, args.location, args.arrangement, args.appliedAt, args.timeZone, args.payMin, args.payMax, args.payCurrency, args.payPeriod, args.payNote, args.applicationId, args.userId],
         rowMode: "array"
     });
 }
@@ -304,11 +319,18 @@ set
     url = $4,
     location = $5,
     arrangement = $6::work_arrangement,
-    applied_at = $7::date
+    applied_at = case
+        when a.applied_at is null
+            and a.status <> 'applied'
+            and $3::application_status = 'applied'
+            and $7::date is null
+        then (current_timestamp at time zone $8::text)::date
+        else $7::date
+    end
 from lists l
 where a.list_id = l.id
-    and a.id = $8
-    and l.user_id = $9`;
+    and a.id = $9
+    and l.user_id = $10`;
 
 export interface UpdateApplicationFieldsArgs {
     companyName: string;
@@ -318,6 +340,7 @@ export interface UpdateApplicationFieldsArgs {
     location: string | null;
     arrangement: string | null;
     appliedAt: Date | null;
+    timeZone: string;
     applicationId: string;
     userId: string;
 }
@@ -325,7 +348,7 @@ export interface UpdateApplicationFieldsArgs {
 export async function updateApplicationFields(client: Client, args: UpdateApplicationFieldsArgs): Promise<void> {
     await client.query({
         text: updateApplicationFieldsQuery,
-        values: [args.companyName, args.roleTitle, args.status, args.url, args.location, args.arrangement, args.appliedAt, args.applicationId, args.userId],
+        values: [args.companyName, args.roleTitle, args.status, args.url, args.location, args.arrangement, args.appliedAt, args.timeZone, args.applicationId, args.userId],
         rowMode: "array"
     });
 }
@@ -442,14 +465,24 @@ export async function insertStatusEvents(client: Client, args: InsertStatusEvent
 
 export const setApplicationsStatusQuery = `-- name: SetApplicationsStatus :exec
 update applications a
-set status = $1::application_status
+set
+    status = $1::application_status,
+    applied_at = case
+        when $1::application_status = 'applied'
+        then coalesce(
+            a.applied_at,
+            (current_timestamp at time zone $2::text)::date
+        )
+        else a.applied_at
+    end
 from lists l
 where a.list_id = l.id
-    and a.id = any($2::uuid[])
-    and l.user_id = $3`;
+    and a.id = any($3::uuid[])
+    and l.user_id = $4`;
 
 export interface SetApplicationsStatusArgs {
     status: string;
+    timeZone: string;
     applicationIds: string[];
     userId: string;
 }
@@ -457,7 +490,7 @@ export interface SetApplicationsStatusArgs {
 export async function setApplicationsStatus(client: Client, args: SetApplicationsStatusArgs): Promise<void> {
     await client.query({
         text: setApplicationsStatusQuery,
-        values: [args.status, args.applicationIds, args.userId],
+        values: [args.status, args.timeZone, args.applicationIds, args.userId],
         rowMode: "array"
     });
 }
@@ -486,14 +519,24 @@ export async function setApplicationsArrangement(client: Client, args: SetApplic
 
 export const setApplicationStatusQuery = `-- name: SetApplicationStatus :exec
 update applications a
-set status = $1::application_status
+set
+    status = $1::application_status,
+    applied_at = case
+        when $1::application_status = 'applied'
+        then coalesce(
+            a.applied_at,
+            (current_timestamp at time zone $2::text)::date
+        )
+        else a.applied_at
+    end
 from lists l
 where a.list_id = l.id
-    and a.id = $2
-    and l.user_id = $3`;
+    and a.id = $3
+    and l.user_id = $4`;
 
 export interface SetApplicationStatusArgs {
     status: string;
+    timeZone: string;
     applicationId: string;
     userId: string;
 }
@@ -501,7 +544,7 @@ export interface SetApplicationStatusArgs {
 export async function setApplicationStatus(client: Client, args: SetApplicationStatusArgs): Promise<void> {
     await client.query({
         text: setApplicationStatusQuery,
-        values: [args.status, args.applicationId, args.userId],
+        values: [args.status, args.timeZone, args.applicationId, args.userId],
         rowMode: "array"
     });
 }

@@ -49,6 +49,22 @@ export const listUpdateSchema = listCreateSchema.extend({
     status: listStatusSchema,
 });
 
+// Server actions receive this from the browser. Validate it at the action
+// boundary before PostgreSQL uses it in `current_timestamp at time zone ...`.
+export const timeZoneSchema = z
+    .string()
+    .trim()
+    .min(1, "Time zone is required.")
+    .max(100, "Time zone is too long.")
+    .refine((timeZone) => {
+        try {
+            new Intl.DateTimeFormat("en", { timeZone }).format();
+            return true;
+        } catch {
+            return false;
+        }
+    }, "Choose a valid time zone.");
+
 export const COMPANY_MAX = 120;
 export const ROLE_MAX = 160;
 export const LOCATION_MAX = 120;

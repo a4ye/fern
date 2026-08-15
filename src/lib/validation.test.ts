@@ -10,6 +10,7 @@ import {
     firstIssue,
     listCreateSchema,
     listUpdateSchema,
+    timeZoneSchema,
 } from "@/lib/validation";
 
 const issue = <T>(result: z.ZodSafeParseResult<T>): string | null =>
@@ -71,6 +72,18 @@ describe("listUpdateSchema", () => {
             expect(update(status).success).toBe(true);
         }
         expect(issue(update("deleted"))).toBe("Choose a valid status.");
+    });
+});
+
+describe("timeZoneSchema", () => {
+    it("accepts IANA zones and rejects unknown ones", () => {
+        expect(timeZoneSchema.safeParse("America/Toronto").success).toBe(true);
+        expect(timeZoneSchema.safeParse("Pacific/Kiritimati").success).toBe(
+            true,
+        );
+        expect(issue(timeZoneSchema.safeParse("Moon/Sea_of_Tranquility"))).toBe(
+            "Choose a valid time zone.",
+        );
     });
 });
 

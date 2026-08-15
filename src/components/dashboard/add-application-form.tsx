@@ -26,7 +26,11 @@ import {
     quietButtonClass,
 } from "@/components/dashboard/table-controls";
 import { useModalDialog } from "@/components/dashboard/use-modal-dialog";
-import type { ApplicationStatus } from "@/components/dashboard/data";
+import {
+    browserTimeZone,
+    todayDateInput,
+    type ApplicationStatus,
+} from "@/components/dashboard/data";
 import { parsePay, payAmountInput } from "@/lib/pay";
 import { URL_MAX } from "@/lib/validation";
 
@@ -86,6 +90,17 @@ export const AddApplicationForm = ({
         key: K,
         value: ApplicationFields[K],
     ) => setDraft((current) => ({ ...current, [key]: value }));
+
+    const changeStatus = (next: ApplicationStatus) => {
+        setStatus(next);
+        if (next === "applied") {
+            setDraft((current) =>
+                current.appliedAt
+                    ? current
+                    : { ...current, appliedAt: todayDateInput() },
+            );
+        }
+    };
 
     const scrape = (link: string) => {
         const url = link.trim();
@@ -165,7 +180,11 @@ export const AddApplicationForm = ({
         setSaving(true);
         setError(null);
         try {
-            const result = await addApplication(listId, { ...draft, status });
+            const result = await addApplication(
+                listId,
+                { ...draft, status },
+                browserTimeZone(),
+            );
             if (result.ok) {
                 dismiss();
                 return;
@@ -313,7 +332,7 @@ export const AddApplicationForm = ({
                         label="Status"
                         value={status}
                         options={STATUS_OPTIONS}
-                        onChange={setStatus}
+                        onChange={changeStatus}
                         variant="form"
                         searchable
                         disabled={fetching}

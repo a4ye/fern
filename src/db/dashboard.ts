@@ -107,7 +107,7 @@ const parseDateInput = (value: string | null): Date | null => {
 };
 
 // The columns an update writes, minus pay, which only some of them write.
-const columnsFrom = (input: ApplicationInput) => ({
+const columnsFrom = (input: ApplicationInput, timeZone: string) => ({
     companyName: input.company,
     roleTitle: input.role,
     status: input.status,
@@ -115,12 +115,14 @@ const columnsFrom = (input: ApplicationInput) => ({
     location: input.location,
     arrangement: input.arrangement,
     appliedAt: parseDateInput(input.appliedAt),
+    timeZone,
 });
 
 export const createApplication = async (
     userId: string,
     listId: string,
     input: ApplicationDetail & { status: ApplicationStatus },
+    timeZone: string,
 ): Promise<boolean> => {
     const row = await gen.createApplication(getPool(), {
         userId,
@@ -132,6 +134,7 @@ export const createApplication = async (
         location: input.location,
         arrangement: input.arrangement,
         appliedAt: parseDateInput(input.appliedAt),
+        timeZone,
         payMin: input.payMin,
         payMax: input.payMax,
         payCurrency: input.payCurrency,
@@ -152,6 +155,7 @@ const updateApplication = async (
     applicationId: string,
     input: ApplicationInput,
     payTyped: boolean,
+    timeZone: string,
 ): Promise<void> => {
     const pool = getPool();
     const current = await gen.getApplicationForUser(pool, {
@@ -160,7 +164,11 @@ const updateApplication = async (
     });
     if (!current) return;
 
-    const columns = { applicationId, userId, ...columnsFrom(input) };
+    const columns = {
+        applicationId,
+        userId,
+        ...columnsFrom(input, timeZone),
+    };
     if (payTyped) {
         await gen.updateApplication(pool, {
             ...columns,
@@ -183,9 +191,16 @@ const updateApplication = async (
 export const updateApplications = async (
     userId: string,
     rows: { id: string; input: ApplicationInput; payTyped: boolean }[],
+    timeZone: string,
 ): Promise<void> => {
     for (const row of rows) {
-        await updateApplication(userId, row.id, row.input, row.payTyped);
+        await updateApplication(
+            userId,
+            row.id,
+            row.input,
+            row.payTyped,
+            timeZone,
+        );
     }
 };
 
@@ -239,6 +254,7 @@ export const logStatusStep = async (
     userId: string,
     applicationId: string,
     status: ApplicationStatus,
+    timeZone: string,
 ): Promise<void> => {
     const pool = getPool();
     const current = await gen.getApplicationForUser(pool, {
@@ -253,7 +269,12 @@ export const logStatusStep = async (
         toStatus: status,
         note: null,
     });
-    await gen.setApplicationStatus(pool, { applicationId, userId, status });
+    await gen.setApplicationStatus(pool, {
+        applicationId,
+        userId,
+        status,
+        timeZone,
+    });
 };
 
 // The detail panel's staged history edits, applied on save. Drops come first so
@@ -263,12 +284,13 @@ export const applyStatusStepEdits = async (
     userId: string,
     applicationId: string,
     edits: { removed: string[]; added: ApplicationStatus[] },
+    timeZone: string,
 ): Promise<void> => {
     for (const eventId of edits.removed) {
-        await removeStatusStep(userId, applicationId, eventId);
+        await removeStatusStep(userId, applicationId, eventId, timeZone);
     }
     for (const status of edits.added) {
-        await logStatusStep(userId, applicationId, status);
+        await logStatusStep(userId, applicationId, status, timeZone);
     }
 };
 
@@ -279,6 +301,7 @@ export const removeStatusStep = async (
     userId: string,
     applicationId: string,
     eventId: string,
+    timeZone: string,
 ): Promise<void> => {
     const pool = getPool();
     const steps = await gen.statusEventsForApplication(pool, {
@@ -294,6 +317,7 @@ export const removeStatusStep = async (
         applicationId,
         userId,
         status: remaining[remaining.length - 1]?.toStatus ?? "not_applied",
+        timeZone,
     });
 };
 
@@ -301,9 +325,10 @@ export const setApplicationsStatus = async (
     userId: string,
     applicationIds: string[],
     status: ApplicationStatus,
+    timeZone: string,
 ): Promise<void> => {
     const pool = getPool();
-    const args = { applicationIds, userId, status };
+    const args = { applicationIds, userId, status, timeZone };
     await gen.insertStatusEvents(pool, args);
     await gen.setApplicationsStatus(pool, args);
 };

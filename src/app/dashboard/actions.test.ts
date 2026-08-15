@@ -29,7 +29,7 @@ mock.module("@/lib/auth", () => ({
 }));
 mock.module("@/db/dashboard", () => db);
 
-const { createList, updateList, deleteList, togglePin } =
+const { createList, updateList, deleteList, setApplicationsStatus, togglePin } =
     await import("@/app/dashboard/actions");
 
 const SIGNED_OUT = { ok: false, error: "You are not signed in." };
@@ -126,5 +126,36 @@ describe("togglePin", () => {
             ["user-1", "list-1", false],
         ]);
         expect(revalidated()).toEqual(["/dashboard", "/dashboard"]);
+    });
+});
+
+describe("setApplicationsStatus", () => {
+    it("passes a validated browser time zone to the status write", async () => {
+        await setApplicationsStatus(
+            "list-1",
+            ["app-1"],
+            "applied",
+            "America/Toronto",
+        );
+
+        expect(db.setApplicationsStatus.mock.calls[0]).toEqual([
+            "user-1",
+            ["app-1"],
+            "applied",
+            "America/Toronto",
+        ]);
+        expect(revalidated()).toContain("/dashboard/list-1");
+    });
+
+    it("rejects an invalid time zone before writing", async () => {
+        await setApplicationsStatus(
+            "list-1",
+            ["app-1"],
+            "applied",
+            "Moon/Sea_of_Tranquility",
+        );
+
+        expect(db.setApplicationsStatus).not.toHaveBeenCalled();
+        expect(revalidatePath).not.toHaveBeenCalled();
     });
 });

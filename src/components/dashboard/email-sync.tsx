@@ -11,6 +11,7 @@ import {
 } from "@/app/dashboard/email-actions";
 import {
     STATUS_META,
+    browserTimeZone,
     formatRelative,
     type ApplicationStatus,
     type EmailSuggestion,
@@ -161,7 +162,7 @@ export const EmailSyncMenu = ({ panel }: { panel: EmailSyncPanel }) => {
         setSuggestions((current) => current.filter((s) => s.id !== id));
         void (async () => {
             if (accept) {
-                await acceptSuggestion(id);
+                await acceptSuggestion(id, browserTimeZone());
                 toast.success("Status updated.");
             } else {
                 await dismissSuggestionAction(id);

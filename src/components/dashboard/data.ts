@@ -556,6 +556,14 @@ export const toDateInput = (date: Date): string =>
         `${date.getDate()}`.padStart(2, "0"),
     ].join("-");
 
+// Status changes originate in the browser, whose zone is the one that decides
+// which calendar day the user means by "today". The zone travels to the server
+// so the database can derive that day from its own current timestamp.
+export const browserTimeZone = (): string =>
+    Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+
+export const todayDateInput = (): string => toDateInput(new Date());
+
 export const formatDay = (value: string): string => {
     const [year, month, day] = value.split("-").map(Number);
     const label = `${MONTHS[month - 1]} ${day}`;

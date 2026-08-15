@@ -20,7 +20,9 @@ import {
 import { useModalDialog } from "@/components/dashboard/use-modal-dialog";
 import {
     STATUS_META,
+    browserTimeZone,
     formatEdited,
+    todayDateInput,
     type ApplicationRow,
     type ApplicationStatus,
     type StatusStep,
@@ -72,10 +74,13 @@ export const ApplicationPanel = ({
         setSaving(true);
         setError(null);
         try {
-            const result = await saveApplicationDetail(listId, app.id, draft, {
-                removed,
-                added,
-            });
+            const result = await saveApplicationDetail(
+                listId,
+                app.id,
+                draft,
+                { removed, added },
+                browserTimeZone(),
+            );
             if (result.ok) {
                 dismiss();
                 return;
@@ -92,6 +97,9 @@ export const ApplicationPanel = ({
     const stageStep = () => {
         if (!staged) return;
         setAdded((queued) => [...queued, staged]);
+        if (staged === "applied" && !draft.appliedAt) {
+            set("appliedAt", todayDateInput());
+        }
         setStaged(null);
     };
 

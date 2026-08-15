@@ -32,6 +32,7 @@ import {
     listCreateSchema,
     listUpdateSchema,
     stepEditsSchema,
+    timeZoneSchema,
     type ActionResult,
 } from "@/lib/validation";
 
@@ -124,16 +125,27 @@ export type NewApplicationDraft = ApplicationDetailDraft & {
 export const addApplication = async (
     listId: string,
     input: NewApplicationDraft,
+    timeZone: string,
 ): Promise<ActionResult> => {
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session) return { ok: false, error: NOT_SIGNED_IN };
+
+    const parsedTimeZone = timeZoneSchema.safeParse(timeZone);
+    if (!parsedTimeZone.success) {
+        return { ok: false, error: firstIssue(parsedTimeZone.error) };
+    }
 
     const parsed = applicationCreateSchema.safeParse(input);
     if (!parsed.success) {
         return { ok: false, error: firstIssue(parsed.error) };
     }
 
-    await insertApplication(session.user.id, listId, parsed.data);
+    await insertApplication(
+        session.user.id,
+        listId,
+        parsed.data,
+        parsedTimeZone.data,
+    );
     revalidatePath(`/dashboard/${listId}`);
     revalidatePath("/dashboard");
     return { ok: true };
@@ -146,9 +158,15 @@ export const addApplication = async (
 export const updateApplicationsBulk = async (
     listId: string,
     rows: { id: string; input: ApplicationDraft; payTyped: boolean }[],
+    timeZone: string,
 ): Promise<ActionResult> => {
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session) return { ok: false, error: NOT_SIGNED_IN };
+
+    const parsedTimeZone = timeZoneSchema.safeParse(timeZone);
+    if (!parsedTimeZone.success) {
+        return { ok: false, error: firstIssue(parsedTimeZone.error) };
+    }
 
     const parsedRows = [];
     for (const row of rows) {
@@ -167,7 +185,11 @@ export const updateApplicationsBulk = async (
         });
     }
 
-    await updateApplicationsDb(session.user.id, parsedRows);
+    await updateApplicationsDb(
+        session.user.id,
+        parsedRows,
+        parsedTimeZone.data,
+    );
     revalidatePath(`/dashboard/${listId}`);
     return { ok: true };
 };
@@ -181,9 +203,15 @@ export const saveApplicationDetail = async (
     applicationId: string,
     input: ApplicationDetailDraft,
     steps: ApplicationStepEdits,
+    timeZone: string,
 ): Promise<ActionResult> => {
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session) return { ok: false, error: NOT_SIGNED_IN };
+
+    const parsedTimeZone = timeZoneSchema.safeParse(timeZone);
+    if (!parsedTimeZone.success) {
+        return { ok: false, error: firstIssue(parsedTimeZone.error) };
+    }
 
     const parsed = applicationDetailSchema.safeParse(input);
     if (!parsed.success) {
@@ -200,6 +228,7 @@ export const saveApplicationDetail = async (
         session.user.id,
         applicationId,
         parsedSteps.data,
+        parsedTimeZone.data,
     );
     revalidatePath(`/dashboard/${listId}`);
     return { ok: true };
@@ -209,11 +238,20 @@ export const setApplicationsStatus = async (
     listId: string,
     applicationIds: string[],
     status: ApplicationStatus,
+    timeZone: string,
 ): Promise<void> => {
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session || applicationIds.length === 0) return;
 
-    await setApplicationsStatusDb(session.user.id, applicationIds, status);
+    const parsedTimeZone = timeZoneSchema.safeParse(timeZone);
+    if (!parsedTimeZone.success) return;
+
+    await setApplicationsStatusDb(
+        session.user.id,
+        applicationIds,
+        status,
+        parsedTimeZone.data,
+    );
     revalidatePath(`/dashboard/${listId}`);
 };
 

@@ -24,6 +24,7 @@ let rows: Row[] = [];
 let applications: Record<string, unknown>[] = [];
 let statusEvents: EventRow[] = [];
 let applicationEvents: EventRow[] = [];
+const TIME_ZONE = "America/Toronto";
 
 const countListsForUser = mock(async (..._args: unknown[]) => ({ total }));
 const listListsForUser = mock(async (..._args: unknown[]) => rows);
@@ -267,7 +268,7 @@ describe("removeStatusStep", () => {
         // The row was added mid pipeline, so the step it came from was never
         // recorded and there is nothing left saying it ever moved.
         applicationEvents = [event("interviewing", "offer", "only")];
-        await removeStatusStep("user-1", "app-1", "only");
+        await removeStatusStep("user-1", "app-1", "only", TIME_ZONE);
 
         expect(deleteApplicationEvent).toHaveBeenCalledTimes(1);
         expect(statusWritten()).toBe("not_applied");
@@ -278,14 +279,14 @@ describe("removeStatusStep", () => {
             event("applied", "interviewing", "first"),
             event("interviewing", "offer", "second"),
         ];
-        await removeStatusStep("user-1", "app-1", "second");
+        await removeStatusStep("user-1", "app-1", "second", TIME_ZONE);
 
         expect(statusWritten()).toBe("interviewing");
     });
 
     it("ignores an event that is not the application's", async () => {
         applicationEvents = [event("applied", "interviewing", "first")];
-        await removeStatusStep("user-1", "app-1", "someone-elses");
+        await removeStatusStep("user-1", "app-1", "someone-elses", TIME_ZONE);
 
         expect(deleteApplicationEvent).not.toHaveBeenCalled();
         expect(setApplicationStatus).not.toHaveBeenCalled();
@@ -302,10 +303,15 @@ describe("applyStatusStepEdits", () => {
         // Both in one save, so the removal's fallback must not be what the
         // application is left sitting at.
         applicationEvents = [event("applied", "interviewing", "first")];
-        await applyStatusStepEdits("user-1", "app-1", {
-            removed: ["first"],
-            added: ["offer_in_progress"],
-        });
+        await applyStatusStepEdits(
+            "user-1",
+            "app-1",
+            {
+                removed: ["first"],
+                added: ["offer_in_progress"],
+            },
+            TIME_ZONE,
+        );
 
         expect(deleteApplicationEvent).toHaveBeenCalledTimes(1);
         expect(insertApplicationEvent).toHaveBeenCalledTimes(1);
@@ -313,10 +319,15 @@ describe("applyStatusStepEdits", () => {
     });
 
     it("records queued steps in the order they were added", async () => {
-        await applyStatusStepEdits("user-1", "app-1", {
-            removed: [],
-            added: ["interviewing", "offer_in_progress"],
-        });
+        await applyStatusStepEdits(
+            "user-1",
+            "app-1",
+            {
+                removed: [],
+                added: ["interviewing", "offer_in_progress"],
+            },
+            TIME_ZONE,
+        );
 
         expect(
             insertApplicationEvent.mock.calls.map(
@@ -324,13 +335,22 @@ describe("applyStatusStepEdits", () => {
             ),
         ).toEqual(["interviewing", "offer_in_progress"]);
         expect(lastStatusWritten()).toBe("offer_in_progress");
+        expect(
+            (
+                setApplicationStatus.mock.calls.at(-1)?.[1] as {
+                    timeZone: string;
+                }
+            ).timeZone,
+        ).toBe(TIME_ZONE);
     });
 
     it("writes nothing when there is nothing staged", async () => {
-        await applyStatusStepEdits("user-1", "app-1", {
-            removed: [],
-            added: [],
-        });
+        await applyStatusStepEdits(
+            "user-1",
+            "app-1",
+            { removed: [], added: [] },
+            TIME_ZONE,
+        );
 
         expect(deleteApplicationEvent).not.toHaveBeenCalled();
         expect(insertApplicationEvent).not.toHaveBeenCalled();

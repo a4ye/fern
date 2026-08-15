@@ -40,7 +40,9 @@ import { ConfirmDialog } from "@/components/dashboard/confirm-dialog";
 import {
     STATUS_META,
     arrangementLabel,
+    browserTimeZone,
     formatDay,
+    todayDateInput,
     type ApplicationRow,
     type ApplicationStatus,
     type Arrangement,
@@ -371,6 +373,7 @@ export const ApplicationsTable = ({
                       type: "status";
                       ids: Set<string>;
                       status: ApplicationStatus;
+                      appliedAt: string;
                   }
                 | {
                       type: "arrangement";
@@ -385,7 +388,14 @@ export const ApplicationsTable = ({
             if (action.type === "status") {
                 return state.map((app) =>
                     action.ids.has(app.id)
-                        ? { ...app, status: action.status }
+                        ? {
+                              ...app,
+                              status: action.status,
+                              appliedAt:
+                                  action.status === "applied"
+                                      ? (app.appliedAt ?? action.appliedAt)
+                                      : app.appliedAt,
+                          }
                         : app,
                 );
             }
@@ -471,7 +481,11 @@ export const ApplicationsTable = ({
             const draft = current.get(id);
             if (!draft) return current;
             const next = new Map(current);
-            next.set(id, { ...draft, [key]: value });
+            const changed = { ...draft, [key]: value };
+            if (key === "status" && value === "applied" && !changed.appliedAt) {
+                changed.appliedAt = todayDateInput();
+            }
+            next.set(id, changed);
             return next;
         });
 
@@ -501,6 +515,7 @@ export const ApplicationsTable = ({
                 // put in the pay columns, so an untouched box leaves them be.
                 payTyped: row.draft.pay !== draftOf(row.app).pay,
             })),
+            browserTimeZone(),
         );
         setBulkSaving(false);
         if (result.ok) {
@@ -512,10 +527,12 @@ export const ApplicationsTable = ({
 
     const applyStatus = (status: ApplicationStatus) => {
         const ids = new Set(selected);
+        const appliedAt = todayDateInput();
+        const timeZone = browserTimeZone();
         clearSelection();
         startMutation(async () => {
-            applyOptimistic({ type: "status", ids, status });
-            await setApplicationsStatus(listId, [...ids], status);
+            applyOptimistic({ type: "status", ids, status, appliedAt });
+            await setApplicationsStatus(listId, [...ids], status, timeZone);
         });
     };
 

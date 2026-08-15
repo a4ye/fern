@@ -103,6 +103,7 @@ export const recordEmailSync = async (userId: string): Promise<void> => {
 export const applySuggestion = async (
     userId: string,
     suggestionId: string,
+    timeZone: string,
 ): Promise<boolean> => {
     const pool = getPool();
     const suggestion = await gen.getSuggestionForUser(pool, {
@@ -123,6 +124,7 @@ export const applySuggestion = async (
             applicationId: suggestion.applicationId,
             userId,
             status: toStatus,
+            timeZone,
         });
         await gen.insertApplicationEvent(pool, {
             applicationId: suggestion.applicationId,
