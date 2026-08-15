@@ -2,7 +2,7 @@
 
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
-import { auth, GOOGLE_PROVIDER_ID } from "@/lib/auth";
+import { auth, emailSyncEnabled, GOOGLE_PROVIDER_ID } from "@/lib/auth";
 import {
     applySuggestion,
     dismissSuggestion,
@@ -42,12 +42,12 @@ export const syncInbox = async (): Promise<SyncResult> => {
         };
     }
 
-    if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+    if (!emailSyncEnabled) {
         return {
             ok: false,
             reason: "ai_unconfigured",
             message:
-                "AI is not configured. Set GOOGLE_GENERATIVE_AI_API_KEY to enable email classification.",
+                "Inbox sync is not configured for privacy-safe processing.",
         };
     }
 

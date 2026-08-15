@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { authClient } from "@/lib/auth-client";
@@ -230,18 +231,9 @@ export const EmailSyncMenu = ({ panel }: { panel: EmailSyncPanel }) => {
                                 {isSyncing ? "Syncing" : "Sync now"}
                             </button>
                         ) : (
-                            <button
-                                type="button"
-                                onClick={connect}
-                                disabled={isConnecting}
-                                className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 bg-accent px-3 text-sm font-medium text-background transition-colors hover:bg-accent-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-accent"
-                            >
-                                <span
-                                    aria-hidden="true"
-                                    className="icon-[simple-icons--google] size-3.5"
-                                />
-                                Connect Gmail
-                            </button>
+                            <span className="shrink-0 text-xs text-muted">
+                                Not connected
+                            </span>
                         )}
                     </div>
 
@@ -255,8 +247,12 @@ export const EmailSyncMenu = ({ panel }: { panel: EmailSyncPanel }) => {
                             , and{" "}
                             <code className="text-ink">
                                 GOOGLE_GENERATIVE_AI_API_KEY
+                            </code>
+                            , and confirm paid processing with{" "}
+                            <code className="text-ink">
+                                GOOGLE_GENERATIVE_AI_PAID_SERVICE=true
                             </code>{" "}
-                            to your <code className="text-ink">.env</code>, then
+                            in your <code className="text-ink">.env</code>, then
                             restart the dev server to connect your inbox.
                         </p>
                     ) : panel.connected ? (
@@ -277,11 +273,50 @@ export const EmailSyncMenu = ({ panel }: { panel: EmailSyncPanel }) => {
                             </p>
                         )
                     ) : (
-                        <p className="px-4 py-6 text-sm text-sub">
-                            Link your Gmail account to automatically detect
-                            interview invites, offers, and rejections, then
-                            review each change before it updates a status.
-                        </p>
+                        <div className="px-4 py-5">
+                            <h3 className="text-sm font-semibold text-balance text-ink">
+                                Before you connect Gmail
+                            </h3>
+                            <div className="mt-3 space-y-3 text-pretty text-xs leading-5 text-sub">
+                                <p>
+                                    Job Tracker uses Gmail read-only access to
+                                    review recent inbox messages for possible
+                                    job application updates. It cannot send,
+                                    change, or delete email.
+                                </p>
+                                <p>
+                                    Relevant message content and information
+                                    about your tracked applications are
+                                    processed by Google Gemini to create
+                                    suggestions.
+                                </p>
+                                <p>
+                                    Job Tracker stores limited details needed to
+                                    show the suggestion, but not a permanent
+                                    copy of the complete email. Every suggestion
+                                    requires your review. See the{" "}
+                                    <Link
+                                        href="/privacy#gmail"
+                                        className="font-medium text-accent-deep underline decoration-hairline underline-offset-3 transition-colors hover:decoration-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                                    >
+                                        Privacy Policy
+                                    </Link>
+                                    .
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={connect}
+                                disabled={isConnecting}
+                                className="mt-5 inline-flex h-10 w-full cursor-pointer items-center justify-center gap-2 bg-accent px-4 text-sm font-medium text-background transition-[background-color,transform] hover:bg-accent-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-accent"
+                            >
+                                <span
+                                    aria-hidden="true"
+                                    className="icon-[simple-icons--google] size-4"
+                                />
+                                {isConnecting ? "Connecting" : "Connect Gmail"}
+                            </button>
+                        </div>
                     )}
                 </div>
             )}

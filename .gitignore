@@ -35,3 +35,4 @@ next-env.d.ts
 docs/superpowers
 .playwright-mcp
 TODO.md
+PUBLIC_RELEASE_CHECKLIST.md

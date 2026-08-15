@@ -49,6 +49,26 @@ const LoginPage = async ({
 
                         <div className="mt-8">
                             <SignInButton />
+                            <p
+                                id="sign-in-terms"
+                                className="mt-3 text-pretty text-xs leading-5 text-muted"
+                            >
+                                By continuing, you agree to the{" "}
+                                <Link
+                                    href="/terms"
+                                    className="font-medium text-sub underline decoration-hairline underline-offset-3 transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                                >
+                                    Terms of Service
+                                </Link>{" "}
+                                and acknowledge the{" "}
+                                <Link
+                                    href="/privacy"
+                                    className="font-medium text-sub underline decoration-hairline underline-offset-3 transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                                >
+                                    Privacy Policy
+                                </Link>
+                                .
+                            </p>
                             {error && (
                                 <p className="mt-3 text-xs font-medium text-rose">
                                     Sign in with GitHub did not complete. Try

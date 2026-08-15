@@ -15,11 +15,19 @@ const requiredEnv = (name: string): string => {
 
 const googleClientId = process.env.GOOGLE_CLIENT_ID;
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+const googleGenerativeAiApiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+const googleGenerativeAiPaidService =
+    process.env.GOOGLE_GENERATIVE_AI_PAID_SERVICE === "true";
 
 // Email sync links a Google account for Gmail access. It is optional: without
-// Google credentials the rest of the app runs unchanged and the feature stays
-// hidden.
-export const emailSyncEnabled = Boolean(googleClientId && googleClientSecret);
+// every privacy-safe processing setting, the rest of the app runs unchanged
+// and the feature remains unavailable.
+export const emailSyncEnabled = Boolean(
+    googleClientId &&
+    googleClientSecret &&
+    googleGenerativeAiApiKey &&
+    googleGenerativeAiPaidService,
+);
 
 export const GOOGLE_PROVIDER_ID = "google";
 export const GMAIL_READONLY_SCOPE =
@@ -28,6 +36,11 @@ export const GMAIL_READONLY_SCOPE =
 export const auth = betterAuth({
     database: getPool(),
     account: {
+        // OAuth grants include access to the user's GitHub identity and,
+        // optionally, Gmail. Encrypt every provider token before it reaches the
+        // database. Existing plaintext tokens remain readable and are replaced
+        // with encrypted values when their provider refreshes them.
+        encryptOAuthTokens: true,
         accountLinking: {
             enabled: true,
             trustedProviders: [GOOGLE_PROVIDER_ID],
