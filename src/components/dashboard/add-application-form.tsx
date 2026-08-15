@@ -22,6 +22,7 @@ import {
 } from "@/components/dashboard/application-form";
 import { ExtensionInstallDialog } from "@/components/dashboard/extension-install-dialog";
 import { mergeImportedApplication } from "@/components/dashboard/merge-imported-application";
+import { QrLinkScanner } from "@/components/dashboard/qr-link-scanner";
 import {
     CellSelect,
     STATUS_OPTIONS,
@@ -252,6 +253,11 @@ export const AddApplicationForm = ({
         }
     };
 
+    const onQrScan = (url: string) => {
+        onLinkChange(url);
+        scrape(url);
+    };
+
     const save = async () => {
         if (saving || !draft.company.trim()) return;
         setSaving(true);
@@ -301,41 +307,47 @@ export const AddApplicationForm = ({
                             htmlFor={LINK_INPUT_ID}
                             className="block text-sm font-medium text-ink"
                         >
-                            Paste a job posting link
+                            Paste or scan a job posting link
                         </label>
-                        <div className="relative mt-3">
-                            <span
-                                aria-hidden="true"
-                                className="icon-[lucide--link] pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted"
+                        <div className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+                            <div className="relative min-w-0">
+                                <span
+                                    aria-hidden="true"
+                                    className="icon-[lucide--link] pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted"
+                                />
+                                <input
+                                    id={LINK_INPUT_ID}
+                                    value={draft.url}
+                                    onChange={(event) =>
+                                        onLinkChange(event.target.value)
+                                    }
+                                    onPaste={onPaste}
+                                    onKeyDown={onLinkKeyDown}
+                                    placeholder="https://"
+                                    autoFocus
+                                    maxLength={URL_MAX}
+                                    className={`h-10 w-full border border-hairline bg-background pl-9 text-sm text-ink transition-colors placeholder:text-muted focus:border-accent focus:outline-none ${fetching ? "pr-20" : "pr-3"}`}
+                                />
+                                {fetching && (
+                                    <div className="absolute top-1/2 right-3 flex -translate-y-1/2 items-center gap-2">
+                                        <span
+                                            aria-hidden="true"
+                                            className="icon-[lucide--loader-circle] size-3.5 animate-spin text-muted"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={skipFetch}
+                                            className={quietButtonClass}
+                                        >
+                                            Skip
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                            <QrLinkScanner
+                                disabled={fetching}
+                                onScan={onQrScan}
                             />
-                            <input
-                                id={LINK_INPUT_ID}
-                                value={draft.url}
-                                onChange={(event) =>
-                                    onLinkChange(event.target.value)
-                                }
-                                onPaste={onPaste}
-                                onKeyDown={onLinkKeyDown}
-                                placeholder="https://"
-                                autoFocus
-                                maxLength={URL_MAX}
-                                className={`w-full border border-hairline bg-background py-2.5 pl-9 text-sm text-ink transition-colors placeholder:text-muted focus:border-accent focus:outline-none ${fetching ? "pr-20" : "pr-3"}`}
-                            />
-                            {fetching && (
-                                <div className="absolute top-1/2 right-3 flex -translate-y-1/2 items-center gap-2">
-                                    <span
-                                        aria-hidden="true"
-                                        className="icon-[lucide--loader-circle] size-3.5 animate-spin text-muted"
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={skipFetch}
-                                        className={quietButtonClass}
-                                    >
-                                        Skip
-                                    </button>
-                                </div>
-                            )}
                         </div>
                         {employerUrl ? (
                             <div className="mt-3 bg-background px-3 py-3 shadow-sm">

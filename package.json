@@ -25,6 +25,7 @@
         "@nivo/core": "^0.99.0",
         "@nivo/sankey": "^0.99.0",
         "@nivo/tooltip": "^0.99.0",
+        "@yudiel/react-qr-scanner": "^2.6.0",
         "ai": "^7.0.36",
         "better-auth": "^1.6.23",
         "html-to-image": "^1.11.13",
