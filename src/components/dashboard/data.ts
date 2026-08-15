@@ -390,6 +390,37 @@ export const parseListSort = (value: string | undefined): ListSort =>
         ? (value as ListSort)
         : "recent";
 
+// "recent" sort and page 1 are the defaults, so they stay out of the URL.
+export const listsQueryString = ({
+    search,
+    sort,
+    page,
+}: {
+    search: string;
+    sort: ListSort;
+    page: number;
+}): string => {
+    const params = new URLSearchParams();
+    const trimmed = search.trim();
+    if (trimmed) params.set("q", trimmed);
+    if (sort !== "recent") params.set("sort", sort);
+    if (page > 1) params.set("page", String(page));
+    return params.toString();
+};
+
+// A list page carries the index's filters in `from` so its back link can
+// restore them. Only the keys the index understands are re-emitted, so the
+// value can't point the link anywhere else.
+export const listsHrefFrom = (from: string | undefined): string => {
+    const source = new URLSearchParams(from ?? "");
+    const query = listsQueryString({
+        search: source.get("q") ?? "",
+        sort: parseListSort(source.get("sort") ?? undefined),
+        page: Math.max(1, Number(source.get("page")) || 1),
+    });
+    return query ? `/dashboard?${query}` : "/dashboard";
+};
+
 // One step in an application's status history. The opening step is where the
 // application started out rather than a move anyone recorded, so it has no
 // event behind it and cannot be taken back on its own.

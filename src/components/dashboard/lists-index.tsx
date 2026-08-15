@@ -17,6 +17,7 @@ import {
 } from "@/app/dashboard/actions";
 import {
     formatEdited,
+    listsQueryString,
     LIST_SORTS,
     type EmailSyncPanel,
     type ListSort,
@@ -80,18 +81,20 @@ const StatusPlate = ({ status }: { status: ListStatus }) => {
 
 const ListRow = ({
     list,
+    href,
     onTogglePin,
     onEdit,
     onDelete,
 }: {
     list: ListSummary;
+    href: string;
     onTogglePin: (list: ListSummary) => void;
     onEdit: (list: ListSummary) => void;
     onDelete: (list: ListSummary) => void;
 }) => (
     <li className="group flex items-stretch border-b border-faint last:border-b-0">
         <Link
-            href={`/dashboard/${list.id}`}
+            href={href}
             className="flex min-w-0 flex-1 items-center gap-4 px-5 py-4 transition-colors hover:bg-surface"
         >
             <div className="min-w-0 flex-1">
@@ -580,28 +583,29 @@ export const ListsIndex = ({
     }
 
     // Builds a dashboard URL, preserving the committed filters unless overridden.
-    // "recent" sort and page 1 are the defaults, so they stay out of the URL.
     const hrefFor = (next: { q?: string; sort?: ListSort; page?: number }) => {
-        const nextQuery = (next.q ?? search).trim();
-        const nextSort = next.sort ?? sort;
-        const nextPage = next.page ?? page;
-        const params = new URLSearchParams();
-        if (nextQuery) params.set("q", nextQuery);
-        if (nextSort !== "recent") params.set("sort", nextSort);
-        if (nextPage > 1) params.set("page", String(nextPage));
-        const qs = params.toString();
+        const qs = listsQueryString({
+            search: next.q ?? search,
+            sort: next.sort ?? sort,
+            page: next.page ?? page,
+        });
         return qs ? `${pathname}?${qs}` : pathname;
     };
+
+    // Opening a list hands it the filters that were in effect, so its back link
+    // can return to this exact view rather than the unfiltered first page.
+    const currentFilters = listsQueryString({ search, sort, page });
+    const detailHref = (id: string) =>
+        currentFilters
+            ? `/dashboard/${id}?from=${encodeURIComponent(currentFilters)}`
+            : `/dashboard/${id}`;
 
     // Push the debounced search term into the URL, resetting to the first page.
     useEffect(() => {
         const trimmed = query.trim();
         if (trimmed === search) return;
         const handle = setTimeout(() => {
-            const params = new URLSearchParams();
-            if (trimmed) params.set("q", trimmed);
-            if (sort !== "recent") params.set("sort", sort);
-            const qs = params.toString();
+            const qs = listsQueryString({ search: trimmed, sort, page: 1 });
             startNavigate(() => {
                 router.replace(qs ? `${pathname}?${qs}` : pathname);
             });
@@ -783,6 +787,7 @@ export const ListsIndex = ({
                                 <ListRow
                                     key={list.id}
                                     list={list}
+                                    href={detailHref(list.id)}
                                     onTogglePin={onTogglePin}
                                     onEdit={() => setEditingId(list.id)}
                                     onDelete={() => setDeletingId(list.id)}
