@@ -100,6 +100,8 @@ export const SeasonPageSkeleton = () => (
                     aria-hidden="true"
                     className="flex flex-wrap items-center gap-2 max-sm:w-full"
                 >
+                    <span className="skeleton h-8 shrink-0 max-sm:w-full sm:w-52" />
+                    <span className="skeleton h-8 w-20 shrink-0 max-sm:grow" />
                     <span className="skeleton h-8 w-24 shrink-0 max-sm:grow" />
                     <span className="skeleton h-8 w-36 shrink-0 max-sm:grow" />
                 </div>

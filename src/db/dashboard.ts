@@ -9,6 +9,7 @@ import {
     formatPay,
     formatRelative,
     toDateInput,
+    type ApplicationExtras,
     type ApplicationRow,
     type ApplicationStatus,
     type Arrangement,
@@ -593,9 +594,8 @@ export const getListDetail = async (
             arrangement: row.arrangement as Arrangement | null,
             appliedAt: row.appliedAt ? toDateInput(row.appliedAt) : null,
             url: row.url,
-            notes: row.notes,
-            history: historyOf(row.id, status),
             updated: formatRelative(row.updatedAt),
+            updatedAt: row.updatedAt.toISOString(),
         };
     });
 
@@ -613,10 +613,16 @@ export const getListDetail = async (
         counts.has(status),
     ).map((status) => ({ status, count: counts.get(status) as number }));
 
-    const flow: FlowEntry[] = applications.map((app) => ({
-        status: app.status,
-        history: app.history.map((step) => step.status),
-    }));
+    // Read from the trails rather than from the rows, which no longer carry
+    // their history: the chart wants the path each application took, and only
+    // the statuses along it, not the steps that recorded them.
+    const flow: FlowEntry[] = applicationRows.map((row) => {
+        const status = row.status as ApplicationStatus;
+        return {
+            status,
+            history: historyOf(row.id, status).map((step) => step.status),
+        };
+    });
 
     const stats: Stat[] = [
         { label: "Total", value: String(applications.length) },
@@ -644,4 +650,42 @@ export const getListDetail = async (
         flow,
         activity,
     };
+};
+
+// The parts of an application the table leaves behind, fetched when one row is
+// opened. Returns null when the application is not this user's, which is the
+// same answer as one that does not exist.
+export const getApplicationExtras = async (
+    userId: string,
+    applicationId: string,
+): Promise<ApplicationExtras | null> => {
+    const pool = getPool();
+    const [detail, eventRows] = await Promise.all([
+        gen.applicationDetailForUser(pool, { applicationId, userId }),
+        gen.statusEventsForApplication(pool, { applicationId, userId }),
+    ]);
+    if (!detail) return null;
+
+    // The same replay the list does, over one application's events: the first
+    // event also contributes where it started from, which is the only record of
+    // the status it was created with.
+    const history: StatusStep[] = [];
+    for (const [index, row] of eventRows.entries()) {
+        if (index === 0 && row.fromStatus) {
+            history.push({
+                id: null,
+                status: row.fromStatus as ApplicationStatus,
+                at: null,
+            });
+        }
+        if (row.toStatus) {
+            history.push({
+                id: row.id,
+                status: row.toStatus as ApplicationStatus,
+                at: row.occurredAt.toISOString(),
+            });
+        }
+    }
+
+    return { notes: detail.notes, history };
 };

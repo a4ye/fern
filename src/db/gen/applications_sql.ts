@@ -88,7 +88,6 @@ select
     url,
     location,
     arrangement,
-    notes,
     pay_min,
     pay_max,
     pay_currency,
@@ -113,7 +112,6 @@ export interface ListApplicationsForListRow {
     url: string | null;
     location: string | null;
     arrangement: string | null;
-    notes: string | null;
     payMin: string | null;
     payMax: string | null;
     payCurrency: string;
@@ -139,17 +137,46 @@ export async function listApplicationsForList(client: Client, args: ListApplicat
             url: row[4],
             location: row[5],
             arrangement: row[6],
-            notes: row[7],
-            payMin: row[8],
-            payMax: row[9],
-            payCurrency: row[10],
-            payPeriod: row[11],
-            bonusAmount: row[12],
-            payNote: row[13],
-            appliedAt: row[14],
-            updatedAt: row[15]
+            payMin: row[7],
+            payMax: row[8],
+            payCurrency: row[9],
+            payPeriod: row[10],
+            bonusAmount: row[11],
+            payNote: row[12],
+            appliedAt: row[13],
+            updatedAt: row[14]
         };
     });
+}
+
+export const applicationDetailForUserQuery = `-- name: ApplicationDetailForUser :one
+select a.notes
+from applications a
+join lists l on l.id = a.list_id
+where a.id = $1 and l.user_id = $2`;
+
+export interface ApplicationDetailForUserArgs {
+    applicationId: string;
+    userId: string;
+}
+
+export interface ApplicationDetailForUserRow {
+    notes: string | null;
+}
+
+export async function applicationDetailForUser(client: Client, args: ApplicationDetailForUserArgs): Promise<ApplicationDetailForUserRow | null> {
+    const result = await client.query({
+        text: applicationDetailForUserQuery,
+        values: [args.applicationId, args.userId],
+        rowMode: "array"
+    });
+    if (result.rows.length !== 1) {
+        return null;
+    }
+    const row = result.rows[0];
+    return {
+        notes: row[0]
+    };
 }
 
 export const pipelineForListQuery = `-- name: PipelineForList :many

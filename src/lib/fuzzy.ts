@@ -11,6 +11,10 @@ const SUBSTRING = 3000;
 const SUBSEQUENCE = 2000;
 const TYPO = 1000;
 
+// Held below the gap to the tier above, so the best run of scattered letters
+// still scores under the weakest literal match.
+const SUBSEQUENCE_CAP = 900;
+
 // Shorter targets win ties: "Offer" should sit above "Offer in progress" for
 // the query "offer". Capped below the tier gap so it stays a tiebreak.
 const lengthTiebreak = (target: string) => Math.min(target.length, 99);
@@ -129,10 +133,18 @@ export const matchScore = (rawQuery: string, rawTarget: string): number => {
     if (target.includes(query)) return SUBSTRING - tiebreak;
 
     const bonus = subsequenceBonus(query, target);
-    if (bonus > 0) return SUBSEQUENCE + Math.min(bonus, 900) - tiebreak;
+    if (bonus > 0)
+        return SUBSEQUENCE + Math.min(bonus, SUBSEQUENCE_CAP) - tiebreak;
 
     return typoScore(query, target);
 };
+
+// True when the query is written into the target rather than merely scattered
+// through it: the same string, a prefix of it, the start of a word in it, or a
+// run inside one. The looser tiers are what rank a short menu well, but they
+// are too forgiving to decide which rows of a table are hidden.
+export const containsMatch = (query: string, target: string): boolean =>
+    matchScore(query, target) > SUBSEQUENCE + SUBSEQUENCE_CAP;
 
 // Scores a query against an option's visible label and its hidden search terms.
 export const searchScore = (

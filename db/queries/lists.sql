@@ -55,8 +55,7 @@ update lists
 set
     name = @name,
     description = sqlc.narg('description'),
-    status = @status::list_status,
-    updated_at = now()
+    status = @status::list_status
 where id = @id and user_id = @user_id
 returning id, name, description, status, updated_at;
 

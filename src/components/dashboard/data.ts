@@ -418,9 +418,19 @@ export type ApplicationRow = {
     arrangement: Arrangement | null;
     appliedAt: string | null;
     url: string | null;
+    // `updated` is the relative label the cell prints, which orders rows by the
+    // width of a word rather than by age, so the timestamp behind it travels too.
+    updated: string;
+    updatedAt: string;
+};
+
+// The parts of an application the table leaves out, which only the detail panel
+// shows. They are read for the one row being opened rather than carried by every
+// row: the notes and the status trail together outweigh everything the table
+// draws, so a long list would spend most of its payload on them.
+export type ApplicationExtras = {
     notes: string | null;
     history: StatusStep[];
-    updated: string;
 };
 
 export const ARRANGEMENTS: Arrangement[] = ["remote", "hybrid", "onsite"];

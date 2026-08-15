@@ -34,6 +34,9 @@ from lists l
 where l.id = @list_id and l.user_id = @user_id
 returning id;
 
+-- Every column the table draws, and nothing past it. The notes are left out
+-- deliberately: they are free text that only the detail panel reads, and a
+-- list's worth of them outweighs every other column put together.
 -- name: ListApplicationsForList :many
 select
     id,
@@ -43,7 +46,6 @@ select
     url,
     location,
     arrangement,
-    notes,
     pay_min,
     pay_max,
     pay_currency,
@@ -55,6 +57,14 @@ select
 from applications
 where list_id = $1
 order by created_at desc, position desc;
+
+-- What the detail panel needs and the table does not, read when a single row is
+-- opened rather than shipped for all of them.
+-- name: ApplicationDetailForUser :one
+select a.notes
+from applications a
+join lists l on l.id = a.list_id
+where a.id = @application_id and l.user_id = @user_id;
 
 -- name: PipelineForList :many
 select status, count(*)::int as count

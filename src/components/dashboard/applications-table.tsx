@@ -2,12 +2,14 @@
 
 import {
     useEffect,
+    useMemo,
     useOptimistic,
     useRef,
     useState,
     useTransition,
 } from "react";
 import {
+    loadApplicationExtras,
     removeApplication,
     removeApplications,
     setApplicationsArrangement,
@@ -22,7 +24,18 @@ import {
     ApplicationsHeaderRow,
     ROW_HEIGHT,
     ROW_MIN_WIDTH,
+    ROW_REM,
 } from "@/components/dashboard/applications-columns";
+import { useRowWindow } from "@/components/dashboard/use-row-window";
+import { ApplicationsFilterMenu } from "@/components/dashboard/applications-filter";
+import {
+    NO_FILTERS,
+    applicationsView,
+    isFiltered,
+    nextSort,
+    type Filters,
+    type Sort,
+} from "@/components/dashboard/applications-view";
 import {
     CellSelect,
     DateField,
@@ -44,6 +57,7 @@ import {
     browserTimeZone,
     formatDay,
     todayDateInput,
+    type ApplicationExtras,
     type ApplicationRow,
     type ApplicationStatus,
     type Arrangement,
@@ -171,14 +185,18 @@ const RowFields = ({
 const ReadRow = ({
     app,
     selected,
+    opening,
     onSelect,
     onEdit,
+    onPrefetch,
     onDelete,
 }: {
     app: ApplicationRow;
     selected: boolean;
+    opening: boolean;
     onSelect: (selected: boolean) => void;
     onEdit: () => void;
+    onPrefetch: () => void;
     onDelete: () => void;
 }) => {
     const meta = STATUS_META[app.status];
@@ -234,16 +252,28 @@ const ReadRow = ({
                         />
                     </a>
                 )}
+                {/* This glyph only appears once the pointer is on the row, so
+                    reaching it is already a deliberate move, and the trip from
+                    here to the press is usually long enough to cover the read
+                    behind it. When it is not, the glyph spins and holds the
+                    press. It keeps its box either way. */}
                 <button
                     type="button"
                     onClick={onEdit}
+                    onMouseEnter={onPrefetch}
+                    onFocus={onPrefetch}
+                    disabled={opening}
                     title="Edit application"
                     aria-label="Edit application"
-                    className="cursor-pointer p-1 opacity-0 transition-[color,opacity] group-hover:opacity-100 hover:text-ink focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                    className={`p-1 transition-[color,opacity] focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
+                        opening
+                            ? "cursor-wait opacity-100"
+                            : "cursor-pointer opacity-0 group-hover:opacity-100 hover:text-ink"
+                    }`}
                 >
                     <span
                         aria-hidden="true"
-                        className="icon-[lucide--pencil] block size-3.5"
+                        className={`block size-3.5 ${opening ? "icon-[lucide--loader-circle] animate-spin" : "icon-[lucide--pencil]"}`}
                     />
                 </button>
                 <button
@@ -317,6 +347,36 @@ const DeleteRow = ({
     </li>
 );
 
+// Narrows the table by any word in a row, which is the one control here that
+// answers a question about a whole list rather than about one column. Escape
+// empties it, so the way back to every row never involves the keyboard's
+// backspace.
+const SearchField = ({
+    value,
+    onChange,
+}: {
+    value: string;
+    onChange: (value: string) => void;
+}) => (
+    <div className="relative max-sm:w-full sm:w-52">
+        <span
+            aria-hidden="true"
+            className="icon-[lucide--search] pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted"
+        />
+        <input
+            type="search"
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            onKeyDown={(event) => {
+                if (event.key === "Escape") onChange("");
+            }}
+            placeholder="Search rows"
+            aria-label="Search applications"
+            className="h-8 w-full border border-hairline bg-background pr-2.5 pl-8 text-sm text-ink transition-colors placeholder:text-muted hover:border-tile-border focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        />
+    </div>
+);
+
 // The rule only reads as a separator while the bar is one line; once it wraps,
 // the groups are already apart and it lands mid-row as a stray mark.
 const Divider = () => (
@@ -355,7 +415,14 @@ export const ApplicationsTable = ({
     applications: ApplicationRow[];
 }) => {
     const [, startMutation] = useTransition();
-    const [editingId, setEditingId] = useState<string | null>(null);
+    // The panel opens on more than the table carries, so the row it is opened
+    // over travels with the notes and status trail fetched for it. Both arrive
+    // together, which is what lets the panel draw complete rather than fill in.
+    const [editing, setEditing] = useState<{
+        id: string;
+        extras: ApplicationExtras;
+    } | null>(null);
+    const [openingId, setOpeningId] = useState<string | null>(null);
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const [selected, setSelected] = useState<Set<string>>(new Set());
     const [drafts, setDrafts] = useState<Map<string, Draft> | null>(null);
@@ -372,7 +439,13 @@ export const ApplicationsTable = ({
     } | null>(null);
     const [confirmingDelete, setConfirmingDelete] = useState(false);
     const [adding, setAdding] = useState(false);
+    // Which rows are shown and in what order. Held here rather than in the URL:
+    // it is how one person is reading the table right now, not where they are.
+    const [filters, setFilters] = useState<Filters>(NO_FILTERS);
+    const [sort, setSort] = useState<Sort | null>(null);
     const selectAllRef = useRef<HTMLInputElement>(null);
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const listRef = useRef<HTMLUListElement>(null);
 
     const [optimisticApplications, applyOptimistic] = useOptimistic(
         applications,
@@ -417,21 +490,102 @@ export const ApplicationsTable = ({
         },
     );
 
+    const view = useMemo(
+        () => applicationsView(optimisticApplications, filters, sort),
+        [optimisticApplications, filters, sort],
+    );
+    const filtered = isFiltered(filters);
+    const rowWindow = useRowWindow(
+        scrollRef,
+        listRef,
+        view.rows.length,
+        ROW_REM,
+    );
+
+    // A tick belongs to a row on screen, and a row can leave the table while it
+    // is ticked: the detail panel can write the very field the table is filtered
+    // on. So the count, the appliers and the delete all read from the rows that
+    // are showing rather than from everything the set still remembers.
+    const selection = view.rows
+        .filter((app) => selected.has(app.id))
+        .map((app) => app.id);
+
     const bulkMode = drafts !== null;
     const allSelected =
-        optimisticApplications.length > 0 &&
-        selected.size === optimisticApplications.length;
+        view.rows.length > 0 && selection.length === view.rows.length;
 
     useEffect(() => {
         if (selectAllRef.current) {
             selectAllRef.current.indeterminate =
-                selected.size > 0 && !allSelected;
+                selection.length > 0 && !allSelected;
         }
-    }, [selected, allSelected]);
+    }, [selection.length, allSelected]);
 
-    // Looked up rather than held, so the panel redraws from the list when a
-    // saved change or a logged step comes back from the server.
-    const editing = optimisticApplications.find((app) => app.id === editingId);
+    // The row itself is looked up rather than held, so the panel redraws from
+    // the list when a saved change comes back from the server.
+    const editingRow = editing
+        ? optimisticApplications.find((app) => app.id === editing.id)
+        : undefined;
+
+    // Reads already made, held only for as long as the rows they were made for.
+    // A save, a bulk status change and an accepted inbox suggestion all come
+    // back as a fresh array from the server, and any of them can have moved a
+    // status trail underneath an entry, so the whole cache goes with it.
+    const [cache, setCache] = useState(() => ({
+        rows: applications,
+        extras: new Map<string, ApplicationExtras>(),
+    }));
+    if (cache.rows !== applications) {
+        setCache({ rows: applications, extras: new Map() });
+    }
+    const readExtras = cache.extras;
+    const reading = useRef(new Set<string>());
+
+    // Speculative, so it says nothing when it fails: the press that follows asks
+    // again through openPanel, which does report it.
+    const prefetchExtras = (id: string) => {
+        if (readExtras.has(id) || reading.current.has(id)) return;
+        reading.current.add(id);
+        loadApplicationExtras(id)
+            .then((extras) => {
+                if (extras) readExtras.set(id, extras);
+            })
+            .catch(() => {})
+            .finally(() => reading.current.delete(id));
+    };
+
+    // Fetched before the panel opens rather than inside it, so the panel has
+    // everything the moment it appears and never has to reserve space for
+    // fields it is still waiting on.
+    //
+    // A read that fails has to keep the panel shut. Empty notes are a value the
+    // panel would happily save back over the real ones, so there is no standing
+    // in for them: blank and unread are the same thing to a text box, and only
+    // one of them is true.
+    const openPanel = (id: string) => {
+        const ready = readExtras.get(id);
+        if (ready) {
+            setEditing({ id, extras: ready });
+            return;
+        }
+
+        setOpeningId(id);
+        setBulkError(null);
+        startMutation(async () => {
+            try {
+                const extras = await loadApplicationExtras(id);
+                if (extras) {
+                    readExtras.set(id, extras);
+                    setEditing({ id, extras });
+                } else {
+                    setBulkError("That application is no longer there.");
+                }
+            } catch {
+                setBulkError("Could not open this application. Try again.");
+            }
+            setOpeningId(null);
+        });
+    };
 
     const clearStaged = () => {
         setStagedStatus(null);
@@ -440,9 +594,14 @@ export const ApplicationsTable = ({
 
     // A staged value belongs to the selection it was staged for, so emptying the
     // selection by any route drops it rather than leaving it primed for the next.
+    // Rows that have since left the table are dropped on the way in, so an empty
+    // selection means the same thing here as it does on screen.
     const setSelection = (next: Set<string>) => {
-        setSelected(next);
-        if (next.size === 0) clearStaged();
+        const showing = new Set(
+            view.rows.filter((app) => next.has(app.id)).map((app) => app.id),
+        );
+        setSelected(showing);
+        if (showing.size === 0) clearStaged();
     };
 
     const clearSelection = () => setSelection(new Set());
@@ -459,9 +618,7 @@ export const ApplicationsTable = ({
 
     const toggleAll = (isSelected: boolean) =>
         setSelection(
-            isSelected
-                ? new Set(optimisticApplications.map((app) => app.id))
-                : new Set(),
+            isSelected ? new Set(view.rows.map((app) => app.id)) : new Set(),
         );
 
     const onDelete = (id: string) => {
@@ -472,13 +629,12 @@ export const ApplicationsTable = ({
         });
     };
 
+    // What is on screen is what gets edited, so a filtered table opens an editor
+    // over the rows it is showing. The search and filter controls stand down for
+    // the duration, which is what keeps that set from moving underneath it.
     const startBulkEdit = () => {
         setBulkError(null);
-        setDrafts(
-            new Map(
-                optimisticApplications.map((app) => [app.id, draftOf(app)]),
-            ),
-        );
+        setDrafts(new Map(view.rows.map((app) => [app.id, draftOf(app)])));
     };
 
     const setDraftField = <K extends keyof Draft>(
@@ -501,11 +657,14 @@ export const ApplicationsTable = ({
 
     const saveBulk = async () => {
         if (!drafts || bulkSaving) return;
-        const changed = optimisticApplications
-            .map((app) => ({ app, draft: drafts.get(app.id) }))
+        const byId = new Map(
+            optimisticApplications.map((app) => [app.id, app]),
+        );
+        const changed = [...drafts]
+            .map(([id, draft]) => ({ app: byId.get(id), draft }))
             .filter(
                 (row): row is { app: ApplicationRow; draft: Draft } =>
-                    row.draft !== undefined &&
+                    row.app !== undefined &&
                     !sameDraft(row.draft, draftOf(row.app)),
             );
 
@@ -536,7 +695,7 @@ export const ApplicationsTable = ({
     };
 
     const applyStatus = (status: ApplicationStatus) => {
-        const ids = new Set(selected);
+        const ids = new Set(selection);
         const appliedAt = todayDateInput();
         const timeZone = browserTimeZone();
         clearSelection();
@@ -547,7 +706,7 @@ export const ApplicationsTable = ({
     };
 
     const applyArrangement = (arrangement: Arrangement | null) => {
-        const ids = new Set(selected);
+        const ids = new Set(selection);
         clearSelection();
         startMutation(async () => {
             applyOptimistic({ type: "arrangement", ids, arrangement });
@@ -556,7 +715,7 @@ export const ApplicationsTable = ({
     };
 
     const deleteSelected = () => {
-        const ids = new Set(selected);
+        const ids = new Set(selection);
         clearSelection();
         startMutation(async () => {
             applyOptimistic({ type: "delete", ids });
@@ -564,14 +723,14 @@ export const ApplicationsTable = ({
         });
     };
 
-    // Both appliers read `selected` from this render and clear the staged
+    // Both appliers read the selection of this render and clear the staged
     // values on their way out, so they can run back to back.
     const applyStaged = () => {
         if (stagedStatus) applyStatus(stagedStatus);
         if (stagedArrangement) applyArrangement(stagedArrangement.value);
     };
 
-    const selecting = selected.size > 0 && !bulkMode;
+    const selecting = selection.length > 0 && !bulkMode;
 
     return (
         <section className="border border-hairline bg-background">
@@ -587,7 +746,7 @@ export const ApplicationsTable = ({
                     <div className="flex w-full flex-wrap items-center gap-x-4 gap-y-2">
                         <p className="shrink-0 text-xs text-sub">
                             <span className="font-medium text-ink tabular-nums">
-                                {selected.size}
+                                {selection.length}
                             </span>{" "}
                             selected
                         </p>
@@ -634,7 +793,7 @@ export const ApplicationsTable = ({
                                 disabled={!stagedStatus && !stagedArrangement}
                                 className={primaryButtonClass}
                             >
-                                Apply to {selected.size}
+                                Apply to {selection.length}
                             </button>
                         </div>
                         <Divider />
@@ -660,10 +819,14 @@ export const ApplicationsTable = ({
                 ) : (
                     <>
                         <h2 className="flex items-baseline gap-2 text-xs font-medium text-muted">
-                            {bulkMode ? "Editing every row" : "Applications"}
+                            {drafts
+                                ? `Editing ${countLabel(drafts.size)}`
+                                : "Applications"}
                             {!bulkMode && (
                                 <span className="text-sub tabular-nums">
-                                    {optimisticApplications.length}
+                                    {filtered
+                                        ? `${view.rows.length} of ${optimisticApplications.length}`
+                                        : optimisticApplications.length}
                                 </span>
                             )}
                         </h2>
@@ -697,6 +860,27 @@ export const ApplicationsTable = ({
                             ) : (
                                 <>
                                     {optimisticApplications.length > 0 && (
+                                        <>
+                                            <SearchField
+                                                value={filters.query}
+                                                onChange={(query) =>
+                                                    setFilters({
+                                                        ...filters,
+                                                        query,
+                                                    })
+                                                }
+                                            />
+                                            <ApplicationsFilterMenu
+                                                filters={filters}
+                                                statusCounts={view.statusCounts}
+                                                arrangementCounts={
+                                                    view.arrangementCounts
+                                                }
+                                                onChange={setFilters}
+                                            />
+                                        </>
+                                    )}
+                                    {view.rows.length > 0 && (
                                         <button
                                             type="button"
                                             onClick={startBulkEdit}
@@ -706,7 +890,9 @@ export const ApplicationsTable = ({
                                                 aria-hidden="true"
                                                 className="icon-[lucide--pencil-line] size-4 shrink-0"
                                             />
-                                            Edit all
+                                            {filtered
+                                                ? "Edit shown"
+                                                : "Edit all"}
                                         </button>
                                     )}
                                     <button
@@ -738,9 +924,34 @@ export const ApplicationsTable = ({
                 <p className="px-5 py-16 text-center text-sm text-sub">
                     No applications in this list yet.
                 </p>
+            ) : view.rows.length === 0 ? (
+                <div className="px-5 py-16 text-center">
+                    <p className="text-sm text-sub">
+                        No applications match this search.
+                    </p>
+                    <button
+                        type="button"
+                        onClick={() => setFilters(NO_FILTERS)}
+                        className={`${quietButtonClass} mt-3`}
+                    >
+                        Clear search and filters
+                    </button>
+                </div>
             ) : (
-                <div className="max-h-[70vh] overflow-auto">
+                <div ref={scrollRef} className="max-h-[70vh] overflow-auto">
                     <ApplicationsHeaderRow
+                        sort={sort}
+                        // An open editor holds a field under the pointer, and
+                        // reordering the rows would move it out from under one
+                        // keystroke to the next.
+                        onSort={
+                            bulkMode
+                                ? undefined
+                                : (key) =>
+                                      setSort((current) =>
+                                          nextSort(current, key),
+                                      )
+                        }
                         selectAll={
                             !bulkMode && (
                                 <input
@@ -748,7 +959,7 @@ export const ApplicationsTable = ({
                                     type="checkbox"
                                     checked={allSelected}
                                     onChange={() =>
-                                        toggleAll(selected.size === 0)
+                                        toggleAll(selection.length === 0)
                                     }
                                     autoComplete="off"
                                     aria-label="Select all applications"
@@ -757,59 +968,86 @@ export const ApplicationsTable = ({
                             )
                         }
                     />
-                    <ul>
-                        {optimisticApplications.map((app) => {
-                            const draft = drafts?.get(app.id);
-                            if (draft) {
+                    <ul ref={listRef}>
+                        {rowWindow.padTop > 0 && (
+                            <li
+                                aria-hidden="true"
+                                style={{
+                                    height: `${rowWindow.padTop * ROW_REM}rem`,
+                                }}
+                            />
+                        )}
+                        {view.rows
+                            .slice(rowWindow.start, rowWindow.end)
+                            .map((app) => {
+                                const draft = drafts?.get(app.id);
+                                if (draft) {
+                                    return (
+                                        <BulkRow
+                                            key={app.id}
+                                            draft={draft}
+                                            updated={app.updated}
+                                            onChange={(key, value) =>
+                                                setDraftField(
+                                                    app.id,
+                                                    key,
+                                                    value,
+                                                )
+                                            }
+                                        />
+                                    );
+                                }
+                                if (app.id === deletingId) {
+                                    return (
+                                        <DeleteRow
+                                            key={app.id}
+                                            label={app.company}
+                                            onConfirm={() => onDelete(app.id)}
+                                            onCancel={() => setDeletingId(null)}
+                                        />
+                                    );
+                                }
                                 return (
-                                    <BulkRow
+                                    <ReadRow
                                         key={app.id}
-                                        draft={draft}
-                                        updated={app.updated}
-                                        onChange={(key, value) =>
-                                            setDraftField(app.id, key, value)
+                                        app={app}
+                                        selected={selected.has(app.id)}
+                                        onSelect={(isSelected) =>
+                                            toggleSelected(app.id, isSelected)
                                         }
+                                        opening={openingId === app.id}
+                                        onEdit={() => openPanel(app.id)}
+                                        onPrefetch={() =>
+                                            prefetchExtras(app.id)
+                                        }
+                                        onDelete={() => setDeletingId(app.id)}
                                     />
                                 );
-                            }
-                            if (app.id === deletingId) {
-                                return (
-                                    <DeleteRow
-                                        key={app.id}
-                                        label={app.company}
-                                        onConfirm={() => onDelete(app.id)}
-                                        onCancel={() => setDeletingId(null)}
-                                    />
-                                );
-                            }
-                            return (
-                                <ReadRow
-                                    key={app.id}
-                                    app={app}
-                                    selected={selected.has(app.id)}
-                                    onSelect={(isSelected) =>
-                                        toggleSelected(app.id, isSelected)
-                                    }
-                                    onEdit={() => setEditingId(app.id)}
-                                    onDelete={() => setDeletingId(app.id)}
-                                />
-                            );
-                        })}
+                            })}
+                        {rowWindow.padBottom > 0 && (
+                            <li
+                                aria-hidden="true"
+                                style={{
+                                    height: `${rowWindow.padBottom * ROW_REM}rem`,
+                                }}
+                            />
+                        )}
                     </ul>
                 </div>
             )}
 
-            {editing && (
+            {editing && editingRow && (
                 <ApplicationPanel
                     listId={listId}
-                    app={editing}
-                    onClose={() => setEditingId(null)}
+                    app={editingRow}
+                    extras={editing.extras}
+                    onClose={() => setEditing(null)}
                 />
             )}
 
             {confirmingDelete && (
                 <ConfirmDialog
-                    title={`Delete ${countLabel(selected.size)}?`}
+                    title={`Delete ${countLabel(selection.length)}?`}
                     detail="This cannot be undone."
                     confirmLabel="Delete"
                     tone="danger"

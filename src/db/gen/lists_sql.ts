@@ -217,8 +217,7 @@ update lists
 set
     name = $1,
     description = $2,
-    status = $3::list_status,
-    updated_at = now()
+    status = $3::list_status
 where id = $4 and user_id = $5
 returning id, name, description, status, updated_at`;
 

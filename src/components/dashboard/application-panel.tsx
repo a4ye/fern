@@ -23,13 +23,17 @@ import {
     browserTimeZone,
     formatEdited,
     todayDateInput,
+    type ApplicationExtras,
     type ApplicationRow,
     type ApplicationStatus,
     type StatusStep,
 } from "@/components/dashboard/data";
 import { payAmountInput } from "@/lib/pay";
 
-const draftOf = (app: ApplicationRow): ApplicationFields => ({
+const draftOf = (
+    app: ApplicationRow,
+    extras: ApplicationExtras,
+): ApplicationFields => ({
     company: app.company,
     role: app.role ?? "",
     location: app.location ?? "",
@@ -42,20 +46,24 @@ const draftOf = (app: ApplicationRow): ApplicationFields => ({
     payPeriod: app.payPeriod,
     bonus: payAmountInput(app.bonus),
     payNote: app.payNote ?? "",
-    notes: app.notes ?? "",
+    notes: extras.notes ?? "",
 });
 
 export const ApplicationPanel = ({
     listId,
     app,
+    extras,
     onClose,
 }: {
     listId: string;
     app: ApplicationRow;
+    extras: ApplicationExtras;
     onClose: () => void;
 }) => {
     const { ref: dialogRef, close } = useModalDialog();
-    const [draft, setDraft] = useState<ApplicationFields>(() => draftOf(app));
+    const [draft, setDraft] = useState<ApplicationFields>(() =>
+        draftOf(app, extras),
+    );
     const [staged, setStaged] = useState<ApplicationStatus | null>(null);
     const [added, setAdded] = useState<ApplicationStatus[]>([]);
     const [removed, setRemoved] = useState<string[]>([]);
@@ -108,7 +116,7 @@ export const ApplicationPanel = ({
     // before anything was recorded, which is not something anyone did. Steps
     // staged in this panel join them at the end, where saving will put them.
     const rows = [
-        ...app.history
+        ...extras.history
             .filter((step): step is StatusStep & { id: string } =>
                 step.id === null ? false : !removed.includes(step.id),
             )

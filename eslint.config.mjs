@@ -27,6 +27,12 @@ const eslintConfig = defineConfig([
             "prefer-const": "error",
         },
     },
+    {
+        // Command-line tools, where printing to the terminal is the whole
+        // interface rather than a leftover debugging line.
+        files: ["db/**/*.ts", "scripts/**/*.ts"],
+        rules: { "no-console": "off" },
+    },
     eslintConfigPrettier,
 ]);
 

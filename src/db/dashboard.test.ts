@@ -49,6 +49,10 @@ const setApplicationsStatus = mock(async (..._args: unknown[]) => undefined);
 const getApplicationForUser = mock(async (..._args: unknown[]) =>
     application("applied"),
 );
+let applicationNotes: string | null = null;
+const applicationDetailForUser = mock(async (..._args: unknown[]) => ({
+    notes: applicationNotes,
+}));
 const insertApplicationEvent = mock(async (..._args: unknown[]) => undefined);
 const suggestion = {
     id: "suggestion-1",
@@ -87,6 +91,7 @@ mock.module("@/db/queries", () => ({
     insertStatusEvents,
     setApplicationsStatus,
     getApplicationForUser,
+    applicationDetailForUser,
     insertApplicationEvent,
     getSuggestionForUser,
     setSuggestionState,
@@ -94,6 +99,7 @@ mock.module("@/db/queries", () => ({
 
 const {
     applyStatusStepEdits,
+    getApplicationExtras,
     getListDetail,
     getListsForUser,
     removeStatusStep,
@@ -128,6 +134,7 @@ beforeEach(() => {
     total = 0;
     rows = [];
     applicationEvents = [];
+    applicationNotes = null;
     countListsForUser.mockClear();
     listListsForUser.mockClear();
     deleteApplicationEvent.mockClear();
@@ -251,6 +258,9 @@ const detail = async () => {
     return loaded;
 };
 
+// The table no longer carries a row's history, so what the list replays is the
+// path the flow chart draws. The steps themselves, which the detail panel takes
+// back one at a time, are read per application and covered below.
 describe("getListDetail", () => {
     it("counts a status recorded twice as two steps of its own", async () => {
         applications = [application("interviewing")];
@@ -258,49 +268,77 @@ describe("getListDetail", () => {
             event("applied", "interviewing", "first"),
             event("interviewing", "interviewing", "second"),
         ];
-        const { applications: loaded, flow } = await detail();
+        const { flow } = await detail();
 
-        expect(loaded[0].history.map((step) => step.status)).toEqual([
+        expect(flow[0].history).toEqual([
             "applied",
             "interviewing",
             "interviewing",
         ]);
-        expect(flow[0].history).toEqual(loaded[0].history.map((s) => s.status));
     });
 
-    it("leaves the opening step with no event to take back", async () => {
-        applications = [application("interviewing")];
-        statusEvents = [event("applied", "interviewing", "first")];
-        const { applications: loaded } = await detail();
-
-        expect(loaded[0].history.map((step) => step.id)).toEqual([
-            null,
-            "first",
-        ]);
-    });
-
-    it("gives an application that never moved a history of where it sits", async () => {
+    it("gives an application that never moved a path of where it sits", async () => {
         applications = [application("not_applied")];
         statusEvents = [];
-        const { applications: loaded } = await detail();
+        const { flow } = await detail();
 
-        expect(loaded[0].history).toEqual([
-            { id: null, status: "not_applied", at: null },
-        ]);
+        expect(flow[0].history).toEqual(["not_applied"]);
     });
 
-    it("ends the history where the row is, even if no step recorded it", async () => {
+    it("ends the path where the row is, even if no step recorded it", async () => {
         // The bulk toolbar writes the event and the status separately, so a
         // status that arrived some other way still has to close the trail.
         applications = [application("rejected")];
         statusEvents = [event("applied", "interviewing", "first")];
-        const { applications: loaded } = await detail();
+        const { flow } = await detail();
 
-        expect(loaded[0].history.map((step) => step.status)).toEqual([
+        expect(flow[0].history).toEqual([
             "applied",
             "interviewing",
             "rejected",
         ]);
+    });
+
+    it("leaves the notes to the panel rather than sending them per row", async () => {
+        applications = [application("applied")];
+        const { applications: loaded } = await detail();
+
+        expect(loaded[0]).not.toHaveProperty("notes");
+        expect(loaded[0]).not.toHaveProperty("history");
+    });
+});
+
+describe("getApplicationExtras", () => {
+    it("leaves the opening step with no event to take back", async () => {
+        applicationEvents = [event("applied", "interviewing", "first")];
+        const extras = await getApplicationExtras("user-1", "app-1");
+
+        expect(extras?.history.map((step) => step.id)).toEqual([null, "first"]);
+        expect(extras?.history.map((step) => step.status)).toEqual([
+            "applied",
+            "interviewing",
+        ]);
+    });
+
+    it("reads only the first event for where the row started", async () => {
+        applicationEvents = [
+            event("applied", "interviewing", "first"),
+            event("interviewing", "onsite", "second"),
+        ];
+        const extras = await getApplicationExtras("user-1", "app-1");
+
+        expect(extras?.history.map((step) => step.status)).toEqual([
+            "applied",
+            "interviewing",
+            "onsite",
+        ]);
+    });
+
+    it("carries the notes the table left behind", async () => {
+        applicationNotes = "Referred by a friend on the infra team.";
+        const extras = await getApplicationExtras("user-1", "app-1");
+
+        expect(extras?.notes).toBe("Referred by a friend on the infra team.");
     });
 });
 

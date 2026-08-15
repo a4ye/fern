@@ -9,6 +9,7 @@ import {
     deleteApplication as deleteApplicationDb,
     deleteApplications as deleteApplicationsDb,
     deleteList as deleteListDb,
+    getApplicationExtras,
     saveApplicationDetailAndSteps as saveApplicationDetailDb,
     setApplicationsArrangement as setApplicationsArrangementDb,
     setApplicationsStatus as setApplicationsStatusDb,
@@ -17,6 +18,7 @@ import {
     updateList as updateListDb,
 } from "@/db/dashboard";
 import type {
+    ApplicationExtras,
     ApplicationStatus,
     Arrangement,
     ListStatus,
@@ -51,6 +53,17 @@ import {
 } from "@/lib/validation";
 
 const NOT_SIGNED_IN = "You are not signed in." as const;
+
+// Read when a row is opened rather than sent with the table. Returning null for
+// an application that is gone or was never this user's lets the panel open on
+// what the row already holds instead of refusing to open at all.
+export const loadApplicationExtras = async (
+    applicationId: string,
+): Promise<ApplicationExtras | null> => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) return null;
+    return getApplicationExtras(session.user.id, applicationId);
+};
 
 export const createList = async (
     name: string,
