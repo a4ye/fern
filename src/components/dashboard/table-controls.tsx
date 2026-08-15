@@ -42,20 +42,23 @@ export const formInputClass =
 export const checkboxClass =
     "size-3.5 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 
+// These are fixed h-8 boxes, so a label that wraps spills out of one instead of
+// making it taller. They hold their line and their width, and the bars they sit
+// in wrap around them.
 export const ghostButtonClass =
-    "inline-flex h-8 cursor-pointer items-center px-3 text-sm text-sub transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+    "inline-flex h-8 shrink-0 cursor-pointer items-center whitespace-nowrap px-3 text-sm text-sub transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 
 export const primaryButtonClass =
-    "inline-flex h-8 cursor-pointer items-center bg-accent px-3 text-sm font-medium text-background transition-colors hover:bg-accent-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-accent";
+    "inline-flex h-8 shrink-0 cursor-pointer items-center whitespace-nowrap bg-accent px-3 text-sm font-medium text-background transition-colors hover:bg-accent-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-accent";
 
 export const secondaryButtonClass =
-    "inline-flex h-8 cursor-pointer items-center gap-1.5 border border-hairline bg-background px-3 text-sm text-ink transition-colors hover:border-tile-border focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+    "inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap border border-hairline bg-background px-3 text-sm text-ink transition-colors hover:border-tile-border focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 
 export const dangerButtonClass =
-    "inline-flex h-8 cursor-pointer items-center bg-rose px-3 text-sm font-medium text-background transition-colors hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+    "inline-flex h-8 shrink-0 cursor-pointer items-center whitespace-nowrap bg-rose px-3 text-sm font-medium text-background transition-colors hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 
 export const quietButtonClass =
-    "inline-flex cursor-pointer items-center gap-1.5 text-xs text-sub transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+    "inline-flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap text-xs text-sub transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 
 // `keywords` are searched but never shown, so an option can be found by what it
 // means as well as by what it is called. `icon` is the source of a small image

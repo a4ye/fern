@@ -121,7 +121,8 @@ export const ListHeader = ({
 
     // Reading and editing occupy the same boxes: h-8 for the 2xl name row, h-5
     // for the description, h-8 for the status row. Single-line and truncated on
-    // both sides, so swapping in the inputs never moves the page.
+    // both sides, so swapping in the inputs never moves the page. Only below
+    // ~340px, where the edit controls cannot share one line, does that row grow.
     return (
         <div className="mt-4">
             <div className="flex items-start gap-3">
@@ -190,7 +191,7 @@ export const ListHeader = ({
                 </div>
             </div>
 
-            <div className="mt-2 flex h-8 items-center gap-3">
+            <div className="mt-2 flex min-h-8 flex-wrap items-center gap-x-3 gap-y-2">
                 {isEditing ? (
                     <>
                         <div className="flex shrink-0 gap-1.5">

@@ -1058,7 +1058,7 @@ const ExpandedDialog = ({
             onClick={(event) => {
                 if (event.target === dialogRef.current) close(onClose);
             }}
-            className="m-auto flex max-h-[calc(100vh-3rem)] max-w-[calc(100vw-3rem)] flex-col border border-hairline bg-background backdrop:bg-ink/25"
+            className="m-auto flex max-h-[calc(100dvh-3rem)] max-w-[calc(100dvw-3rem)] flex-col border border-hairline bg-background backdrop:bg-ink/25"
         >
             <div className="flex h-10 shrink-0 items-center justify-between gap-6 border-b border-hairline px-4">
                 <h2 className="text-xs font-medium text-muted">Sankey</h2>
@@ -1157,7 +1157,7 @@ export const PipelineFlow = ({
                 <div className="overflow-x-auto">
                     <div
                         style={{ minWidth: chartWidth(columns) }}
-                        className="h-160 px-4 py-4"
+                        className="h-120 px-4 py-4 lg:h-160"
                     >
                         <ResponsiveSankey {...CHART_PROPS} data={graph} />
                     </div>

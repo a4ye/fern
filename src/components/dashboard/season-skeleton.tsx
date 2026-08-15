@@ -72,19 +72,23 @@ export const SeasonPageSkeleton = () => (
 
         <div
             aria-hidden="true"
-            className="mt-6 flex flex-wrap items-center gap-x-8 gap-y-3 border border-hairline bg-background px-4 py-3"
+            className="mt-6 border border-hairline bg-background sm:flex sm:items-center sm:gap-x-8 sm:px-4 sm:py-3"
         >
-            {Array.from({ length: 4 }, (_, index) => (
-                <span key={index} className="flex h-8 items-baseline gap-2">
-                    <span className="skeleton h-5 w-6" />
-                    <span className="skeleton h-3 w-16" />
-                </span>
-            ))}
-            <span className="skeleton ml-auto h-4 w-20" />
+            <div className="grid grid-cols-2 gap-x-8 gap-y-2 px-4 py-3 sm:flex sm:flex-1 sm:flex-wrap sm:items-baseline sm:p-0">
+                {Array.from({ length: 4 }, (_, index) => (
+                    <span key={index} className="flex h-8 items-baseline gap-2">
+                        <span className="skeleton h-5 w-6" />
+                        <span className="skeleton h-3 w-16" />
+                    </span>
+                ))}
+            </div>
+            <span className="flex h-11 w-full items-center border-t border-faint px-4 sm:h-8 sm:w-auto sm:shrink-0 sm:border-t-0 sm:px-0">
+                <span className="skeleton h-4 w-20" />
+            </span>
         </div>
 
         <section className="mt-4 border border-hairline bg-background">
-            <div className="flex h-12 items-center justify-between gap-4 border-b border-hairline px-5">
+            <div className="flex min-h-12 flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-hairline px-5 py-2 lg:py-0">
                 <h2 className="flex items-baseline gap-2 text-xs font-medium text-muted">
                     Applications
                     <span
@@ -92,9 +96,12 @@ export const SeasonPageSkeleton = () => (
                         className="skeleton h-3 w-4 self-center"
                     />
                 </h2>
-                <div aria-hidden="true" className="flex items-center gap-2">
-                    <span className="skeleton h-8 w-24" />
-                    <span className="skeleton h-8 w-36" />
+                <div
+                    aria-hidden="true"
+                    className="flex flex-wrap items-center gap-2 max-sm:w-full"
+                >
+                    <span className="skeleton h-8 w-24 shrink-0 max-sm:grow" />
+                    <span className="skeleton h-8 w-36 shrink-0 max-sm:grow" />
                 </div>
             </div>
             <div className="max-h-[70vh] overflow-auto">

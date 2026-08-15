@@ -31,13 +31,18 @@ export const ListInsights = ({
 
     return (
         <div>
-            <div className="flex flex-wrap items-center gap-x-8 gap-y-3 border border-hairline bg-background px-4 py-3">
-                <StatStrip stats={stats} />
+            {/* One row on a wide bar. Narrow, the toggle drops to a full-width
+                footer of its own rather than trailing the stats, which left it
+                stranded against the right edge under a ragged last line. */}
+            <div className="border border-hairline bg-background sm:flex sm:items-center sm:gap-x-8 sm:px-4 sm:py-3">
+                <div className="px-4 py-3 sm:min-w-0 sm:flex-1 sm:p-0">
+                    <StatStrip stats={stats} />
+                </div>
                 <button
                     type="button"
                     onClick={() => setOpen((previous) => !previous)}
                     aria-expanded={open}
-                    className="ml-auto inline-flex h-8 cursor-pointer items-center gap-1.5 text-sm text-sub transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                    className="flex h-11 w-full cursor-pointer items-center justify-between border-t border-faint px-4 text-sm text-sub transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:h-8 sm:w-auto sm:shrink-0 sm:justify-start sm:gap-1.5 sm:border-t-0 sm:px-0"
                 >
                     Insights
                     <span
