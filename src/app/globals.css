@@ -37,6 +37,47 @@ body {
     font-family: var(--font-sans), sans-serif;
 }
 
+/* Keep scroll surfaces in the same quiet, square visual language as the rest of
+   the app where full scrollbar styling is supported. Firefox explicitly keeps
+   its native, platform-aware scrollbar. */
+@supports (-moz-appearance: none) {
+    * {
+        scrollbar-color: auto;
+        scrollbar-width: auto;
+    }
+}
+
+@supports not (-moz-appearance: none) {
+    *::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+    }
+
+    *::-webkit-scrollbar-track,
+    *::-webkit-scrollbar-corner {
+        background: transparent;
+    }
+
+    *::-webkit-scrollbar-thumb {
+        min-width: 36px;
+        min-height: 36px;
+        border: 2px solid transparent;
+        background: var(--color-muted) padding-box;
+    }
+
+    *::-webkit-scrollbar-thumb:hover {
+        background-color: var(--color-accent);
+    }
+
+    *::-webkit-scrollbar-thumb:active {
+        background-color: var(--color-accent-deep);
+    }
+
+    *::-webkit-scrollbar-button {
+        display: none;
+    }
+}
+
 /* Overlays fade both ways. `display` and `overlay` are discrete properties, so
    without `allow-discrete` the browser hides the element and drops it out of the
    top layer on the first frame and the closing fade never gets to run.
