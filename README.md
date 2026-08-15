@@ -34,3 +34,18 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Browser importer
+
+The optional Chrome/Firefox importer reads public job postings from the user's
+browser and shares its field parser with the server fallback. Build unpacked
+extensions with:
+
+```bash
+bun run extension:build
+```
+
+See [`extension/README.md`](extension/README.md) for local installation,
+production-origin configuration, and store-release settings. Deploy the latest
+database migrations before enabling the supported-ATS fallback; they provide
+the shared import cache and distributed provider rate budgets.

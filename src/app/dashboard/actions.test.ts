@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, mock } from "bun:test";
 const spy = () => mock(async (..._args: unknown[]) => {});
 
 let session: { user: { id: string } } | null = null;
+let cachedImport: Record<string, unknown> | null = null;
+let importBudget = true;
 
 const db = {
     createList: spy(),
@@ -14,6 +16,8 @@ const db = {
     createApplication: spy(),
     updateApplication: spy(),
     updateApplications: spy(),
+    saveApplicationDetail: spy(),
+    applyStatusStepEdits: spy(),
     deleteApplication: spy(),
     deleteApplications: spy(),
     setApplicationsStatus: spy(),
@@ -21,6 +25,11 @@ const db = {
 };
 
 const revalidatePath = mock((..._args: unknown[]) => {});
+const getCachedJobImport = mock(async () => cachedImport);
+const acquireJobImportBudget = mock(
+    async (..._args: unknown[]) => importBudget,
+);
+const putCachedJobImport = mock(async () => {});
 
 mock.module("next/headers", () => ({ headers: async () => new Headers() }));
 mock.module("next/cache", () => ({ revalidatePath }));
@@ -28,17 +37,82 @@ mock.module("@/lib/auth", () => ({
     auth: { api: { getSession: async () => session } },
 }));
 mock.module("@/db/dashboard", () => db);
+mock.module("@/db/job-import", () => ({
+    getCachedJobImport,
+    acquireJobImportBudget,
+    putCachedJobImport,
+}));
 
-const { createList, updateList, deleteList, setApplicationsStatus, togglePin } =
-    await import("@/app/dashboard/actions");
+const {
+    createList,
+    updateList,
+    deleteList,
+    setApplicationsStatus,
+    suggestFromUrl,
+    togglePin,
+} = await import("@/app/dashboard/actions");
 
 const SIGNED_OUT = { ok: false, error: "You are not signed in." };
 const revalidated = () => revalidatePath.mock.calls.flat();
 
 beforeEach(() => {
     session = { user: { id: "user-1" } };
+    cachedImport = null;
+    importBudget = true;
     revalidatePath.mockClear();
     for (const fn of Object.values(db)) fn.mockClear();
+    getCachedJobImport.mockClear();
+    acquireJobImportBudget.mockClear();
+    putCachedJobImport.mockClear();
+});
+
+describe("suggestFromUrl", () => {
+    const posting = {
+        company: "Acme",
+        role: "Engineer",
+        location: null,
+        arrangement: null,
+        pay: null,
+        source: "json-ld",
+        employerUrl: null,
+    } as const;
+
+    it("does not fetch arbitrary employer domains on the backend", async () => {
+        expect(await suggestFromUrl("https://careers.acme.com/job/1")).toEqual({
+            status: "unsupported",
+            posting: {
+                company: null,
+                role: null,
+                location: null,
+                arrangement: null,
+                pay: null,
+                source: "none",
+                employerUrl: null,
+            },
+        });
+        expect(acquireJobImportBudget).not.toHaveBeenCalled();
+    });
+
+    it("serves a shared cached ATS result without spending rate budget", async () => {
+        cachedImport = posting;
+        expect(
+            await suggestFromUrl("https://jobs.lever.co/acme/engineer"),
+        ).toEqual({ status: "found", posting });
+        expect(acquireJobImportBudget).not.toHaveBeenCalled();
+    });
+
+    it("stops a supported-provider fallback when its budget is exhausted", async () => {
+        importBudget = false;
+        const result = await suggestFromUrl(
+            "https://jobs.lever.co/acme/engineer",
+        );
+        expect(result.status).toBe("rate-limited");
+        expect(acquireJobImportBudget.mock.calls[0]).toEqual([
+            "user-1",
+            "jobs.lever.co",
+            1,
+        ]);
+    });
 });
 
 describe("createList", () => {

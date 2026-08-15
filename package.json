@@ -11,6 +11,7 @@
         "lint:fix": "eslint --fix",
         "format": "prettier --write .",
         "format:check": "prettier --check .",
+        "extension:build": "bun run extension/build.ts",
         "db:new": "dbmate --env POSTGRES_URL new",
         "db:migrate": "dbmate --env POSTGRES_URL --no-dump-schema up",
         "db:rollback": "dbmate --env POSTGRES_URL --no-dump-schema rollback",

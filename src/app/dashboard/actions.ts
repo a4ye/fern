@@ -23,7 +23,22 @@ import type {
     ListStatus,
     PayPeriod,
 } from "@/components/dashboard/data";
-import { scrapePosting, type ScrapedPosting } from "@/lib/job-scrape";
+import {
+    EMPTY_POSTING,
+    normalizeImportUrl,
+    scrapePosting,
+    serverImportHost,
+    serverImportRequestCost,
+} from "@/lib/job-scrape";
+import {
+    hasPostingSuggestion,
+    type ScrapedPosting,
+} from "@/lib/job-import/shared";
+import {
+    acquireJobImportBudget,
+    getCachedJobImport,
+    putCachedJobImport,
+} from "@/db/job-import";
 import {
     applicationCreateSchema,
     applicationDetailSchema,
@@ -59,26 +74,44 @@ export const createList = async (
     return { ok: true };
 };
 
-const EMPTY_SUGGESTION: ScrapedPosting = {
-    company: null,
-    role: null,
-    location: null,
-    arrangement: null,
-    pay: null,
-    source: "none",
-    employerUrl: null,
+export type JobImportFallbackResult = {
+    status: "found" | "missed" | "unsupported" | "rate-limited";
+    posting: ScrapedPosting;
 };
 
-export const suggestFromUrl = async (url: string): Promise<ScrapedPosting> => {
+export const suggestFromUrl = async (
+    url: string,
+): Promise<JobImportFallbackResult> => {
     const session = await auth.api.getSession({ headers: await headers() });
-    if (!session) return EMPTY_SUGGESTION;
+    if (!session) return { status: "missed", posting: EMPTY_POSTING };
+
+    const normalizedUrl = normalizeImportUrl(url.trim());
+    const providerHost = serverImportHost(url.trim());
+    if (!normalizedUrl || !providerHost) {
+        return { status: "unsupported", posting: EMPTY_POSTING };
+    }
 
     try {
-        return await scrapePosting(url.trim());
+        const cached = await getCachedJobImport(normalizedUrl);
+        if (cached) return { status: "found", posting: cached };
+
+        const allowed = await acquireJobImportBudget(
+            session.user.id,
+            providerHost,
+            serverImportRequestCost(normalizedUrl),
+        );
+        if (!allowed) {
+            return { status: "rate-limited", posting: EMPTY_POSTING };
+        }
+
+        const posting = await scrapePosting(normalizedUrl);
+        if (hasPostingSuggestion(posting)) {
+            await putCachedJobImport(normalizedUrl, posting);
+            return { status: "found", posting };
+        }
+        return { status: "missed", posting };
     } catch {
-        // A dead link or unreachable host just yields no suggestions; the user
-        // fills the row in by hand.
-        return EMPTY_SUGGESTION;
+        return { status: "missed", posting: EMPTY_POSTING };
     }
 };
 

@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { parsePosting, scrapePosting } from "@/lib/job-scrape";
+import {
+    normalizeImportUrl,
+    parsePosting,
+    scrapePosting,
+    serverImportHost,
+    serverImportRequestCost,
+} from "@/lib/job-scrape";
 import { parsePay } from "@/lib/pay";
 
 const jsonLd = (posting: Record<string, unknown>) =>
@@ -141,6 +147,45 @@ describe("parsePosting", () => {
 });
 
 describe("scrapePosting", () => {
+    it("keeps arbitrary employer domains out of the server fallback", async () => {
+        let fetched = false;
+        globalThis.fetch = (async (_input: string | URL | Request) => {
+            fetched = true;
+            return new Response("");
+        }) as typeof fetch;
+
+        expect(
+            await scrapePosting("https://careers.acme.com/platform-engineer"),
+        ).toEqual({
+            company: null,
+            role: null,
+            location: null,
+            arrangement: null,
+            pay: null,
+            source: "none",
+            employerUrl: null,
+        });
+        expect(fetched).toBeFalse();
+    });
+
+    it("normalizes tracking parameters before shared caching", () => {
+        expect(
+            normalizeImportUrl(
+                "https://jobs.lever.co/acme/123?utm_source=email&team=eng#apply",
+            ),
+        ).toBe("https://jobs.lever.co/acme/123?team=eng");
+        expect(serverImportHost("https://jobs.lever.co/acme/123")).toBe(
+            "jobs.lever.co",
+        );
+        expect(serverImportHost("https://careers.acme.com/123")).toBeNull();
+        expect(
+            serverImportRequestCost("https://simplify.jobs/p/123/engineer"),
+        ).toBe(2);
+        expect(
+            serverImportRequestCost("https://jobs.lever.co/acme/123"),
+        ).toBe(1);
+    });
+
     it("returns a cleaned employer URL as a separate suggestion", async () => {
         const simplifyUrl =
             "https://simplify.jobs/p/1234/platform-engineer-at-acme";
