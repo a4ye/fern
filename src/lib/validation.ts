@@ -185,6 +185,15 @@ const amountSchema = (label: string) =>
         )
         .transform((value) => (value === "" ? null : value));
 
+// The column is char(3), and the picker's list comes from the runtime's own
+// currency data, which need not match byte for byte between the browser that
+// offered the code and the server that stores it. The shape is what matters.
+export const currencySchema = z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z]{3}$/, "Choose a valid currency.");
+
 // Every column an application has, which is more than the table's own row
 // exposes. Status is not among them: the detail panel moves it by recording a
 // step, and the create form below adds it back as the one it starts at.
@@ -208,11 +217,7 @@ const applicationDetailFields = z.object({
     // currency data, which need not match byte for byte between the browser
     // that offered the code and the server that stores it. The shape is what
     // matters.
-    payCurrency: z
-        .string()
-        .trim()
-        .toUpperCase()
-        .regex(/^[A-Z]{3}$/, "Choose a valid currency."),
+    payCurrency: currencySchema,
     payPeriod: z.enum(PAY_PERIODS, "Choose a valid pay period.").nullable(),
     bonus: amountSchema("Bonus"),
     payNote: optionalText("Pay note", PAY_MAX),
@@ -244,6 +249,21 @@ export const stepEditsSchema = z.object({
     added: z
         .array(z.enum(APPLICATION_STATUSES, "Choose a valid status."))
         .max(MAX_STATUS_STEP_EDITS),
+});
+
+export const DISPLAY_NAME_MAX = 80;
+
+// The settings page saves both fields together, so one parse covers the form.
+export const accountSettingsSchema = z.object({
+    name: z
+        .string()
+        .trim()
+        .min(1, "Name is required.")
+        .max(
+            DISPLAY_NAME_MAX,
+            `Name must be ${DISPLAY_NAME_MAX} characters or fewer.`,
+        ),
+    defaultCurrency: currencySchema,
 });
 
 // Narrows a safeParse failure to a single message for display. Schemas above

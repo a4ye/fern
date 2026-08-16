@@ -705,10 +705,12 @@ const ReviewStep = ({
 export const ImportDialog = ({
     listId,
     applications,
+    defaultCurrency,
     onClose,
 }: {
     listId: string;
     applications: ApplicationRow[];
+    defaultCurrency: string;
     onClose: () => void;
 }) => {
     const { ref: dialogRef, close } = useModalDialog();
@@ -746,6 +748,7 @@ export const ImportDialog = ({
                       },
                       fallbackStatus,
                       listKeys,
+                      defaultCurrency,
                   )
                 : [],
         [
@@ -755,6 +758,7 @@ export const ImportDialog = ({
             arrangementEdits,
             fallbackStatus,
             listKeys,
+            defaultCurrency,
         ],
     );
 

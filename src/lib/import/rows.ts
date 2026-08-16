@@ -131,8 +131,8 @@ const dedupeKey = (fields: {
     ].join("\u0000");
 };
 
-const draftKey = (draft: ImportDraft): string => {
-    const pay = parsePay(draft.pay);
+const draftKey = (draft: ImportDraft, defaultCurrency: string): string => {
+    const pay = parsePay(draft.pay, defaultCurrency);
     return dedupeKey({ ...draft, ...pay });
 };
 
@@ -242,6 +242,10 @@ export const buildRows = (
     choices: ValueChoices,
     fallbackStatus: ApplicationStatus,
     alreadyInList: ReadonlyMap<string, ApplicationRow>,
+    // The currency a row's pay is read as when its own text names none, which
+    // has to be the one the write will use or an import would count a row it is
+    // about to duplicate as new.
+    defaultCurrency: string,
 ): RowOutcome[] => {
     // The whole column decides how its dates read, so a value that would work
     // either way is settled by its neighbours rather than guessed at.
@@ -297,7 +301,7 @@ export const buildRows = (
         }
 
         const { draft, dropped } = read;
-        const key = draftKey(draft);
+        const key = draftKey(draft, defaultCurrency);
 
         const existing = alreadyInList.get(key);
         if (existing) {

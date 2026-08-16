@@ -56,13 +56,18 @@ const employerHost = (raw: string): string => {
 
 export const AddApplicationForm = ({
     listId,
+    defaultCurrency,
     onClose,
 }: {
     listId: string;
+    defaultCurrency: string;
     onClose: () => void;
 }) => {
     const { ref: dialogRef, close } = useModalDialog();
-    const [draft, setDraft] = useState<ApplicationFields>(EMPTY_FIELDS);
+    const [draft, setDraft] = useState<ApplicationFields>({
+        ...EMPTY_FIELDS,
+        payCurrency: defaultCurrency,
+    });
     const [status, setStatus] = useState<ApplicationStatus>("not_applied");
     const [missed, setMissed] = useState(false);
     const [rateLimited, setRateLimited] = useState(false);
@@ -122,7 +127,12 @@ export const AddApplicationForm = ({
 
     const applyPosting = (found: ScrapedPosting, url: string) => {
         setDraft((current) =>
-            mergeImportedApplication(current, found, editedFields.current),
+            mergeImportedApplication(
+                current,
+                found,
+                editedFields.current,
+                defaultCurrency,
+            ),
         );
         setEmployerUrl(
             found.employerUrl && found.employerUrl !== url

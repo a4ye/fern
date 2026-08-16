@@ -160,7 +160,7 @@ const PERIOD_PATTERNS: [RegExp, PayPeriod][] = [
 
 const MULTIPLIER: Record<string, number> = { k: 1_000, m: 1_000_000 };
 
-const readCurrency = (value: string): string => {
+const readCurrency = (value: string, fallback: string): string => {
     const capitals = value.match(CODE_UPPERCASE);
     if (capitals) return capitals[1];
     const code = value.match(CODE_ANY_CASE);
@@ -168,7 +168,7 @@ const readCurrency = (value: string): string => {
     for (const [glyph, currency] of GLYPH_CURRENCY) {
         if (value.includes(glyph)) return currency;
     }
-    return DEFAULT_CURRENCY;
+    return fallback;
 };
 
 // Returns the period plus the text with the period words removed, so a token
@@ -305,13 +305,19 @@ const overflows = (amount: number): boolean =>
 export const payAmountInput = (amount: string | null): string =>
     amount === null ? "" : String(Number(amount));
 
-export const parsePay = (input: string | null): PayFields => {
+// `fallbackCurrency` is the user's own default, which stands in wherever the
+// text names no currency of its own. A pay line that does name one still wins:
+// the preference answers "120000/yr", not "CAD 120000/yr".
+export const parsePay = (
+    input: string | null,
+    fallbackCurrency: string = DEFAULT_CURRENCY,
+): PayFields => {
     const raw = input?.trim() ?? "";
     if (!raw) {
         return {
             payMin: null,
             payMax: null,
-            payCurrency: DEFAULT_CURRENCY,
+            payCurrency: fallbackCurrency,
             payPeriod: null,
             payNote: null,
         };
@@ -326,7 +332,7 @@ export const parsePay = (input: string | null): PayFields => {
         return {
             payMin: null,
             payMax: null,
-            payCurrency: DEFAULT_CURRENCY,
+            payCurrency: fallbackCurrency,
             payPeriod: null,
             payNote: raw,
         };
@@ -339,7 +345,7 @@ export const parsePay = (input: string | null): PayFields => {
     return {
         payMin: asNumeric(min),
         payMax: second === undefined || max === min ? null : asNumeric(max),
-        payCurrency: readCurrency(raw),
+        payCurrency: readCurrency(raw, fallbackCurrency),
         payPeriod: period,
         payNote: null,
     };

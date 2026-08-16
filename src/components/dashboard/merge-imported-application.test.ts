@@ -22,6 +22,7 @@ describe("mergeImportedApplication", () => {
             EMPTY_FIELDS,
             POSTING,
             new Set(),
+            "USD",
         );
 
         expect(merged).toMatchObject({
@@ -48,6 +49,7 @@ describe("mergeImportedApplication", () => {
             current,
             POSTING,
             new Set(["company", "location", "payCurrency"]),
+            "USD",
         );
 
         expect(merged.company).toBe("My company name");
@@ -75,6 +77,7 @@ describe("mergeImportedApplication", () => {
                 pay: null,
             },
             new Set(),
+            "USD",
         );
 
         expect(merged.company).toBe("");

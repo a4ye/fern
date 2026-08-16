@@ -31,6 +31,9 @@ export const emailSyncEnabled = Boolean(
     googleGenerativeAiPaidService,
 );
 
+// GitHub is how everyone signs in. Google is only ever linked afterwards, for
+// read access to a connected inbox, and is never a way into the account.
+export const GITHUB_PROVIDER_ID = "github";
 export const GOOGLE_PROVIDER_ID = "google";
 export const GMAIL_READONLY_SCOPE =
     "https://www.googleapis.com/auth/gmail.readonly";

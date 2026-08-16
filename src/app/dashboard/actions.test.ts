@@ -37,6 +37,9 @@ mock.module("@/lib/auth", () => ({
     auth: { api: { getSession: async () => session } },
 }));
 mock.module("@/db/dashboard", () => db);
+mock.module("@/db/settings", () => ({
+    getUserSettings: async () => ({ defaultCurrency: "USD" }),
+}));
 mock.module("@/db/job-import", () => ({
     getCachedJobImport,
     acquireJobImportBudget,

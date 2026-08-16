@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { importApplications } from "@/db/dashboard";
+import { getUserSettings } from "@/db/settings";
 import {
     MAX_IMPORT_ROWS,
     readSheet,
@@ -63,11 +64,13 @@ export const commitImport = async (
         rows.push(parsed.data);
     }
 
+    const { defaultCurrency } = await getUserSettings(session.user.id);
     const added = await importApplications(
         session.user.id,
         listId,
         rows,
         parsedTimeZone.data,
+        defaultCurrency,
     );
 
     revalidatePath(`/dashboard/${listId}`);

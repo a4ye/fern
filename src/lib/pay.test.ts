@@ -215,6 +215,16 @@ describe("parsePay", () => {
         expect(parsePay("zł 8000/mo").payCurrency).toBe("PLN");
     });
 
+    // The user's default currency stands in for the text's silence, so it must
+    // never overrule a currency the text names for itself.
+    it("falls back to the given currency only when the text names none", () => {
+        expect(parsePay("120000/yr", "CAD").payCurrency).toBe("CAD");
+        expect(parsePay(null, "CAD").payCurrency).toBe("CAD");
+        expect(parsePay("competitive", "CAD").payCurrency).toBe("CAD");
+        expect(parsePay("USD 120000/yr", "CAD").payCurrency).toBe("USD");
+        expect(parsePay("€90,000", "CAD").payCurrency).toBe("EUR");
+    });
+
     // Codes that are also English words are the reason the whole list cannot
     // just be matched case-insensitively.
     it("reads a word-like code only when it is capitalised", () => {

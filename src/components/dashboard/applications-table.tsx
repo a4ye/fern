@@ -427,10 +427,12 @@ export const ApplicationsTable = ({
     listId,
     name,
     applications,
+    defaultCurrency,
 }: {
     listId: string;
     name: string;
     applications: ApplicationRow[];
+    defaultCurrency: string;
 }) => {
     const [, startMutation] = useTransition();
     // The panel opens on more than the table carries, so the row it is opened
@@ -979,6 +981,7 @@ export const ApplicationsTable = ({
             {adding && !bulkMode && (
                 <AddApplicationForm
                     listId={listId}
+                    defaultCurrency={defaultCurrency}
                     onClose={() => setAdding(false)}
                 />
             )}
@@ -987,6 +990,7 @@ export const ApplicationsTable = ({
                 <ImportDialog
                     listId={listId}
                     applications={optimisticApplications}
+                    defaultCurrency={defaultCurrency}
                     onClose={() => setImporting(false)}
                 />
             )}

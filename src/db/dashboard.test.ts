@@ -456,6 +456,7 @@ describe("compound application writes", () => {
                 { id: "app-a", input, payTyped: false },
             ],
             TIME_ZONE,
+            "USD",
         );
 
         expect(updateApplicationsBulkQuery).toHaveBeenCalledTimes(1);

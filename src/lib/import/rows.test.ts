@@ -28,6 +28,7 @@ const build = (
     options: {
         existing?: ReadonlyMap<string, ApplicationRow>;
         statuses?: Record<string, "applied" | "rejected">;
+        defaultCurrency?: string;
     } = {},
 ): RowOutcome[] =>
     buildRows(
@@ -36,6 +37,7 @@ const build = (
         { ...NO_CHOICES, statuses: options.statuses ?? {} },
         "applied",
         options.existing ?? new Map(),
+        options.defaultCurrency ?? "USD",
     );
 
 const kinds = (outcomes: RowOutcome[]) =>
@@ -121,6 +123,7 @@ describe("building rows", () => {
             NO_CHOICES,
             "applied",
             new Map(),
+            "USD",
         );
         expect(outcomes[0]).toMatchObject({
             kind: "ready",
@@ -139,6 +142,7 @@ describe("building rows", () => {
             NO_CHOICES,
             "applied",
             new Map(),
+            "USD",
         );
         expect(outcomes[0]).toMatchObject({ kind: "ready" });
         const outcome = outcomes[0];
@@ -257,6 +261,20 @@ describe("duplicates", () => {
         const outcomes = build(
             [["Anthropic", "Engineer", "Applied", "", "$120,000"]],
             { existing },
+        );
+        expect(outcomes[0].kind).toBe("duplicate");
+    });
+
+    // A figure typed without a currency is stored as the user's default, so the
+    // preview has to read it the same way or it would offer to import a row the
+    // list already holds.
+    test("reads a figure with no currency as the user's default", () => {
+        const existing = existingIndex([
+            existingRow({ payMin: "120000", payCurrency: "CAD" }),
+        ]);
+        const outcomes = build(
+            [["Anthropic", "Engineer", "Applied", "", "120,000"]],
+            { existing, defaultCurrency: "CAD" },
         );
         expect(outcomes[0].kind).toBe("duplicate");
     });

@@ -421,6 +421,21 @@ export const listsHrefFrom = (from: string | undefined): string => {
     return query ? `/dashboard?${query}` : "/dashboard";
 };
 
+export const SETTINGS_PATH = "/dashboard/settings";
+
+// Settings is opened from wherever the user was reading, so the address they
+// left travels with the link and its back button returns to it whole, filters
+// and page included. A tab opened straight onto settings carries nothing and
+// lands on the lists. The value arrives in the URL, where anyone could write
+// it, so only our own dashboard paths are honoured: the rest would make the
+// back button a way off the site.
+export const settingsBackHref = (from: string | undefined): string =>
+    from &&
+    /^\/dashboard(?:[/?]|$)/.test(from) &&
+    !from.startsWith(SETTINGS_PATH)
+        ? from
+        : "/dashboard";
+
 // One step in an application's status history. The opening step is where the
 // application started out rather than a move anyone recorded, so it has no
 // event behind it and cannot be taken back on its own.

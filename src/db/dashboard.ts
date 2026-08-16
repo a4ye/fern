@@ -161,11 +161,12 @@ export const importApplications = async (
     listId: string,
     rows: (ApplicationInput & { notes: string | null })[],
     timeZone: string,
+    defaultCurrency: string,
 ): Promise<number> => {
     if (rows.length === 0) return 0;
 
     const payload = rows.map((row, offset) => {
-        const pay = parsePay(row.pay);
+        const pay = parsePay(row.pay, defaultCurrency);
         return {
             offset,
             company_name: row.company,
@@ -197,11 +198,14 @@ export const updateApplications = async (
     userId: string,
     rows: { id: string; input: ApplicationInput; payTyped: boolean }[],
     timeZone: string,
+    defaultCurrency: string,
 ): Promise<void> => {
     if (rows.length === 0) return;
 
     const payload = rows.map((row) => {
-        const pay = row.payTyped ? parsePay(row.input.pay) : null;
+        const pay = row.payTyped
+            ? parsePay(row.input.pay, defaultCurrency)
+            : null;
         return {
             id: row.id,
             company_name: row.input.company,

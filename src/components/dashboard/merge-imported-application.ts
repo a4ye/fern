@@ -6,8 +6,9 @@ export const mergeImportedApplication = (
     current: ApplicationFields,
     posting: ScrapedPosting,
     edited: ReadonlySet<keyof ApplicationFields>,
+    defaultCurrency: string,
 ): ApplicationFields => {
-    const pay = parsePay(posting.pay);
+    const pay = parsePay(posting.pay, defaultCurrency);
 
     return {
         ...current,

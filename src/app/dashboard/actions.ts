@@ -17,6 +17,7 @@ import {
     updateApplications as updateApplicationsDb,
     updateList as updateListDb,
 } from "@/db/dashboard";
+import { getUserSettings } from "@/db/settings";
 import type {
     ApplicationExtras,
     ApplicationStatus,
@@ -245,10 +246,12 @@ export const updateApplicationsBulk = async (
         });
     }
 
+    const { defaultCurrency } = await getUserSettings(session.user.id);
     await updateApplicationsDb(
         session.user.id,
         parsedRows,
         parsedTimeZone.data,
+        defaultCurrency,
     );
     revalidatePath(`/dashboard/${listId}`);
     revalidatePath("/dashboard");
