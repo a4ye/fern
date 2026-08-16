@@ -52,7 +52,11 @@ const countLabel = (count: number, noun: string) =>
 // The label wraps rather than truncating: the whole point of the status rows is
 // to read what the file actually said, and "Submitted - Pending Response" says
 // nothing cut off at "Submitted - Pend...".
-const ROW_GRID = "grid grid-cols-[10rem_minmax(0,15rem)_minmax(0,1fr)] gap-3";
+// Three columns need 26rem before they need anything, which is wider than a
+// phone, so on a narrow screen the row folds: what the file says on one line,
+// what it becomes on the next.
+const ROW_GRID =
+    "sm:grid sm:grid-cols-[10rem_minmax(0,15rem)_minmax(0,1fr)] sm:gap-3";
 
 const Row = ({
     label,
@@ -63,19 +67,30 @@ const Row = ({
     hint?: string;
     children: React.ReactNode;
 }) => (
-    <div className={`${ROW_GRID} items-center`}>
-        <span className="text-pretty break-words text-xs text-ink">
-            {label}
-        </span>
+    <div
+        className={`${ROW_GRID} max-sm:space-y-1.5 max-sm:border-b max-sm:border-faint max-sm:pb-3 max-sm:last:border-b-0 max-sm:last:pb-0 sm:items-center`}
+    >
+        <div className="flex items-baseline justify-between gap-3 sm:contents">
+            <span className="min-w-0 text-pretty break-words text-xs text-ink">
+                {label}
+            </span>
+            {/* The label is the question and keeps its width; the sample takes
+            what is left and truncates there. A pay cell can run to a sentence,
+            and it may not be the thing that breaks "Arrangement" in half. */}
+            <span
+                title={hint}
+                className="min-w-0 truncate text-xs text-muted max-sm:flex-1 max-sm:text-right sm:order-last"
+            >
+                {hint}
+            </span>
+        </div>
         {children}
-        <span title={hint} className="truncate text-xs text-muted">
-            {hint}
-        </span>
     </div>
 );
 
 // Names the three columns once, so the rows under them do not have to be
-// puzzled out from their contents.
+// puzzled out from their contents. Folded rows name themselves, so the headings
+// go with the columns they head.
 const RowHeader = ({
     left,
     middle,
@@ -86,7 +101,7 @@ const RowHeader = ({
     right: string;
 }) => (
     <div
-        className={`${ROW_GRID} border-b border-faint pb-1.5 text-xs text-muted`}
+        className={`${ROW_GRID} max-sm:hidden border-b border-faint pb-1.5 text-xs text-muted`}
     >
         <span>{left}</span>
         <span>{middle}</span>
@@ -224,12 +239,11 @@ const FileStep = ({
                     What happens next
                 </p>
                 <Note icon="icon-[lucide--columns-3]">
-                    You choose which column of your file goes into each Job
-                    Tracker field. Most are matched for you already.
+                    You choose which column goes into each field. Most are
+                    matched already.
                 </Note>
                 <Note icon="icon-[lucide--check-check]">
-                    You see exactly what will be added, and what is already in
-                    this list, before anything is saved.
+                    You see what will be added before anything is saved.
                 </Note>
                 <Note icon="icon-[lucide--shield-check]">
                     Your file is not stored. Applications are only added to this
@@ -312,6 +326,38 @@ const MapStep = ({
         [sheet.headers],
     );
 
+    // Which fields the file itself answered, read from the sheet rather than
+    // from the live mapping: a row may not leave the list under your finger
+    // because you set it to Not imported.
+    const matched = useMemo(() => matchColumns(sheet.headers), [sheet.headers]);
+    const [showUnmatched, setShowUnmatched] = useState(false);
+    const asked = IMPORT_FIELDS.filter(
+        (field) => field.required || matched[field.key] !== undefined,
+    );
+    const unmatched = IMPORT_FIELDS.filter(
+        (field) => !field.required && matched[field.key] === undefined,
+    );
+
+    const fieldRow = (field: (typeof IMPORT_FIELDS)[number]) => {
+        const column = mapping[field.key];
+        return (
+            <Row
+                key={field.key}
+                label={field.required ? `${field.label} *` : field.label}
+                hint={column === undefined ? "" : sampleOf(sheet, column)}
+            >
+                <CellSelect
+                    label={field.label}
+                    value={column ?? NO_COLUMN}
+                    options={columnOptions}
+                    onChange={(next) => onMap(field.key, next)}
+                    variant="form"
+                    searchable
+                />
+            </Row>
+        );
+    };
+
     const statusValues = distinctValues(sheet, mapping.status);
     const arrangementValues = distinctValues(sheet, mapping.arrangement);
     const statusCounts = countsOf(sheet, mapping.status);
@@ -336,56 +382,58 @@ const MapStep = ({
                 title="Match your columns"
                 note={
                     <>
-                        Choose which column of your file goes into each Job
-                        Tracker field. We matched them using your headings, so
-                        please check each one. Choose <Term>Not imported</Term>{" "}
-                        to leave a field blank.
+                        Check each match. <Term>Not imported</Term> leaves a
+                        field blank.
                     </>
                 }
             >
-                <div className="space-y-2">
+                <div className="space-y-3 sm:space-y-2">
                     <RowHeader
                         left="Field"
                         middle="Your column"
                         right="First value"
                     />
-                    {IMPORT_FIELDS.map((field) => {
-                        const column = mapping[field.key];
-                        const sample =
-                            column === undefined ? "" : sampleOf(sheet, column);
-                        return (
-                            <Row
-                                key={field.key}
-                                label={
-                                    field.required
-                                        ? `${field.label} *`
-                                        : field.label
-                                }
-                                hint={sample}
-                            >
-                                <CellSelect
-                                    label={field.label}
-                                    value={column ?? NO_COLUMN}
-                                    options={columnOptions}
-                                    onChange={(next) => onMap(field.key, next)}
-                                    variant="form"
-                                    searchable
-                                />
-                            </Row>
-                        );
-                    })}
+                    {asked.map(fieldRow)}
                 </div>
+
+                {/* Nothing in the file reaches these, so there is nothing to
+                check: they are folded away rather than filling the step with
+                rows that all read Not imported. */}
+                {unmatched.length > 0 && (
+                    <div className="mt-3 border-t border-faint pt-3">
+                        <button
+                            type="button"
+                            onClick={() =>
+                                setShowUnmatched((previous) => !previous)
+                            }
+                            aria-expanded={showUnmatched}
+                            className="flex cursor-pointer items-center gap-1.5 text-xs text-sub transition-colors hover:text-ink focus-visible:outline-1 focus-visible:outline-accent"
+                        >
+                            <span
+                                aria-hidden="true"
+                                className={`icon-[lucide--chevron-right] size-3.5 shrink-0 transition-transform ${showUnmatched ? "rotate-90" : ""}`}
+                            />
+                            {countLabel(unmatched.length, "field")} not matched
+                            to a column
+                        </button>
+                        {showUnmatched && (
+                            <div className="mt-4 space-y-3 sm:space-y-2">
+                                {unmatched.map(fieldRow)}
+                            </div>
+                        )}
+                    </div>
+                )}
             </Section>
 
             <Section
                 title="Match your statuses"
                 note={
                     statusValues.length > 0
-                        ? "Choose which Job Tracker status each of your values maps to. Your choice applies to every row with that value."
-                        : "Your file has no status column. Every application will start at the status you choose here."
+                        ? "Each choice applies to every row with that value."
+                        : "Your file has no status column. Every application starts at the status you choose."
                 }
             >
-                <div className="space-y-2">
+                <div className="space-y-3 sm:space-y-2">
                     {statusValues.length > 0 && (
                         <RowHeader
                             left="Your file says"
@@ -443,13 +491,11 @@ const MapStep = ({
                     title="Match your arrangements"
                     note={
                         <>
-                            Choose which arrangement each of your values maps
-                            to. Anything left on <Term>Not set</Term> will be
-                            blank.
+                            Anything left on <Term>Not set</Term> stays blank.
                         </>
                     }
                 >
-                    <div className="space-y-2">
+                    <div className="space-y-3 sm:space-y-2">
                         <RowHeader
                             left="Your file says"
                             middle="Maps to"
@@ -487,7 +533,9 @@ const MapStep = ({
 };
 
 // `lead` marks the figure the step is about, so the eye lands on what is being
-// added rather than on what is not.
+// added rather than on what is not. Three abreast is three labels in a column
+// each too narrow to hold one, so on a phone they turn on their side and the
+// figures line up down the right.
 const Tally = ({
     label,
     value,
@@ -497,21 +545,27 @@ const Tally = ({
     value: number;
     lead?: boolean;
 }) => (
-    <div className="border-r border-faint px-4 py-3 last:border-r-0">
+    <div className="flex items-baseline justify-between gap-3 border-b border-faint px-4 py-2.5 last:border-b-0 sm:block sm:border-r sm:border-b-0 sm:py-3 sm:last:border-r-0">
         <p
-            className={`text-lg leading-none ${lead ? "font-medium text-ink" : "text-sub"}`}
+            className={`order-last text-lg leading-none tabular-nums ${lead ? "font-medium text-ink" : "text-sub"}`}
         >
             {value}
         </p>
-        <p className="mt-1.5 text-xs text-muted">{label}</p>
+        <p className="text-xs text-muted sm:mt-1.5">{label}</p>
     </div>
 );
 
 // A grid rather than fixed widths on a flex row: "Row 7" and "Row 104" are
 // different widths, and a column too narrow for the longest of them wraps that
 // one line and leaves the list with rows of two different heights.
+// A phone has room for the company and one figure beside it, so the row leads
+// with the company, the line number goes to the right as the metadata it is,
+// and the detail takes a line of its own underneath rather than halving the
+// width and leaving both ends truncated.
 const OUTCOME_GRID =
-    "grid grid-cols-[4.5rem_minmax(0,11rem)_minmax(0,1fr)] items-center gap-3";
+    "grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3 gap-y-0.5 sm:grid-cols-[4.5rem_minmax(0,11rem)_minmax(0,1fr)] sm:items-center sm:gap-3";
+
+const DETAIL_CELL = "truncate text-xs max-sm:order-3 max-sm:col-span-2";
 
 const OutcomeLine = ({
     line,
@@ -523,12 +577,37 @@ const OutcomeLine = ({
     detail: React.ReactNode;
 }) => (
     <>
-        <span className="whitespace-nowrap text-xs text-muted">Row {line}</span>
-        <span className="truncate text-xs text-ink" title={company}>
+        <span className="whitespace-nowrap text-xs text-muted max-sm:order-2 max-sm:justify-self-end">
+            Row {line}
+        </span>
+        <span
+            className="truncate text-xs text-ink max-sm:order-1"
+            title={company}
+        >
             {company || "(no company)"}
         </span>
-        <span className="truncate text-xs text-sub">{detail}</span>
+        <span className={`${DETAIL_CELL} text-sub`}>{detail}</span>
     </>
+);
+
+// Three headings for three columns. A folded row leads with the company and
+// says "Row 4" in as many words, so the headings go with the columns and the
+// note above the list covers what the third line holds. `inset` clears the
+// checkbox on the one list whose rows can be picked.
+const OutcomeHeader = ({
+    detail,
+    inset = false,
+}: {
+    detail: string;
+    inset?: boolean;
+}) => (
+    <div
+        className={`${OUTCOME_GRID} max-sm:hidden border-b border-faint bg-surface px-3 py-1.5 text-xs text-muted ${inset ? "pl-9" : ""}`}
+    >
+        <span>Your row</span>
+        <span>Company</span>
+        <span className={DETAIL_CELL}>{detail}</span>
+    </div>
 );
 
 const fieldLabel = (field: ImportField): string =>
@@ -571,7 +650,7 @@ const ReviewStep = ({
         <div className="space-y-8">
             {/* The three figures answer the only question this step exists to
             answer, before any of the lists under them are read. */}
-            <div className="grid grid-cols-3 border border-hairline">
+            <div className="grid border border-hairline sm:grid-cols-3">
                 <Tally label="Adding" value={adding} lead />
                 <Tally label="Already in this list" value={duplicates.length} />
                 <Tally label="Skipped" value={invalid.length} />
@@ -579,34 +658,27 @@ const ReviewStep = ({
 
             {duplicates.length > 0 && (
                 <section>
-                    <div className="flex items-start justify-between gap-3">
+                    <div className="flex flex-col items-start gap-3 sm:flex-row sm:justify-between">
                         <div className="min-w-0">
                             <h3 className="text-sm font-medium text-ink">
                                 Already in this list
                             </h3>
                             <p className="mt-1 max-w-prose text-pretty text-xs leading-5 text-sub">
-                                Every column in these rows matches an
-                                application already in this list, so they will
-                                not be imported. Select any you want to import
-                                as a separate application.
+                                These match an application already in this list,
+                                so they will not be imported. Select any you
+                                want to add anyway.
                             </p>
                         </div>
                         <button
                             type="button"
                             onClick={() => onKeepAll(!keptAll)}
-                            className={`${secondaryButtonClass} shrink-0`}
+                            className={`${secondaryButtonClass} shrink-0 max-sm:w-full max-sm:justify-center`}
                         >
                             {keptAll ? "Clear selection" : "Select all"}
                         </button>
                     </div>
-                    <div className="mt-4 max-h-48 overflow-y-auto border border-faint">
-                        <div
-                            className={`${OUTCOME_GRID} border-b border-faint bg-surface px-3 py-1.5 pl-9 text-xs text-muted`}
-                        >
-                            <span>Your row</span>
-                            <span>Company</span>
-                            <span>Matches</span>
-                        </div>
+                    <div className="mt-4 max-h-64 overflow-y-auto border border-faint sm:max-h-48">
+                        <OutcomeHeader detail="Matches" inset />
                         {duplicates.map((row) => (
                             <label
                                 key={row.line}
@@ -642,16 +714,10 @@ const ReviewStep = ({
             {partial.length > 0 && (
                 <Section
                     title="Imported without some values"
-                    note="These rows will be imported. The columns listed could not be read, so they will be left blank."
+                    note="The columns listed could not be read and will be left blank."
                 >
-                    <div className="max-h-48 overflow-y-auto border border-faint">
-                        <div
-                            className={`${OUTCOME_GRID} border-b border-faint bg-surface px-3 py-1.5 text-xs text-muted`}
-                        >
-                            <span>Your row</span>
-                            <span>Company</span>
-                            <span>Left empty</span>
-                        </div>
+                    <div className="max-h-64 overflow-y-auto border border-faint sm:max-h-48">
+                        <OutcomeHeader detail="Left empty" />
                         {partial.map((row) => (
                             <div
                                 key={row.line}
@@ -675,14 +741,8 @@ const ReviewStep = ({
                     title="Skipped"
                     note="These rows cannot be imported. Fix them in your file and import it again."
                 >
-                    <div className="max-h-48 overflow-y-auto border border-faint">
-                        <div
-                            className={`${OUTCOME_GRID} border-b border-faint bg-surface px-3 py-1.5 text-xs text-muted`}
-                        >
-                            <span>Your row</span>
-                            <span>Company</span>
-                            <span>Reason</span>
-                        </div>
+                    <div className="max-h-64 overflow-y-auto border border-faint sm:max-h-48">
+                        <OutcomeHeader detail="Reason" />
                         {invalid.map((row) => (
                             <div
                                 key={row.line}
@@ -866,7 +926,7 @@ export const ImportDialog = ({
         >
             <div className="flex max-h-[85vh] flex-col">
                 <div className="h-0.75 shrink-0 bg-accent" aria-hidden="true" />
-                <header className="shrink-0 border-x border-b border-hairline px-5 py-4">
+                <header className="shrink-0 border-x border-b border-hairline px-4 py-4 sm:px-5">
                     <div className="flex items-start gap-3">
                         <div className="min-w-0 flex-1">
                             <h2
@@ -901,7 +961,7 @@ export const ImportDialog = ({
                     </div>
                 </header>
 
-                <div className="min-h-0 flex-1 overflow-y-auto border-x border-hairline px-5 py-5">
+                <div className="min-h-0 flex-1 overflow-y-auto border-x border-hairline px-4 py-5 sm:px-5">
                     {step === "file" && (
                         <FileStep busy={busy} onPick={pickFile} />
                     )}
@@ -961,10 +1021,13 @@ export const ImportDialog = ({
                     )}
                 </div>
 
-                <footer className="flex shrink-0 items-center justify-end gap-1 border-x border-t border-b border-hairline px-5 py-3">
+                <footer className="flex shrink-0 flex-wrap items-center justify-end gap-x-1 gap-y-2 border-x border-t border-b border-hairline px-4 py-3 sm:px-5">
+                    {/* Beside the buttons where there is room for it, on its own
+                    line where there is not: a reason clipped to three words is
+                    no reason at all. */}
                     {note && (
                         <p
-                            className={`mr-auto min-w-0 truncate text-xs ${error ? "text-rose" : "text-muted"}`}
+                            className={`min-w-0 truncate text-xs max-sm:w-full sm:mr-auto ${error ? "text-rose" : "text-muted"}`}
                         >
                             {note}
                         </p>

@@ -113,13 +113,13 @@ export const ApplicationsFilterMenu = ({
     }, [open]);
 
     return (
-        <div ref={ref} className="relative max-sm:grow">
+        <div ref={ref} className="relative shrink-0">
             <button
                 type="button"
                 onClick={() => setOpen((previous) => !previous)}
                 aria-haspopup="true"
                 aria-expanded={open}
-                className={`${secondaryButtonClass} max-sm:w-full max-sm:justify-center ${open || count > 0 ? "border-tile-border" : ""}`}
+                className={`${secondaryButtonClass} ${open || count > 0 ? "border-tile-border" : ""}`}
             >
                 <span
                     aria-hidden="true"
@@ -133,7 +133,7 @@ export const ApplicationsFilterMenu = ({
                 )}
             </button>
             {open && (
-                <div className="absolute right-0 z-30 mt-1 w-60 border border-hairline bg-background shadow-sm">
+                <div className="absolute right-0 z-30 mt-1 w-60 max-w-[calc(100vw-2.5rem)] border border-hairline bg-background shadow-sm">
                     <div className="flex items-center justify-between border-b border-hairline px-3 py-2">
                         <p className="text-xs font-medium text-muted">
                             Filter rows

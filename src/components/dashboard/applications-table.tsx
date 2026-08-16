@@ -889,7 +889,12 @@ export const ApplicationsTable = ({
                             ) : (
                                 <>
                                     {optimisticApplications.length > 0 && (
-                                        <>
+                                        // Held together on one line so the
+                                        // filter button ends it. Its menu hangs
+                                        // from the button's right edge, and on a
+                                        // phone that edge is the only one with
+                                        // the menu's width behind it.
+                                        <div className="flex items-center gap-2 max-sm:w-full">
                                             <SearchField
                                                 value={filters.query}
                                                 onChange={(query) =>
@@ -907,7 +912,7 @@ export const ApplicationsTable = ({
                                                 }
                                                 onChange={setFilters}
                                             />
-                                        </>
+                                        </div>
                                     )}
                                     {view.rows.length > 0 && (
                                         <>
