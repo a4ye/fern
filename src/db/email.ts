@@ -25,8 +25,7 @@ export const getApplicationsForUser = async (
     }));
 };
 
-export const insertEmailSuggestion = async (input: {
-    userId: string;
+export type EmailSuggestionInput = {
     applicationId: string;
     messageId: string;
     from: string;
@@ -37,21 +36,31 @@ export const insertEmailSuggestion = async (input: {
     suggestedStatus: ApplicationStatus;
     confidence: number;
     reasoning: string | null;
-}): Promise<boolean> => {
-    const row = await gen.insertEmailSuggestion(getPool(), {
-        userId: input.userId,
-        applicationId: input.applicationId,
-        messageId: input.messageId,
-        emailFrom: input.from,
-        emailSubject: input.subject,
-        emailSnippet: input.snippet,
-        emailReceivedAt: input.receivedAt,
-        currentStatus: input.currentStatus,
-        suggestedStatus: input.suggestedStatus,
-        confidence: input.confidence,
-        reasoning: input.reasoning,
+};
+
+export const insertEmailSuggestions = async (
+    userId: string,
+    inputs: EmailSuggestionInput[],
+): Promise<number> => {
+    if (inputs.length === 0) return 0;
+    const rows = await gen.insertEmailSuggestions(getPool(), {
+        userId,
+        rows: JSON.stringify(
+            inputs.map((input) => ({
+                application_id: input.applicationId,
+                message_id: input.messageId,
+                email_from: input.from,
+                email_subject: input.subject,
+                email_snippet: input.snippet,
+                email_received_at: input.receivedAt.toISOString(),
+                current_status: input.currentStatus,
+                suggested_status: input.suggestedStatus,
+                confidence: input.confidence,
+                reasoning: input.reasoning,
+            })),
+        ),
     });
-    return row !== null;
+    return rows.length;
 };
 
 const isStatus = (value: string): value is ApplicationStatus =>

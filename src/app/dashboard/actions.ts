@@ -43,16 +43,22 @@ import {
 import {
     applicationCreateSchema,
     applicationDetailSchema,
+    applicationIdSchema,
     applicationSchema,
     firstIssue,
     listCreateSchema,
     listUpdateSchema,
+    MAX_APPLICATION_BATCH,
     stepEditsSchema,
     timeZoneSchema,
     type ActionResult,
 } from "@/lib/validation";
 
 const NOT_SIGNED_IN = "You are not signed in." as const;
+
+const validApplicationIds = (ids: string[]): boolean =>
+    ids.length <= MAX_APPLICATION_BATCH &&
+    ids.every((id) => applicationIdSchema.safeParse(id).success);
 
 // Read when a row is opened rather than sent with the table. Returning null for
 // an application that is gone or was never this user's lets the panel open on
@@ -207,6 +213,12 @@ export const updateApplicationsBulk = async (
 ): Promise<ActionResult> => {
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session) return { ok: false, error: NOT_SIGNED_IN };
+    if (rows.length > MAX_APPLICATION_BATCH) {
+        return {
+            ok: false,
+            error: `You can edit ${MAX_APPLICATION_BATCH} applications at a time.`,
+        };
+    }
 
     const parsedTimeZone = timeZoneSchema.safeParse(timeZone);
     if (!parsedTimeZone.success) {
@@ -215,6 +227,9 @@ export const updateApplicationsBulk = async (
 
     const parsedRows = [];
     for (const row of rows) {
+        if (!applicationIdSchema.safeParse(row.id).success) {
+            return { ok: false, error: "Choose a valid application." };
+        }
         const parsed = applicationSchema.safeParse(row.input);
         if (!parsed.success) {
             const label = row.input.company.trim() || "a row";
@@ -288,7 +303,12 @@ export const setApplicationsStatus = async (
     timeZone: string,
 ): Promise<void> => {
     const session = await auth.api.getSession({ headers: await headers() });
-    if (!session || applicationIds.length === 0) return;
+    if (
+        !session ||
+        applicationIds.length === 0 ||
+        !validApplicationIds(applicationIds)
+    )
+        return;
 
     const parsedTimeZone = timeZoneSchema.safeParse(timeZone);
     if (!parsedTimeZone.success) return;
@@ -309,7 +329,12 @@ export const setApplicationsArrangement = async (
     arrangement: Arrangement | null,
 ): Promise<void> => {
     const session = await auth.api.getSession({ headers: await headers() });
-    if (!session || applicationIds.length === 0) return;
+    if (
+        !session ||
+        applicationIds.length === 0 ||
+        !validApplicationIds(applicationIds)
+    )
+        return;
 
     await setApplicationsArrangementDb(
         session.user.id,
@@ -337,7 +362,12 @@ export const removeApplications = async (
     applicationIds: string[],
 ): Promise<void> => {
     const session = await auth.api.getSession({ headers: await headers() });
-    if (!session || applicationIds.length === 0) return;
+    if (
+        !session ||
+        applicationIds.length === 0 ||
+        !validApplicationIds(applicationIds)
+    )
+        return;
 
     await deleteApplicationsDb(session.user.id, applicationIds);
     revalidatePath(`/dashboard/${listId}`);

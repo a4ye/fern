@@ -149,7 +149,8 @@ select
 from applications a
 join lists l on l.id = a.list_id
 where l.user_id = @user_id
-order by a.updated_at desc;
+order by a.updated_at desc
+limit 2000;
 
 -- name: GetApplicationForUser :one
 select a.id, a.status
@@ -167,6 +168,76 @@ join lists l on l.id = a.list_id
 where a.id = any(@application_ids::uuid[]) and l.user_id = @user_id
 order by a.id
 for update of a;
+
+-- A quick-edit batch is locked, updated, and given status-history rows in one
+-- statement. JSON keeps the fields for each row together while avoiding a
+-- network round trip per application.
+-- name: UpdateApplicationsBulk :exec
+with locked as materialized (
+    select
+        a.id,
+        a.status as old_status,
+        input.value ->> 'company_name' as company_name,
+        input.value ->> 'role_title' as role_title,
+        input.value ->> 'status' as status,
+        input.value ->> 'url' as url,
+        input.value ->> 'location' as location,
+        input.value ->> 'arrangement' as arrangement,
+        input.value ->> 'applied_at' as applied_at,
+        (input.value ->> 'pay_typed')::boolean as pay_typed,
+        input.value ->> 'pay_min' as pay_min,
+        input.value ->> 'pay_max' as pay_max,
+        input.value ->> 'pay_currency' as pay_currency,
+        input.value ->> 'pay_period' as pay_period,
+        input.value ->> 'pay_note' as pay_note
+    from applications a
+    join lists l on l.id = a.list_id
+    join jsonb_array_elements(@rows::jsonb) as input(value)
+        on (input.value ->> 'id')::uuid = a.id
+    where l.user_id = @user_id
+    order by a.id
+    for update of a
+),
+updated as (
+    update applications a
+    set
+        company_name = row.company_name,
+        role_title = row.role_title,
+        status = row.status::application_status,
+        url = row.url,
+        location = row.location,
+        arrangement = row.arrangement::work_arrangement,
+        applied_at = case
+            when a.applied_at is null
+                and a.status <> 'applied'
+                and row.status::application_status = 'applied'
+                and row.applied_at::date is null
+            then (current_timestamp at time zone @time_zone::text)::date
+            else row.applied_at::date
+        end,
+        pay_min = case
+            when row.pay_typed then row.pay_min::numeric else a.pay_min
+        end,
+        pay_max = case
+            when row.pay_typed then row.pay_max::numeric else a.pay_max
+        end,
+        pay_currency = case
+            when row.pay_typed then row.pay_currency else a.pay_currency
+        end,
+        pay_period = case
+            when row.pay_typed then row.pay_period::pay_period else a.pay_period
+        end,
+        pay_note = case
+            when row.pay_typed then row.pay_note else a.pay_note
+        end
+    from locked row
+    where a.id = row.id
+    returning a.id, row.old_status, a.status as new_status
+)
+insert into application_events (application_id, from_status, to_status)
+select id, old_status, new_status
+from updated
+where old_status <> new_status;
 
 -- name: UpdateApplication :exec
 update applications a
@@ -285,7 +356,8 @@ set
 from lists l
 where a.list_id = l.id
     and a.id = any(@application_ids::uuid[])
-    and l.user_id = @user_id;
+    and l.user_id = @user_id
+    and a.status <> @status::application_status;
 
 -- name: SetApplicationsArrangement :exec
 update applications a
@@ -293,7 +365,9 @@ set arrangement = sqlc.narg('arrangement')::work_arrangement
 from lists l
 where a.list_id = l.id
     and a.id = any(@application_ids::uuid[])
-    and l.user_id = @user_id;
+    and l.user_id = @user_id
+    and a.arrangement is distinct from
+        sqlc.narg('arrangement')::work_arrangement;
 
 -- name: SetApplicationStatus :exec
 update applications a

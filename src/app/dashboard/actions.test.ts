@@ -57,6 +57,7 @@ const {
 } = await import("@/app/dashboard/actions");
 
 const SIGNED_OUT = { ok: false, error: "You are not signed in." };
+const APPLICATION_ID = "00000000-0000-4000-8000-000000000001";
 const revalidated = () => revalidatePath.mock.calls.flat();
 
 beforeEach(() => {
@@ -211,14 +212,14 @@ describe("setApplicationsStatus", () => {
     it("passes a validated browser time zone to the status write", async () => {
         await setApplicationsStatus(
             "list-1",
-            ["app-1"],
+            [APPLICATION_ID],
             "applied",
             "America/Toronto",
         );
 
         expect(db.setApplicationsStatus.mock.calls[0]).toEqual([
             "user-1",
-            ["app-1"],
+            [APPLICATION_ID],
             "applied",
             "America/Toronto",
         ]);
@@ -228,7 +229,7 @@ describe("setApplicationsStatus", () => {
     it("rejects an invalid time zone before writing", async () => {
         await setApplicationsStatus(
             "list-1",
-            ["app-1"],
+            [APPLICATION_ID],
             "applied",
             "Moon/Sea_of_Tranquility",
         );
@@ -278,7 +279,7 @@ describe("application write revalidation", () => {
     it("refreshes the list detail and overview after bulk editing applications", async () => {
         await updateApplicationsBulk(
             "list-1",
-            [{ id: "app-1", input: quickEdit, payTyped: false }],
+            [{ id: APPLICATION_ID, input: quickEdit, payTyped: false }],
             "America/Toronto",
         );
 
@@ -298,7 +299,7 @@ describe("application write revalidation", () => {
     });
 
     it("refreshes the list detail and overview after changing arrangement", async () => {
-        await setApplicationsArrangement("list-1", ["app-1"], "remote");
+        await setApplicationsArrangement("list-1", [APPLICATION_ID], "remote");
 
         expect(revalidated()).toEqual(["/dashboard/list-1", "/dashboard"]);
     });

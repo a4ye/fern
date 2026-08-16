@@ -294,7 +294,8 @@ select
 from applications a
 join lists l on l.id = a.list_id
 where l.user_id = $1
-order by a.updated_at desc`;
+order by a.updated_at desc
+limit 2000`;
 
 export interface ApplicationsForUserArgs {
     userId: string;
@@ -387,6 +388,87 @@ export async function lockApplicationsForUser(client: Client, args: LockApplicat
         return {
             id: row[0]
         };
+    });
+}
+
+export const updateApplicationsBulkQuery = `-- name: UpdateApplicationsBulk :exec
+with locked as materialized (
+    select
+        a.id,
+        a.status as old_status,
+        input.value ->> 'company_name' as company_name,
+        input.value ->> 'role_title' as role_title,
+        input.value ->> 'status' as status,
+        input.value ->> 'url' as url,
+        input.value ->> 'location' as location,
+        input.value ->> 'arrangement' as arrangement,
+        input.value ->> 'applied_at' as applied_at,
+        (input.value ->> 'pay_typed')::boolean as pay_typed,
+        input.value ->> 'pay_min' as pay_min,
+        input.value ->> 'pay_max' as pay_max,
+        input.value ->> 'pay_currency' as pay_currency,
+        input.value ->> 'pay_period' as pay_period,
+        input.value ->> 'pay_note' as pay_note
+    from applications a
+    join lists l on l.id = a.list_id
+    join jsonb_array_elements($1::jsonb) as input(value)
+        on (input.value ->> 'id')::uuid = a.id
+    where l.user_id = $2
+    order by a.id
+    for update of a
+),
+updated as (
+    update applications a
+    set
+        company_name = row.company_name,
+        role_title = row.role_title,
+        status = row.status::application_status,
+        url = row.url,
+        location = row.location,
+        arrangement = row.arrangement::work_arrangement,
+        applied_at = case
+            when a.applied_at is null
+                and a.status <> 'applied'
+                and row.status::application_status = 'applied'
+                and row.applied_at::date is null
+            then (current_timestamp at time zone $3::text)::date
+            else row.applied_at::date
+        end,
+        pay_min = case
+            when row.pay_typed then row.pay_min::numeric else a.pay_min
+        end,
+        pay_max = case
+            when row.pay_typed then row.pay_max::numeric else a.pay_max
+        end,
+        pay_currency = case
+            when row.pay_typed then row.pay_currency else a.pay_currency
+        end,
+        pay_period = case
+            when row.pay_typed then row.pay_period::pay_period else a.pay_period
+        end,
+        pay_note = case
+            when row.pay_typed then row.pay_note else a.pay_note
+        end
+    from locked row
+    where a.id = row.id
+    returning a.id, row.old_status, a.status as new_status
+)
+insert into application_events (application_id, from_status, to_status)
+select id, old_status, new_status
+from updated
+where old_status <> new_status`;
+
+export interface UpdateApplicationsBulkArgs {
+    rows: any;
+    userId: string;
+    timeZone: string;
+}
+
+export async function updateApplicationsBulk(client: Client, args: UpdateApplicationsBulkArgs): Promise<void> {
+    await client.query({
+        text: updateApplicationsBulkQuery,
+        values: [args.rows, args.userId, args.timeZone],
+        rowMode: "array"
     });
 }
 
@@ -611,7 +693,8 @@ set
 from lists l
 where a.list_id = l.id
     and a.id = any($3::uuid[])
-    and l.user_id = $4`;
+    and l.user_id = $4
+    and a.status <> $1::application_status`;
 
 export interface SetApplicationsStatusArgs {
     status: string;
@@ -634,7 +717,9 @@ set arrangement = $1::work_arrangement
 from lists l
 where a.list_id = l.id
     and a.id = any($2::uuid[])
-    and l.user_id = $3`;
+    and l.user_id = $3
+    and a.arrangement is distinct from
+        $1::work_arrangement`;
 
 export interface SetApplicationsArrangementArgs {
     arrangement: string | null;

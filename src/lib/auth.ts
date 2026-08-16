@@ -1,5 +1,7 @@
 import { betterAuth } from "better-auth";
 import { nextCookies } from "better-auth/next-js";
+import { cache } from "react";
+import { headers } from "next/headers";
 import { getPool } from "@/db/client";
 
 const requiredEnv = (name: string): string => {
@@ -67,3 +69,9 @@ export const auth = betterAuth({
     },
     plugins: [nextCookies()],
 });
+
+// Layouts, pages, and metadata are rendered as separate Server Components. Keep
+// their authentication check to one database read for the lifetime of a request.
+export const getRequestSession = cache(async () =>
+    auth.api.getSession({ headers: await headers() }),
+);

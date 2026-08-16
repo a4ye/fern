@@ -4,7 +4,11 @@ import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { importApplications } from "@/db/dashboard";
-import { readSheet, type SheetResult } from "@/lib/import/sheet";
+import {
+    MAX_IMPORT_ROWS,
+    readSheet,
+    type SheetResult,
+} from "@/lib/import/sheet";
 import type { ImportDraft } from "@/lib/import/rows";
 import { importRowSchema, timeZoneSchema, firstIssue } from "@/lib/validation";
 
@@ -37,6 +41,12 @@ export const commitImport = async (
 
     if (drafts.length === 0) {
         return { ok: false, error: "There is nothing to import." };
+    }
+    if (drafts.length > MAX_IMPORT_ROWS) {
+        return {
+            ok: false,
+            error: `You can import ${MAX_IMPORT_ROWS} rows at a time.`,
+        };
     }
 
     const parsedTimeZone = timeZoneSchema.safeParse(timeZone);

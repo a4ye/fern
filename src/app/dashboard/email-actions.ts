@@ -7,7 +7,7 @@ import {
     applySuggestion,
     dismissSuggestion,
     getApplicationsForUser,
-    insertEmailSuggestion,
+    insertEmailSuggestions,
     recordEmailSync,
 } from "@/db/email";
 import { classifyEmails } from "@/lib/email/classify";
@@ -88,29 +88,39 @@ export const syncInbox = async (): Promise<SyncResult> => {
             emails,
         );
 
-        let found = 0;
+        const suggestions = new Map<string, (typeof matches)[number]>();
         for (const match of matches) {
             const email = emails[match.emailIndex];
             const application = applications[match.applicationIndex];
             // Skip matches that only restate the current status.
             if (application.status === match.suggestedStatus) continue;
-
-            const inserted = await insertEmailSuggestion({
-                userId,
-                applicationId: application.id,
-                messageId: email.id,
-                from: email.from,
-                subject: email.subject,
-                snippet: email.snippet,
-                receivedAt: email.receivedAt,
-                currentStatus: application.status,
-                suggestedStatus: match.suggestedStatus,
-                confidence: match.confidence,
-                reasoning: match.reasoning,
-            });
-            if (inserted) found += 1;
+            const key = `${application.id}\u0000${email.id}`;
+            const previous = suggestions.get(key);
+            if (!previous || previous.confidence < match.confidence) {
+                suggestions.set(key, match);
+            }
+            if (suggestions.size >= MAX_EMAILS) break;
         }
 
+        const found = await insertEmailSuggestions(
+            userId,
+            [...suggestions.values()].map((match) => {
+                const email = emails[match.emailIndex];
+                const application = applications[match.applicationIndex];
+                return {
+                    applicationId: application.id,
+                    messageId: email.id,
+                    from: email.from,
+                    subject: email.subject,
+                    snippet: email.snippet,
+                    receivedAt: email.receivedAt,
+                    currentStatus: application.status,
+                    suggestedStatus: match.suggestedStatus,
+                    confidence: match.confidence,
+                    reasoning: match.reasoning,
+                };
+            }),
+        );
         await recordEmailSync(userId);
         revalidatePath("/dashboard", "layout");
         return { ok: true, found, scanned: emails.length };

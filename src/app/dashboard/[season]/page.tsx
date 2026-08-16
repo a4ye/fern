@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { headers } from "next/headers";
+import { cache } from "react";
 import { notFound, redirect } from "next/navigation";
-import { auth } from "@/lib/auth";
+import { getRequestSession } from "@/lib/auth";
 import { getListDetail } from "@/db/dashboard";
 import { ApplicationsTable } from "@/components/dashboard/applications-table";
 import { listsHrefFrom } from "@/components/dashboard/data";
@@ -14,20 +14,22 @@ type Props = {
     searchParams: Promise<{ from?: string }>;
 };
 
+const loadListDetail = cache(getListDetail);
+
 export const generateMetadata = async ({
     params,
 }: Props): Promise<Metadata> => {
-    const session = await auth.api.getSession({ headers: await headers() });
+    const session = await getRequestSession();
     if (!session) return { title: "List" };
-    const detail = await getListDetail(session.user.id, (await params).season);
+    const detail = await loadListDetail(session.user.id, (await params).season);
     return { title: detail ? detail.name : "List" };
 };
 
 const SeasonPage = async ({ params, searchParams }: Props) => {
-    const session = await auth.api.getSession({ headers: await headers() });
+    const session = await getRequestSession();
     if (!session) redirect("/login");
 
-    const detail = await getListDetail(session.user.id, (await params).season);
+    const detail = await loadListDetail(session.user.id, (await params).season);
     if (!detail) notFound();
 
     return (

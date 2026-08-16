@@ -27,6 +27,7 @@ import {
 import { parsePay } from "@/lib/pay";
 
 const STATUS_ORDER = Object.keys(STATUS_META) as ApplicationStatus[];
+type QueryClient = Pick<PoolClient, "query">;
 
 export type ListsPage = {
     lists: ListSummary[];
@@ -40,31 +41,42 @@ export const getListsForUser = async (
     options: { search: string; sort: ListSort; page: number; pageSize: number },
 ): Promise<ListsPage> => {
     const pool = getPool();
-    const count = await gen.countListsForUser(pool, {
-        userId,
-        search: options.search,
-    });
-    const total = count?.total ?? 0;
-    const pageCount = Math.max(1, Math.ceil(total / options.pageSize));
-    const page = Math.min(Math.max(1, options.page), pageCount);
+    const requestedPage = Math.max(1, options.page);
+    const loadPage = (page: number) =>
+        gen.listsPageForUser(pool, {
+            userId,
+            search: options.search,
+            sort: options.sort,
+            pageLimit: options.pageSize,
+            pageOffset: (page - 1) * options.pageSize,
+        });
 
-    const rows = await gen.listListsForUser(pool, {
-        userId,
-        search: options.search,
-        sort: options.sort,
-        pageLimit: options.pageSize,
-        pageOffset: (page - 1) * options.pageSize,
-    });
+    let rows = await loadPage(requestedPage);
+    const total = rows[0]?.total ?? 0;
+    const pageCount = Math.max(1, Math.ceil(total / options.pageSize));
+    const page = Math.min(requestedPage, pageCount);
+
+    if (page !== requestedPage) rows = await loadPage(page);
     return {
-        lists: rows.map((row) => ({
-            id: row.id,
-            name: row.name,
-            description: row.description,
-            status: row.status as ListStatus,
-            pinned: row.pinnedAt !== null,
-            updatedAt: row.updatedAt.toISOString(),
-            totalApplications: row.totalApplications,
-        })),
+        lists: rows.flatMap((row) =>
+            row.id &&
+            row.name &&
+            row.status &&
+            row.updatedAt &&
+            row.totalApplications !== null
+                ? [
+                      {
+                          id: row.id,
+                          name: row.name,
+                          description: row.description,
+                          status: row.status as ListStatus,
+                          pinned: row.pinnedAt !== null,
+                          updatedAt: row.updatedAt.toISOString(),
+                          totalApplications: row.totalApplications,
+                      },
+                  ]
+                : [],
+        ),
         total,
         page,
         pageCount,
@@ -107,18 +119,6 @@ const parseDateInput = (value: string | null): Date | null => {
     const [year, month, day] = value.split("-").map(Number);
     return new Date(year, month - 1, day);
 };
-
-// The columns an update writes, minus pay, which only some of them write.
-const columnsFrom = (input: ApplicationInput, timeZone: string) => ({
-    companyName: input.company,
-    roleTitle: input.role,
-    status: input.status,
-    url: input.url,
-    location: input.location,
-    arrangement: input.arrangement,
-    appliedAt: parseDateInput(input.appliedAt),
-    timeZone,
-});
 
 export const createApplication = async (
     userId: string,
@@ -193,70 +193,39 @@ export const importApplications = async (
     return inserted.length;
 };
 
-// One row of the quick edit grid. `payTyped` says whether the pay box was
-// actually edited: the grid holds pay as one line of text, so writing it back
-// when it was only sitting there would flatten a range, currency and note the
-// detail panel had set.
-const updateApplication = async (
-    client: PoolClient,
-    userId: string,
-    applicationId: string,
-    input: ApplicationInput,
-    payTyped: boolean,
-    timeZone: string,
-): Promise<void> => {
-    const current = await gen.getApplicationForUser(client, {
-        applicationId,
-        userId,
-    });
-    if (!current) return;
-
-    const columns = {
-        applicationId,
-        userId,
-        ...columnsFrom(input, timeZone),
-    };
-    if (payTyped) {
-        await gen.updateApplication(client, {
-            ...columns,
-            ...parsePay(input.pay),
-        });
-    } else {
-        await gen.updateApplicationFields(client, columns);
-    }
-
-    if (current.status !== input.status) {
-        await gen.insertApplicationEvent(client, {
-            applicationId,
-            fromStatus: current.status,
-            toStatus: input.status,
-            note: null,
-        });
-    }
-};
-
 export const updateApplications = async (
     userId: string,
     rows: { id: string; input: ApplicationInput; payTyped: boolean }[],
     timeZone: string,
-): Promise<void> =>
-    withTransaction(async (client) => {
-        // A stable lock order prevents two overlapping bulk edits from taking
-        // the same application locks in opposite orders.
-        const orderedRows = [...rows].sort((left, right) =>
-            left.id.localeCompare(right.id),
-        );
-        for (const row of orderedRows) {
-            await updateApplication(
-                client,
-                userId,
-                row.id,
-                row.input,
-                row.payTyped,
-                timeZone,
-            );
-        }
+): Promise<void> => {
+    if (rows.length === 0) return;
+
+    const payload = rows.map((row) => {
+        const pay = row.payTyped ? parsePay(row.input.pay) : null;
+        return {
+            id: row.id,
+            company_name: row.input.company,
+            role_title: row.input.role,
+            status: row.input.status,
+            url: row.input.url,
+            location: row.input.location,
+            arrangement: row.input.arrangement,
+            applied_at: row.input.appliedAt,
+            pay_typed: row.payTyped,
+            pay_min: pay?.payMin ?? null,
+            pay_max: pay?.payMax ?? null,
+            pay_currency: pay?.payCurrency ?? null,
+            pay_period: pay?.payPeriod ?? null,
+            pay_note: pay?.payNote ?? null,
+        };
     });
+
+    await gen.updateApplicationsBulk(getPool(), {
+        rows: JSON.stringify(payload),
+        userId,
+        timeZone,
+    });
+};
 
 // Everything the detail panel edits. Amounts are decimal strings, since that is
 // how numeric columns arrive and leave, and rounding them through a float would
@@ -278,7 +247,7 @@ export type ApplicationDetail = {
 };
 
 const saveApplicationDetailWithClient = async (
-    client: PoolClient,
+    client: QueryClient,
     userId: string,
     applicationId: string,
     detail: ApplicationDetail,
@@ -314,73 +283,17 @@ export const saveApplicationDetail = async (
 // Records a step in the history and leaves the application sitting at it. The
 // status it already holds is a valid step: that is how a second interview is
 // logged, and the chart draws it as a round of its own.
-const logStatusStepWithClient = async (
-    client: PoolClient,
-    userId: string,
-    applicationId: string,
-    status: ApplicationStatus,
-    timeZone: string,
-): Promise<void> => {
-    const current = await gen.getApplicationForUser(client, {
-        applicationId,
-        userId,
-    });
-    if (!current) return;
-
-    await gen.insertApplicationEvent(client, {
-        applicationId,
-        fromStatus: current.status,
-        toStatus: status,
-        note: null,
-    });
-    await gen.setApplicationStatus(client, {
-        applicationId,
-        userId,
-        status,
-        timeZone,
-    });
-};
-
 export const logStatusStep = async (
     userId: string,
     applicationId: string,
     status: ApplicationStatus,
     timeZone: string,
-): Promise<void> =>
-    withTransaction((client) =>
-        logStatusStepWithClient(
-            client,
-            userId,
-            applicationId,
-            status,
-            timeZone,
-        ),
-    );
-
-const removeStatusStepWithClient = async (
-    client: PoolClient,
-    userId: string,
-    applicationId: string,
-    eventId: string,
-    timeZone: string,
 ): Promise<void> => {
-    const steps = await gen.statusEventsForApplication(client, {
+    await gen.applyStatusStepEdits(getPool(), {
         applicationId,
         userId,
-    });
-    if (!steps.some((step) => step.id === eventId)) return;
-
-    await gen.deleteApplicationEvent(client, {
-        eventId,
-        applicationId,
-        userId,
-    });
-
-    const remaining = steps.filter((step) => step.id !== eventId);
-    await gen.setApplicationStatus(client, {
-        applicationId,
-        userId,
-        status: remaining[remaining.length - 1]?.toStatus ?? "not_applied",
+        removedEventIds: [],
+        addedStatuses: [status],
         timeZone,
     });
 };
@@ -389,38 +302,20 @@ const removeStatusStepWithClient = async (
 // a step removed and re-recorded in the same edit still ends up last, which is
 // where the application is left sitting.
 const applyStatusStepEditsWithClient = async (
-    client: PoolClient,
+    client: QueryClient,
     userId: string,
     applicationId: string,
     edits: { removed: string[]; added: ApplicationStatus[] },
     timeZone: string,
 ): Promise<void> => {
-    // Lock the application before touching its history so another request
-    // cannot add a step between reading the history and updating the status.
-    const application = await gen.getApplicationForUser(client, {
+    if (edits.removed.length === 0 && edits.added.length === 0) return;
+    await gen.applyStatusStepEdits(client, {
         applicationId,
         userId,
+        removedEventIds: edits.removed,
+        addedStatuses: edits.added,
+        timeZone,
     });
-    if (!application) return;
-
-    for (const eventId of edits.removed) {
-        await removeStatusStepWithClient(
-            client,
-            userId,
-            applicationId,
-            eventId,
-            timeZone,
-        );
-    }
-    for (const status of edits.added) {
-        await logStatusStepWithClient(
-            client,
-            userId,
-            applicationId,
-            status,
-            timeZone,
-        );
-    }
 };
 
 export const applyStatusStepEdits = async (
@@ -428,16 +323,15 @@ export const applyStatusStepEdits = async (
     applicationId: string,
     edits: { removed: string[]; added: ApplicationStatus[] },
     timeZone: string,
-): Promise<void> =>
-    withTransaction((client) =>
-        applyStatusStepEditsWithClient(
-            client,
-            userId,
-            applicationId,
-            edits,
-            timeZone,
-        ),
+): Promise<void> => {
+    await applyStatusStepEditsWithClient(
+        getPool(),
+        userId,
+        applicationId,
+        edits,
+        timeZone,
     );
+};
 
 export const saveApplicationDetailAndSteps = async (
     userId: string,
@@ -445,8 +339,18 @@ export const saveApplicationDetailAndSteps = async (
     detail: ApplicationDetail,
     edits: { removed: string[]; added: ApplicationStatus[] },
     timeZone: string,
-): Promise<void> =>
-    withTransaction(async (client) => {
+): Promise<void> => {
+    if (edits.removed.length === 0 && edits.added.length === 0) {
+        await saveApplicationDetailWithClient(
+            getPool(),
+            userId,
+            applicationId,
+            detail,
+        );
+        return;
+    }
+
+    await withTransaction(async (client) => {
         await saveApplicationDetailWithClient(
             client,
             userId,
@@ -461,6 +365,7 @@ export const saveApplicationDetailAndSteps = async (
             timeZone,
         );
     });
+};
 
 // Takes back a recorded step, so removing the one just logged is an undo. The
 // application is left where the last remaining step put it, and with no steps
@@ -470,21 +375,15 @@ export const removeStatusStep = async (
     applicationId: string,
     eventId: string,
     timeZone: string,
-): Promise<void> =>
-    withTransaction(async (client) => {
-        const application = await gen.getApplicationForUser(client, {
-            applicationId,
-            userId,
-        });
-        if (!application) return;
-        await removeStatusStepWithClient(
-            client,
-            userId,
-            applicationId,
-            eventId,
-            timeZone,
-        );
+): Promise<void> => {
+    await gen.applyStatusStepEdits(getPool(), {
+        applicationId,
+        userId,
+        removedEventIds: [eventId],
+        addedStatuses: [],
+        timeZone,
     });
+};
 
 export const setApplicationsStatus = async (
     userId: string,
@@ -571,13 +470,10 @@ export const getListDetail = async (
     const list = await gen.getListForUser(pool, { id: listId, userId });
     if (!list) return null;
 
-    const [applicationRows, pipelineRows, eventRows, statusEventRows] =
-        await Promise.all([
-            gen.listApplicationsForList(pool, { listId }),
-            gen.pipelineForList(pool, { listId }),
-            gen.recentEventsForList(pool, { listId }),
-            gen.statusEventsForList(pool, { listId }),
-        ]);
+    const [applicationRows, statusEventRows] = await Promise.all([
+        gen.listApplicationsForList(pool, { listId }),
+        gen.statusEventsForList(pool, { listId }),
+    ]);
 
     // Rows arrive ordered by application and time, so appending each event's
     // target status replays the trail. The first event also contributes where it
@@ -645,8 +541,9 @@ export const getListDetail = async (
     });
 
     const counts = new Map<ApplicationStatus, number>();
-    for (const row of pipelineRows) {
-        counts.set(row.status as ApplicationStatus, row.count);
+    for (const row of applicationRows) {
+        const status = row.status as ApplicationStatus;
+        counts.set(status, (counts.get(status) ?? 0) + 1);
     }
     const sumOf = (statuses: ApplicationStatus[]): number =>
         statuses.reduce(
@@ -676,13 +573,20 @@ export const getListDetail = async (
         { label: "Offers", value: String(sumOf(OFFER_STATUSES)) },
     ];
 
-    const activity: ActivityItem[] = eventRows.map((row, index) => ({
-        id: `${row.companyName}-${row.occurredAt.getTime()}-${index}`,
-        company: row.companyName,
-        toStatus: row.toStatus ? (row.toStatus as ApplicationStatus) : null,
-        note: row.note,
-        when: formatRelative(row.occurredAt),
-    }));
+    const activity: ActivityItem[] = [...statusEventRows]
+        .sort(
+            (left, right) =>
+                right.occurredAt.getTime() - left.occurredAt.getTime() ||
+                right.id.localeCompare(left.id),
+        )
+        .slice(0, 12)
+        .map((row) => ({
+            id: row.id,
+            company: row.companyName,
+            toStatus: row.toStatus ? (row.toStatus as ApplicationStatus) : null,
+            note: row.note,
+            when: formatRelative(row.occurredAt),
+        }));
 
     return {
         id: list.id,

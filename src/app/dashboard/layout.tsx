@@ -1,10 +1,9 @@
 import type { ReactNode } from "react";
-import { headers } from "next/headers";
-import { auth } from "@/lib/auth";
+import { getRequestSession } from "@/lib/auth";
 import { DashboardTopBar } from "@/components/dashboard/top-bar";
 
 const DashboardLayout = async ({ children }: { children: ReactNode }) => {
-    const session = await auth.api.getSession({ headers: await headers() });
+    const session = await getRequestSession();
     const name = session?.user.name ?? "there";
     const image = session?.user.image ?? null;
 

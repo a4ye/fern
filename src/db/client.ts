@@ -11,7 +11,15 @@ export function getPool(): Pool {
                     "Copy .env.example to .env and set your Neon connection string.",
             );
         }
-        pool = new Pool({ connectionString });
+        pool = new Pool({
+            connectionString,
+            // Keep one warm application instance from consuming the database's
+            // connection budget, and fail promptly instead of queueing forever.
+            max: 5,
+            connectionTimeoutMillis: 5_000,
+            idleTimeoutMillis: 10_000,
+            query_timeout: 15_000,
+        });
     }
     return pool;
 }

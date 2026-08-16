@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { auth } from "@/lib/auth";
+import { getRequestSession } from "@/lib/auth";
 import { getListsForUser } from "@/db/dashboard";
 import { loadEmailPanel } from "@/lib/email/panel";
 import { LIST_PAGE_SIZE, parseListSort } from "@/components/dashboard/data";
@@ -17,7 +17,7 @@ const DashboardPage = async ({
     searchParams: Promise<{ q?: string; sort?: string; page?: string }>;
 }) => {
     const requestHeaders = await headers();
-    const session = await auth.api.getSession({ headers: requestHeaders });
+    const session = await getRequestSession();
     if (!session) redirect("/login");
 
     const params = await searchParams;

@@ -47,11 +47,18 @@ export async function recentEventsForList(client: Client, args: RecentEventsForL
 }
 
 export const statusEventsForListQuery = `-- name: StatusEventsForList :many
-select e.id, e.application_id, e.from_status, e.to_status, e.occurred_at
+select
+    e.id,
+    e.application_id,
+    a.company_name,
+    e.from_status,
+    e.to_status,
+    e.note,
+    e.occurred_at
 from application_events e
 join applications a on a.id = e.application_id
 where a.list_id = $1
-order by e.application_id, e.occurred_at`;
+order by e.application_id, e.occurred_at, e.id`;
 
 export interface StatusEventsForListArgs {
     listId: string;
@@ -60,8 +67,10 @@ export interface StatusEventsForListArgs {
 export interface StatusEventsForListRow {
     id: string;
     applicationId: string;
+    companyName: string;
     fromStatus: string | null;
     toStatus: string | null;
+    note: string | null;
     occurredAt: Date;
 }
 
@@ -75,9 +84,11 @@ export async function statusEventsForList(client: Client, args: StatusEventsForL
         return {
             id: row[0],
             applicationId: row[1],
-            fromStatus: row[2],
-            toStatus: row[3],
-            occurredAt: row[4]
+            companyName: row[2],
+            fromStatus: row[3],
+            toStatus: row[4],
+            note: row[5],
+            occurredAt: row[6]
         };
     });
 }
@@ -156,6 +167,110 @@ export async function insertApplicationEvent(client: Client, args: InsertApplica
     await client.query({
         text: insertApplicationEventQuery,
         values: [args.applicationId, args.fromStatus, args.toStatus, args.note],
+        rowMode: "array"
+    });
+}
+
+export const applyStatusStepEditsQuery = `-- name: ApplyStatusStepEdits :exec
+with locked as materialized (
+    select a.id, a.status
+    from applications a
+    join lists l on l.id = a.list_id
+    where a.id = $2 and l.user_id = $3
+    for update of a
+),
+deleted as (
+    delete from application_events e
+    using locked
+    where e.application_id = locked.id
+        and e.id = any($4::uuid[])
+    returning e.id
+),
+base as materialized (
+    select
+        locked.id,
+        case
+            when exists (select 1 from deleted) then coalesce(
+                (
+                    select e.to_status
+                    from application_events e
+                    where e.application_id = locked.id
+                        and not (e.id = any($4::uuid[]))
+                    order by e.occurred_at desc, e.id desc
+                    limit 1
+                ),
+                'not_applied'::application_status
+            )
+            else locked.status
+        end as status
+    from locked
+),
+additions as materialized (
+    select addition.status, addition.ordinality
+    from unnest($5::application_status[])
+        with ordinality as addition(status, ordinality)
+),
+inserted as (
+    insert into application_events (
+        application_id,
+        from_status,
+        to_status,
+        occurred_at
+    )
+    select
+        base.id,
+        case
+            when addition.ordinality = 1 then base.status
+            else lag(addition.status) over (order by addition.ordinality)
+        end,
+        addition.status,
+        statement_timestamp()
+            + ((addition.ordinality - 1) * interval '1 microsecond')
+    from base
+    cross join additions addition
+    returning to_status, occurred_at
+),
+final_status as (
+    select coalesce(
+        (
+            select inserted.to_status
+            from inserted
+            order by inserted.occurred_at desc
+            limit 1
+        ),
+        base.status
+    ) as status
+    from base
+)
+update applications a
+set
+    status = final_status.status,
+    applied_at = case
+        when final_status.status = 'applied' then coalesce(
+            a.applied_at,
+            (current_timestamp at time zone $1::text)::date
+        )
+        else a.applied_at
+    end
+from final_status
+where a.id = $2
+    and (
+        exists (select 1 from deleted)
+        or exists (select 1 from inserted)
+    )`;
+
+export interface ApplyStatusStepEditsArgs {
+    timeZone: string;
+    applicationId: string;
+    userId: string;
+    removedEventIds: string[];
+    addedStatuses: string[];
+}
+
+export async function applyStatusStepEdits(client: Client, args: ApplyStatusStepEditsArgs): Promise<void> {
+    await client.query({
+        text: applyStatusStepEditsQuery,
+        values: [args.timeZone, args.applicationId, args.userId, args.removedEventIds, args.addedStatuses],
         rowMode: "array"
     });
 }

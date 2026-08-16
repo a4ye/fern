@@ -29,6 +29,27 @@ const transactionClient = { transaction: true };
 
 const countListsForUser = mock(async (..._args: unknown[]) => ({ total }));
 const listListsForUser = mock(async (..._args: unknown[]) => rows);
+const listsPageForUser = mock(async (..._args: unknown[]) =>
+    rows.length > 0
+        ? rows.map((item, index) => ({
+              ...item,
+              total,
+              pageOrder: String(index + 1),
+          }))
+        : [
+              {
+                  id: null,
+                  name: null,
+                  description: null,
+                  status: null,
+                  pinnedAt: null,
+                  updatedAt: null,
+                  totalApplications: null,
+                  total,
+                  pageOrder: null,
+              },
+          ],
+);
 const getListForUser = mock(async (..._args: unknown[]) => row());
 const listApplicationsForList = mock(
     async (..._args: unknown[]) => applications,
@@ -43,6 +64,12 @@ const deleteApplicationEvent = mock(async (..._args: unknown[]) => undefined);
 const setApplicationStatus = mock(async (..._args: unknown[]) => undefined);
 const updateApplicationDetail = mock(async (..._args: unknown[]) => undefined);
 const updateApplicationFields = mock(async (..._args: unknown[]) => undefined);
+const updateApplicationsBulkQuery = mock(
+    async (..._args: unknown[]) => undefined,
+);
+const applyStatusStepEditsQuery = mock(
+    async (..._args: unknown[]) => undefined,
+);
 const lockApplicationsForUser = mock(async (..._args: unknown[]) => []);
 const insertStatusEvents = mock(async (..._args: unknown[]) => undefined);
 const setApplicationsStatus = mock(async (..._args: unknown[]) => undefined);
@@ -77,6 +104,7 @@ mock.module("@/db/client", () => ({
 mock.module("@/db/queries", () => ({
     countListsForUser,
     listListsForUser,
+    listsPageForUser,
     getListForUser,
     listApplicationsForList,
     pipelineForList,
@@ -87,6 +115,8 @@ mock.module("@/db/queries", () => ({
     setApplicationStatus,
     updateApplicationDetail,
     updateApplicationFields,
+    updateApplicationsBulk: updateApplicationsBulkQuery,
+    applyStatusStepEdits: applyStatusStepEditsQuery,
     lockApplicationsForUser,
     insertStatusEvents,
     setApplicationsStatus,
@@ -128,7 +158,7 @@ const load = (page: number) =>
         pageSize: 8,
     });
 
-const queryArgs = () => listListsForUser.mock.calls[0]?.[1];
+const queryArgs = () => listsPageForUser.mock.calls.at(-1)?.[1];
 
 beforeEach(() => {
     total = 0;
@@ -137,10 +167,13 @@ beforeEach(() => {
     applicationNotes = null;
     countListsForUser.mockClear();
     listListsForUser.mockClear();
+    listsPageForUser.mockClear();
     deleteApplicationEvent.mockClear();
     setApplicationStatus.mockClear();
     updateApplicationDetail.mockClear();
     updateApplicationFields.mockClear();
+    updateApplicationsBulkQuery.mockClear();
+    applyStatusStepEditsQuery.mockClear();
     lockApplicationsForUser.mockClear();
     insertStatusEvents.mockClear();
     setApplicationsStatus.mockClear();
@@ -169,10 +202,7 @@ describe("getListsForUser", () => {
             pageLimit: 8,
             pageOffset: 8,
         });
-        expect(countListsForUser.mock.calls[0]?.[1]).toEqual({
-            userId: "user-1",
-            search: "grad",
-        });
+        expect(listsPageForUser).toHaveBeenCalledTimes(1);
     });
 
     it("clamps a page past the end to the last page", async () => {
@@ -181,6 +211,7 @@ describe("getListsForUser", () => {
 
         expect(result.page).toBe(3);
         expect(queryArgs()).toMatchObject({ pageOffset: 16 });
+        expect(listsPageForUser).toHaveBeenCalledTimes(2);
     });
 
     it("clamps a page below one, so the offset is never negative", async () => {
@@ -343,52 +374,23 @@ describe("getApplicationExtras", () => {
 });
 
 describe("removeStatusStep", () => {
-    const statusWritten = () =>
-        (setApplicationStatus.mock.calls[0]?.[1] as { status: string }).status;
-
-    it("goes back to not applied once the last recorded step is gone", async () => {
-        // The row was added mid pipeline, so the step it came from was never
-        // recorded and there is nothing left saying it ever moved.
-        applicationEvents = [event("interviewing", "offer", "only")];
+    it("submits one set-based removal", async () => {
         await removeStatusStep("user-1", "app-1", "only", TIME_ZONE);
 
-        expect(deleteApplicationEvent).toHaveBeenCalledTimes(1);
-        expect(statusWritten()).toBe("not_applied");
-        expect(withTransaction).toHaveBeenCalledTimes(1);
-        expect(deleteApplicationEvent.mock.calls[0]?.[0]).toBe(
-            transactionClient,
-        );
-    });
-
-    it("leaves the application where the remaining steps put it", async () => {
-        applicationEvents = [
-            event("applied", "interviewing", "first"),
-            event("interviewing", "offer", "second"),
-        ];
-        await removeStatusStep("user-1", "app-1", "second", TIME_ZONE);
-
-        expect(statusWritten()).toBe("interviewing");
-    });
-
-    it("ignores an event that is not the application's", async () => {
-        applicationEvents = [event("applied", "interviewing", "first")];
-        await removeStatusStep("user-1", "app-1", "someone-elses", TIME_ZONE);
-
-        expect(deleteApplicationEvent).not.toHaveBeenCalled();
-        expect(setApplicationStatus).not.toHaveBeenCalled();
+        expect(applyStatusStepEditsQuery).toHaveBeenCalledTimes(1);
+        expect(applyStatusStepEditsQuery.mock.calls[0]?.[1]).toEqual({
+            applicationId: "app-1",
+            userId: "user-1",
+            removedEventIds: ["only"],
+            addedStatuses: [],
+            timeZone: TIME_ZONE,
+        });
+        expect(withTransaction).not.toHaveBeenCalled();
     });
 });
 
 describe("applyStatusStepEdits", () => {
-    const lastStatusWritten = () => {
-        const calls = setApplicationStatus.mock.calls;
-        return (calls[calls.length - 1]?.[1] as { status: string }).status;
-    };
-
     it("drops the steps it was given before recording the new ones", async () => {
-        // Both in one save, so the removal's fallback must not be what the
-        // application is left sitting at.
-        applicationEvents = [event("applied", "interviewing", "first")];
         await applyStatusStepEdits(
             "user-1",
             "app-1",
@@ -399,17 +401,10 @@ describe("applyStatusStepEdits", () => {
             TIME_ZONE,
         );
 
-        expect(deleteApplicationEvent).toHaveBeenCalledTimes(1);
-        expect(insertApplicationEvent).toHaveBeenCalledTimes(1);
-        expect(lastStatusWritten()).toBe("offer_in_progress");
-        expect(withTransaction).toHaveBeenCalledTimes(1);
-        expect(
-            [
-                ...deleteApplicationEvent.mock.calls,
-                ...insertApplicationEvent.mock.calls,
-                ...setApplicationStatus.mock.calls,
-            ].every((call) => call[0] === transactionClient),
-        ).toBe(true);
+        expect(applyStatusStepEditsQuery.mock.calls[0]?.[1]).toMatchObject({
+            removedEventIds: ["first"],
+            addedStatuses: ["offer_in_progress"],
+        });
     });
 
     it("records queued steps in the order they were added", async () => {
@@ -423,19 +418,10 @@ describe("applyStatusStepEdits", () => {
             TIME_ZONE,
         );
 
-        expect(
-            insertApplicationEvent.mock.calls.map(
-                (call) => (call[1] as { toStatus: string }).toStatus,
-            ),
-        ).toEqual(["interviewing", "offer_in_progress"]);
-        expect(lastStatusWritten()).toBe("offer_in_progress");
-        expect(
-            (
-                setApplicationStatus.mock.calls.at(-1)?.[1] as {
-                    timeZone: string;
-                }
-            ).timeZone,
-        ).toBe(TIME_ZONE);
+        expect(applyStatusStepEditsQuery.mock.calls[0]?.[1]).toMatchObject({
+            addedStatuses: ["interviewing", "offer_in_progress"],
+            timeZone: TIME_ZONE,
+        });
     });
 
     it("writes nothing when there is nothing staged", async () => {
@@ -446,9 +432,7 @@ describe("applyStatusStepEdits", () => {
             TIME_ZONE,
         );
 
-        expect(deleteApplicationEvent).not.toHaveBeenCalled();
-        expect(insertApplicationEvent).not.toHaveBeenCalled();
-        expect(setApplicationStatus).not.toHaveBeenCalled();
+        expect(applyStatusStepEditsQuery).not.toHaveBeenCalled();
     });
 });
 
@@ -464,7 +448,7 @@ describe("compound application writes", () => {
         url: null,
     };
 
-    it("saves every bulk-edited row in one transaction", async () => {
+    it("saves every bulk-edited row in one statement", async () => {
         await updateApplications(
             "user-1",
             [
@@ -474,18 +458,14 @@ describe("compound application writes", () => {
             TIME_ZONE,
         );
 
-        expect(withTransaction).toHaveBeenCalledTimes(1);
+        expect(updateApplicationsBulkQuery).toHaveBeenCalledTimes(1);
+        const args = updateApplicationsBulkQuery.mock.calls[0]?.[1] as {
+            rows: string;
+        };
         expect(
-            updateApplicationFields.mock.calls.map(
-                (call) => (call[1] as { applicationId: string }).applicationId,
-            ),
-        ).toEqual(["app-a", "app-b"]);
-        expect(
-            [
-                ...updateApplicationFields.mock.calls,
-                ...insertApplicationEvent.mock.calls,
-            ].every((call) => call[0] === transactionClient),
-        ).toBe(true);
+            (JSON.parse(args.rows) as { id: string }[]).map((row) => row.id),
+        ).toEqual(["app-b", "app-a"]);
+        expect(withTransaction).not.toHaveBeenCalled();
     });
 
     it("saves detail fields and staged history in one transaction", async () => {
@@ -515,10 +495,9 @@ describe("compound application writes", () => {
         expect(updateApplicationDetail.mock.calls[0]?.[0]).toBe(
             transactionClient,
         );
-        expect(insertApplicationEvent.mock.calls[0]?.[0]).toBe(
+        expect(applyStatusStepEditsQuery.mock.calls[0]?.[0]).toBe(
             transactionClient,
         );
-        expect(setApplicationStatus.mock.calls[0]?.[0]).toBe(transactionClient);
     });
 
     it("locks a bulk selection before writing history and status", async () => {

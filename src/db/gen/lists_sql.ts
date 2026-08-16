@@ -67,6 +67,119 @@ export async function listListsForUser(client: Client, args: ListListsForUserArg
     });
 }
 
+export const listsPageForUserQuery = `-- name: ListsPageForUser :many
+with summaries as materialized (
+    select
+        l.id,
+        l.name,
+        l.description,
+        l.status,
+        l.pinned_at,
+        l.updated_at,
+        count(a.id)::int as total_applications
+    from lists l
+    left join applications a on a.list_id = l.id
+    where l.user_id = $1
+        and (
+            $2::text = ''
+            or l.name ilike '%' || $2 || '%'
+            or coalesce(l.description, '') ilike '%' || $2 || '%'
+        )
+    group by l.id
+),
+totals as (
+    select count(*)::int as total from summaries
+),
+paged as materialized (
+    select
+        summaries.id, summaries.name, summaries.description, summaries.status, summaries.pinned_at, summaries.updated_at, summaries.total_applications,
+        totals.total,
+        row_number() over (
+            order by
+                (summaries.pinned_at is not null) desc,
+                case when $3::text = 'name' then summaries.name end asc,
+                case when $3::text = 'applications'
+                    then summaries.total_applications end desc,
+                summaries.updated_at desc
+        ) as page_order
+    from summaries
+    cross join totals
+    order by
+        (summaries.pinned_at is not null) desc,
+        case when $3::text = 'name' then summaries.name end asc,
+        case when $3::text = 'applications'
+            then summaries.total_applications end desc,
+        summaries.updated_at desc
+    limit $5::int
+    offset $4::int
+)
+select
+    id,
+    name,
+    description,
+    status,
+    pinned_at,
+    updated_at,
+    total_applications,
+    total,
+    page_order
+from paged
+union all
+select
+    null::uuid,
+    null::text,
+    null::text,
+    null::list_status,
+    null::timestamptz,
+    null::timestamptz,
+    null::int,
+    totals.total,
+    null::bigint
+from totals
+where not exists (select 1 from paged)
+order by page_order nulls last`;
+
+export interface ListsPageForUserArgs {
+    userId: string;
+    search: string;
+    sort: string;
+    pageOffset: number;
+    pageLimit: number;
+}
+
+export interface ListsPageForUserRow {
+    id: string;
+    name: string;
+    description: string | null;
+    status: string;
+    pinnedAt: Date | null;
+    updatedAt: Date;
+    totalApplications: number;
+    total: number;
+    pageOrder: string;
+}
+
+export async function listsPageForUser(client: Client, args: ListsPageForUserArgs): Promise<ListsPageForUserRow[]> {
+    const result = await client.query({
+        text: listsPageForUserQuery,
+        values: [args.userId, args.search, args.sort, args.pageOffset, args.pageLimit],
+        rowMode: "array"
+    });
+    return result.rows.map(row => {
+        return {
+            id: row[0],
+            name: row[1],
+            description: row[2],
+            status: row[3],
+            pinnedAt: row[4],
+            updatedAt: row[5],
+            totalApplications: row[6],
+            total: row[7],
+            pageOrder: row[8]
+        };
+    });
+}
+
 export const countListsForUserQuery = `-- name: CountListsForUser :one
 select count(*)::int as total
 from lists l

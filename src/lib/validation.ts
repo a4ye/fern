@@ -14,6 +14,12 @@ export type ActionResult = { ok: true } | { ok: false; error: string };
 
 export const LIST_NAME_MAX = 80;
 export const LIST_DESCRIPTION_MAX = 280;
+export const MAX_APPLICATION_BATCH = 2_000;
+export const MAX_STATUS_STEP_EDITS = 100;
+
+export const applicationIdSchema = z
+    .string()
+    .uuid("Choose a valid application.");
 
 // The satisfies clause ties these values to ListStatus in
 // src/components/dashboard/data.ts, so a typo or renamed status fails to compile.
@@ -234,8 +240,10 @@ export const applicationCreateSchema = applicationDetailFields
 // The detail panel stages its history edits and sends them with the form, so
 // the steps it drops and the ones it records arrive as part of the same save.
 export const stepEditsSchema = z.object({
-    removed: z.array(z.string()),
-    added: z.array(z.enum(APPLICATION_STATUSES, "Choose a valid status.")),
+    removed: z.array(applicationIdSchema).max(MAX_STATUS_STEP_EDITS),
+    added: z
+        .array(z.enum(APPLICATION_STATUSES, "Choose a valid status."))
+        .max(MAX_STATUS_STEP_EDITS),
 });
 
 // Narrows a safeParse failure to a single message for display. Schemas above

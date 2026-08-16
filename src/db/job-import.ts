@@ -27,19 +27,13 @@ export const acquireJobImportBudget = async (
     providerHost: string,
     providerRequestCost: number,
 ): Promise<boolean> => {
-    const user = await gen.takeJobImportBudget(getPool(), {
-        scopeKey: `user:${userId}`,
+    const result = await gen.takeJobImportBudgets(getPool(), {
+        userScopeKey: `user:${userId}`,
+        providerScopeKey: `provider:${providerHost}`,
+        providerRequestCost,
         windowSeconds: WINDOW_SECONDS,
-        requestLimit: USER_REQUESTS_PER_MINUTE,
-        requestCost: 1,
+        userRequestLimit: USER_REQUESTS_PER_MINUTE,
+        providerRequestLimit: PROVIDER_REQUESTS_PER_MINUTE,
     });
-    if (!user) return false;
-
-    const provider = await gen.takeJobImportBudget(getPool(), {
-        scopeKey: `provider:${providerHost}`,
-        windowSeconds: WINDOW_SECONDS,
-        requestLimit: PROVIDER_REQUESTS_PER_MINUTE,
-        requestCost: providerRequestCost,
-    });
-    return provider !== null;
+    return result?.allowed === true;
 };

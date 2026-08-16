@@ -34,6 +34,17 @@ export async function getCachedJobImport(client: Client, args: GetCachedJobImpor
 }
 
 export const putCachedJobImportQuery = `-- name: PutCachedJobImport :exec
+with pruned as (
+    delete from job_import_cache
+    where ctid in (
+        select ctid
+        from job_import_cache
+        where fetched_at <= current_timestamp - interval '7 days'
+            and url <> $1
+        order by fetched_at
+        limit 100
+    )
+)
 insert into job_import_cache (url, posting)
 values ($1, $2::jsonb)
 on conflict (url) do update
@@ -106,6 +117,44 @@ export async function takeJobImportBudget(client: Client, args: TakeJobImportBud
     const row = result.rows[0];
     return {
         requestCount: row[0]
+    };
+}
+
+export const takeJobImportBudgetsQuery = `-- name: TakeJobImportBudgets :one
+select take_job_import_budgets(
+    $1,
+    $2,
+    $3::int,
+    $4::int,
+    $5::int,
+    $6::int
+) as allowed`;
+
+export interface TakeJobImportBudgetsArgs {
+    userScopeKey: string;
+    providerScopeKey: string;
+    providerRequestCost: number;
+    windowSeconds: number;
+    userRequestLimit: number;
+    providerRequestLimit: number;
+}
+
+export interface TakeJobImportBudgetsRow {
+    allowed: boolean;
+}
+
+export async function takeJobImportBudgets(client: Client, args: TakeJobImportBudgetsArgs): Promise<TakeJobImportBudgetsRow | null> {
+    const result = await client.query({
+        text: takeJobImportBudgetsQuery,
+        values: [args.userScopeKey, args.providerScopeKey, args.providerRequestCost, args.windowSeconds, args.userRequestLimit, args.providerRequestLimit],
+        rowMode: "array"
+    });
+    if (result.rows.length !== 1) {
+        return null;
+    }
+    const row = result.rows[0];
+    return {
+        allowed: row[0]
     };
 }
 
