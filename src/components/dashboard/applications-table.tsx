@@ -909,6 +909,19 @@ export const ApplicationsTable = ({
                                     )}
                                     {view.rows.length > 0 && (
                                         <>
+                                            <button
+                                                type="button"
+                                                onClick={startBulkEdit}
+                                                className={`${secondaryButtonClass} ${FILL_NARROW}`}
+                                            >
+                                                <span
+                                                    aria-hidden="true"
+                                                    className="icon-[lucide--pencil-line] size-4 shrink-0"
+                                                />
+                                                {filtered
+                                                    ? "Edit shown"
+                                                    : "Edit all"}
+                                            </button>
                                             <DownloadMenu
                                                 title="Export these applications"
                                                 heading={
@@ -929,19 +942,6 @@ export const ApplicationsTable = ({
                                                 />
                                                 Export
                                             </DownloadMenu>
-                                            <button
-                                                type="button"
-                                                onClick={startBulkEdit}
-                                                className={`${secondaryButtonClass} ${FILL_NARROW}`}
-                                            >
-                                                <span
-                                                    aria-hidden="true"
-                                                    className="icon-[lucide--pencil-line] size-4 shrink-0"
-                                                />
-                                                {filtered
-                                                    ? "Edit shown"
-                                                    : "Edit all"}
-                                            </button>
                                         </>
                                     )}
                                     {/* Outside the guard above: an empty list is
