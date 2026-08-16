@@ -148,6 +148,51 @@ export const createApplication = async (
     return row !== null;
 };
 
+// Rows read out of a spreadsheet, written by one statement. A query per row
+// would be a network round trip per row with a transaction held open across all
+// of them, which is the whole cost of an import and grows with the file.
+//
+// The date goes over as the yyyy-mm-dd the sheet was read into rather than as a
+// Date, so the day cannot move in serialization. Everything else is text for the
+// same reason: one JSON parameter that the database casts, rather than fourteen
+// arrays that have to stay in step.
+export const importApplications = async (
+    userId: string,
+    listId: string,
+    rows: (ApplicationInput & { notes: string | null })[],
+    timeZone: string,
+): Promise<number> => {
+    if (rows.length === 0) return 0;
+
+    const payload = rows.map((row, offset) => {
+        const pay = parsePay(row.pay);
+        return {
+            offset,
+            company_name: row.company,
+            role_title: row.role,
+            status: row.status,
+            url: row.url,
+            location: row.location,
+            arrangement: row.arrangement,
+            applied_at: row.appliedAt,
+            pay_min: pay.payMin,
+            pay_max: pay.payMax,
+            pay_currency: pay.payCurrency,
+            pay_period: pay.payPeriod,
+            pay_note: pay.payNote,
+            notes: row.notes,
+        };
+    });
+
+    const inserted = await gen.createApplications(getPool(), {
+        userId,
+        listId,
+        timeZone,
+        rows: JSON.stringify(payload),
+    });
+    return inserted.length;
+};
+
 // One row of the quick edit grid. `payTyped` says whether the pay box was
 // actually edited: the grid holds pay as one line of text, so writing it back
 // when it was only sitting there would flatten a range, currency and note the

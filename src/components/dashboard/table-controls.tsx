@@ -139,6 +139,40 @@ const OptionIcon = ({ src }: { src?: string }) =>
 const popupHost = (trigger: HTMLElement | null): HTMLElement =>
     trigger?.closest("dialog") ?? document.body;
 
+// `position: fixed` measures from the viewport only while nothing above it
+// carries a transform, scale or translate. Anything that does becomes the
+// containing block instead, and the coordinates worked out above land the popup
+// that far out. Centred dialogs animate on `scale` and so do exactly this, while
+// the drawer rests at `transform: none` and does not (see globals.css), so which
+// it is has to be read off the element rather than assumed.
+const shiftsOrigin = (host: HTMLElement): boolean => {
+    if (host === document.body) return false;
+    const style = getComputedStyle(host);
+    return (
+        style.transform !== "none" ||
+        style.filter !== "none" ||
+        style.perspective !== "none" ||
+        style.getPropertyValue("scale") !== "none" ||
+        style.getPropertyValue("translate") !== "none" ||
+        style.getPropertyValue("rotate") !== "none"
+    );
+};
+
+// Re-reads a viewport placement against whichever ancestor is actually acting as
+// the origin, leaving it alone when that is the viewport after all.
+const within = (style: Placement, host: HTMLElement): Placement => {
+    if (!shiftsOrigin(host)) return style;
+    const origin = host.getBoundingClientRect();
+    const left = style.left - origin.left;
+    return style.top === undefined
+        ? {
+              left,
+              width: style.width,
+              bottom: origin.bottom - window.innerHeight + style.bottom,
+          }
+        : { left, width: style.width, top: style.top - origin.top };
+};
+
 // A custom dropdown rather than a native <select>: the browser's native option
 // popup can't be styled to match the table. Passing `placeholder` turns it into
 // an action menu, where the button keeps its label instead of showing the value.
@@ -195,9 +229,12 @@ export const CellSelect = <T,>({
     const place = useCallback(() => {
         const trigger = triggerRef.current;
         if (!trigger) return;
+        const host = popupHost(trigger);
+        const placement = placeFrom(trigger.getBoundingClientRect());
         setPlaced({
-            ...placeFrom(trigger.getBoundingClientRect()),
-            host: popupHost(trigger),
+            ...placement,
+            style: within(placement.style, host),
+            host,
         });
     }, []);
 
@@ -533,12 +570,15 @@ export const DateField = ({
     const place = useCallback(() => {
         const trigger = triggerRef.current;
         if (!trigger) return;
+        const host = popupHost(trigger);
+        const placement = placeFrom(trigger.getBoundingClientRect(), {
+            width: CALENDAR_WIDTH,
+            height: CALENDAR_HEIGHT,
+        });
         setPlaced({
-            ...placeFrom(trigger.getBoundingClientRect(), {
-                width: CALENDAR_WIDTH,
-                height: CALENDAR_HEIGHT,
-            }),
-            host: popupHost(trigger),
+            ...placement,
+            style: within(placement.style, host),
+            host,
         });
     }, []);
 

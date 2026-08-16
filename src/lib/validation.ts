@@ -149,6 +149,13 @@ export const applicationSchema = z.object({
 
 export const NOTES_MAX = 4000;
 
+// One row read out of a spreadsheet: the columns the quick-edit grid holds,
+// where pay is still the single line of text the sheet wrote, plus the notes
+// only an import carries in alongside them.
+export const importRowSchema = applicationSchema.extend({
+    notes: optionalText("Notes", NOTES_MAX),
+});
+
 // What an amount field accepts before it stops taking keys: ten digits and two
 // decimals, plus room for the grouping commas people type, which the schema
 // strips back out.

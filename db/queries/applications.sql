@@ -34,6 +34,72 @@ from lists l
 where l.id = @list_id and l.user_id = @user_id
 returning id;
 
+-- A whole spreadsheet in one statement. The same columns CreateApplication
+-- writes, read off one JSON parameter rather than one row per round trip: a
+-- query per row would hold the transaction open for as long as the network
+-- took, times the number of rows.
+--
+-- `offset` counts 0, 1, 2 up the batch, so every row lands after the ones
+-- already in the list and in the order the file wrote them. The insert cannot
+-- read its own rows back to work that out, which is also why the position
+-- trigger is no help here: within one statement it would hand every row the
+-- same number.
+--
+-- Every field arrives as text and is cast here. A date in particular must not
+-- go through the driver as a Date, which is serialized in its own timezone and
+-- can land a day either side of midnight; yyyy-mm-dd cast in the database
+-- cannot move.
+-- name: CreateApplications :many
+insert into applications (
+    list_id, position, company_name, role_title, status, url, location,
+    arrangement, applied_at, pay_min, pay_max, pay_currency, pay_period,
+    pay_note, notes
+)
+select
+    l.id,
+    coalesce(
+        (select max(a.position) + 1 from applications a where a.list_id = l.id),
+        0
+    ) + row.offset,
+    row.company_name,
+    row.role_title,
+    row.status::application_status,
+    row.url,
+    row.location,
+    row.arrangement::work_arrangement,
+    coalesce(
+        row.applied_at::date,
+        case
+            when row.status::application_status = 'applied'
+            then (current_timestamp at time zone @time_zone::text)::date
+        end
+    ),
+    row.pay_min::numeric,
+    row.pay_max::numeric,
+    row.pay_currency,
+    row.pay_period::pay_period,
+    row.pay_note,
+    row.notes
+from lists l
+cross join jsonb_to_recordset(@rows::jsonb) as row(
+    "offset" int,
+    company_name text,
+    role_title text,
+    status text,
+    url text,
+    location text,
+    arrangement text,
+    applied_at text,
+    pay_min text,
+    pay_max text,
+    pay_currency text,
+    pay_period text,
+    pay_note text,
+    notes text
+)
+where l.id = @list_id and l.user_id = @user_id
+returning id;
+
 -- Every column the table draws, and nothing past it. The notes are left out
 -- deliberately: they are free text that only the detail panel reads, and a
 -- list's worth of them outweighs every other column put together.

@@ -36,6 +36,7 @@ import {
     DownloadMenu,
     type DownloadFormat,
 } from "@/components/dashboard/download-menu";
+import { ImportDialog } from "@/components/dashboard/import-dialog";
 import {
     NO_FILTERS,
     applicationsView,
@@ -456,6 +457,7 @@ export const ApplicationsTable = ({
     } | null>(null);
     const [confirmingDelete, setConfirmingDelete] = useState(false);
     const [adding, setAdding] = useState(false);
+    const [importing, setImporting] = useState(false);
     // Which rows are shown and in what order. Held here rather than in the URL:
     // it is how one person is reading the table right now, not where they are.
     const [filters, setFilters] = useState<Filters>(NO_FILTERS);
@@ -942,6 +944,20 @@ export const ApplicationsTable = ({
                                             </button>
                                         </>
                                     )}
+                                    {/* Outside the guard above: an empty list is
+                                    exactly where someone arriving from another
+                                    tracker starts. */}
+                                    <button
+                                        type="button"
+                                        onClick={() => setImporting(true)}
+                                        className={`${secondaryButtonClass} ${FILL_NARROW}`}
+                                    >
+                                        <span
+                                            aria-hidden="true"
+                                            className="icon-[lucide--upload] size-4 shrink-0"
+                                        />
+                                        Import
+                                    </button>
                                     <button
                                         type="button"
                                         onClick={() => setAdding(true)}
@@ -964,6 +980,14 @@ export const ApplicationsTable = ({
                 <AddApplicationForm
                     listId={listId}
                     onClose={() => setAdding(false)}
+                />
+            )}
+
+            {importing && !bulkMode && (
+                <ImportDialog
+                    listId={listId}
+                    applications={optimisticApplications}
+                    onClose={() => setImporting(false)}
                 />
             )}
 

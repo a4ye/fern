@@ -79,6 +79,81 @@ export async function createApplication(client: Client, args: CreateApplicationA
     };
 }
 
+export const createApplicationsQuery = `-- name: CreateApplications :many
+insert into applications (
+    list_id, position, company_name, role_title, status, url, location,
+    arrangement, applied_at, pay_min, pay_max, pay_currency, pay_period,
+    pay_note, notes
+)
+select
+    l.id,
+    coalesce(
+        (select max(a.position) + 1 from applications a where a.list_id = l.id),
+        0
+    ) + row.offset,
+    row.company_name,
+    row.role_title,
+    row.status::application_status,
+    row.url,
+    row.location,
+    row.arrangement::work_arrangement,
+    coalesce(
+        row.applied_at::date,
+        case
+            when row.status::application_status = 'applied'
+            then (current_timestamp at time zone $1::text)::date
+        end
+    ),
+    row.pay_min::numeric,
+    row.pay_max::numeric,
+    row.pay_currency,
+    row.pay_period::pay_period,
+    row.pay_note,
+    row.notes
+from lists l
+cross join jsonb_to_recordset($2::jsonb) as row(
+    "offset" int,
+    company_name text,
+    role_title text,
+    status text,
+    url text,
+    location text,
+    arrangement text,
+    applied_at text,
+    pay_min text,
+    pay_max text,
+    pay_currency text,
+    pay_period text,
+    pay_note text,
+    notes text
+)
+where l.id = $3 and l.user_id = $4
+returning id`;
+
+export interface CreateApplicationsArgs {
+    timeZone: string;
+    rows: any;
+    listId: string;
+    userId: string;
+}
+
+export interface CreateApplicationsRow {
+    id: string;
+}
+
+export async function createApplications(client: Client, args: CreateApplicationsArgs): Promise<CreateApplicationsRow[]> {
+    const result = await client.query({
+        text: createApplicationsQuery,
+        values: [args.timeZone, args.rows, args.listId, args.userId],
+        rowMode: "array"
+    });
+    return result.rows.map(row => {
+        return {
+            id: row[0]
+        };
+    });
+}
+
 export const listApplicationsForListQuery = `-- name: ListApplicationsForList :many
 select
     id,
