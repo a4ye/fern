@@ -29,6 +29,14 @@ import {
 import { useRowWindow } from "@/components/dashboard/use-row-window";
 import { ApplicationsFilterMenu } from "@/components/dashboard/applications-filter";
 import {
+    applicationsFile,
+    type ExportFormat,
+} from "@/components/dashboard/applications-export";
+import {
+    DownloadMenu,
+    type DownloadFormat,
+} from "@/components/dashboard/download-menu";
+import {
     NO_FILTERS,
     applicationsView,
     isFiltered,
@@ -62,6 +70,7 @@ import {
     type ApplicationStatus,
     type Arrangement,
 } from "@/components/dashboard/data";
+import { fileSlug, saveBlob } from "@/lib/download";
 import { COMPANY_MAX, LOCATION_MAX, PAY_MAX, ROLE_MAX } from "@/lib/validation";
 
 type Draft = {
@@ -407,11 +416,19 @@ const STAGED_ARRANGEMENT_OPTIONS: Option<
     Arrangement | null | typeof UNCHANGED
 >[] = [{ value: UNCHANGED, label: "Leave unchanged" }, ...ARRANGEMENT_OPTIONS];
 
+const EXPORT_FORMATS: readonly DownloadFormat<ExportFormat>[] = [
+    { id: "csv", label: "CSV", icon: "icon-[lucide--file-text]" },
+    { id: "xlsx", label: "XLSX", icon: "icon-[lucide--sheet]" },
+    { id: "json", label: "JSON", icon: "icon-[lucide--braces]" },
+];
+
 export const ApplicationsTable = ({
     listId,
+    name,
     applications,
 }: {
     listId: string;
+    name: string;
     applications: ApplicationRow[];
 }) => {
     const [, startMutation] = useTransition();
@@ -636,6 +653,14 @@ export const ApplicationsTable = ({
         setBulkError(null);
         setDrafts(new Map(view.rows.map((app) => [app.id, draftOf(app)])));
     };
+
+    // What is on screen is what leaves, so a filtered table writes a file of the
+    // rows it is showing, in the order it is showing them. The menu says which.
+    const exportRows = (format: ExportFormat) =>
+        saveBlob(
+            applicationsFile(view.rows, format, name),
+            `${fileSlug(name)}-applications.${format}`,
+        );
 
     const setDraftField = <K extends keyof Draft>(
         id: string,
@@ -881,19 +906,41 @@ export const ApplicationsTable = ({
                                         </>
                                     )}
                                     {view.rows.length > 0 && (
-                                        <button
-                                            type="button"
-                                            onClick={startBulkEdit}
-                                            className={`${secondaryButtonClass} ${FILL_NARROW}`}
-                                        >
-                                            <span
-                                                aria-hidden="true"
-                                                className="icon-[lucide--pencil-line] size-4 shrink-0"
-                                            />
-                                            {filtered
-                                                ? "Edit shown"
-                                                : "Edit all"}
-                                        </button>
+                                        <>
+                                            <DownloadMenu
+                                                title="Export these applications"
+                                                heading={
+                                                    filtered
+                                                        ? `${view.rows.length} shown`
+                                                        : countLabel(
+                                                              view.rows.length,
+                                                          )
+                                                }
+                                                formats={EXPORT_FORMATS}
+                                                className="max-sm:grow"
+                                                triggerClass={`${secondaryButtonClass} max-sm:w-full max-sm:justify-center`}
+                                                onSelect={exportRows}
+                                            >
+                                                <span
+                                                    aria-hidden="true"
+                                                    className="icon-[lucide--download] size-4 shrink-0"
+                                                />
+                                                Export
+                                            </DownloadMenu>
+                                            <button
+                                                type="button"
+                                                onClick={startBulkEdit}
+                                                className={`${secondaryButtonClass} ${FILL_NARROW}`}
+                                            >
+                                                <span
+                                                    aria-hidden="true"
+                                                    className="icon-[lucide--pencil-line] size-4 shrink-0"
+                                                />
+                                                {filtered
+                                                    ? "Edit shown"
+                                                    : "Edit all"}
+                                            </button>
+                                        </>
                                     )}
                                     <button
                                         type="button"

@@ -25,7 +25,12 @@ import {
     type ApplicationStatus,
     type FlowEntry,
 } from "@/components/dashboard/data";
+import {
+    DownloadMenu,
+    type DownloadFormat,
+} from "@/components/dashboard/download-menu";
 import { useModalDialog } from "@/components/dashboard/use-modal-dialog";
+import { fileSlug, saveFile } from "@/lib/download";
 
 const SAGE = "var(--color-accent)";
 const DEEP = "var(--color-accent-deep)";
@@ -866,12 +871,6 @@ const ExpandedChart = ({
     );
 };
 
-const fileSlug = (value: string) =>
-    value
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "") || "chart";
-
 // The chart paints itself with design tokens that only exist on the page, so a
 // standalone file has to carry their resolved values.
 const EXPORT_TOKENS = [
@@ -915,116 +914,45 @@ const chartHref = async (node: HTMLElement, format: ExportFormat) => {
     return toPng(node, { pixelRatio: 2, backgroundColor: background });
 };
 
-const saveFile = (href: string, filename: string) => {
-    const link = document.createElement("a");
-    link.download = filename;
-    link.href = href;
-    link.click();
-};
-
-const ExportOption = ({
-    format,
-    icon,
-    note,
-    onSelect,
-}: {
-    format: string;
-    icon: string;
-    note: string;
-    onSelect: () => void;
-}) => (
-    <button
-        type="button"
-        role="menuitem"
-        onClick={onSelect}
-        className="flex w-full cursor-pointer items-center gap-2.5 border-b border-faint px-3 py-2 text-left transition-colors last:border-b-0 hover:bg-surface"
-    >
-        <span
-            aria-hidden="true"
-            className={`${icon} size-4 shrink-0 text-muted`}
-        />
-        <span className="min-w-0">
-            <span className="block text-xs font-medium text-ink">{format}</span>
-            <span className="block text-xs text-sub">{note}</span>
-        </span>
-    </button>
-);
-
 const headerButtonClass =
     "cursor-pointer p-1 text-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-40";
 
-const DownloadMenu = ({
+const CHART_FORMATS: readonly DownloadFormat<ExportFormat>[] = [
+    {
+        id: "png",
+        label: "PNG",
+        icon: "icon-[lucide--image]",
+        note: "Bitmap image",
+    },
+    {
+        id: "svg",
+        label: "SVG",
+        icon: "icon-[lucide--vector-square]",
+        note: "Vector image",
+    },
+];
+
+const ChartDownloadMenu = ({
     busy,
     onSelect,
 }: {
     busy: boolean;
     onSelect: (format: ExportFormat) => void;
-}) => {
-    const menuRef = useRef<HTMLDivElement>(null);
-    const [open, setOpen] = useState(false);
-
-    useEffect(() => {
-        if (!open) return;
-        const onPointerDown = (event: PointerEvent) => {
-            if (!menuRef.current?.contains(event.target as Node))
-                setOpen(false);
-        };
-        document.addEventListener("pointerdown", onPointerDown);
-        return () => document.removeEventListener("pointerdown", onPointerDown);
-    }, [open]);
-
-    const pick = (format: ExportFormat) => {
-        setOpen(false);
-        onSelect(format);
-    };
-
-    return (
-        <div
-            ref={menuRef}
-            onKeyDown={(event) => event.key === "Escape" && setOpen(false)}
-            className="relative"
-        >
-            <button
-                type="button"
-                onClick={() => setOpen((previous) => !previous)}
-                disabled={busy}
-                aria-haspopup="menu"
-                aria-expanded={open}
-                aria-label="Download this chart"
-                title="Download"
-                className={headerButtonClass}
-            >
-                <span
-                    aria-hidden="true"
-                    className="icon-[lucide--download] block size-4"
-                />
-            </button>
-            {open && (
-                <div
-                    role="menu"
-                    aria-label="Download this chart"
-                    className="absolute top-full right-0 z-20 mt-1 w-40 border border-hairline bg-background shadow-sm"
-                >
-                    <p className="border-b border-hairline px-3 py-1.5 text-xs font-medium text-muted">
-                        Download
-                    </p>
-                    <ExportOption
-                        format="PNG"
-                        icon="icon-[lucide--image]"
-                        note="Bitmap image"
-                        onSelect={() => pick("png")}
-                    />
-                    <ExportOption
-                        format="SVG"
-                        icon="icon-[lucide--vector-square]"
-                        note="Vector image"
-                        onSelect={() => pick("svg")}
-                    />
-                </div>
-            )}
-        </div>
-    );
-};
+}) => (
+    <DownloadMenu
+        title="Download this chart"
+        heading="Download"
+        formats={CHART_FORMATS}
+        busy={busy}
+        triggerClass={headerButtonClass}
+        onSelect={onSelect}
+    >
+        <span
+            aria-hidden="true"
+            className="icon-[lucide--download] block size-4"
+        />
+    </DownloadMenu>
+);
 
 // Native <dialog> rather than a hand-rolled overlay: showModal gives the focus
 // trap, Escape handling, inert background and top-layer stacking for free.
@@ -1066,7 +994,7 @@ const ExpandedDialog = ({
                     <span className="text-xs text-sub tabular-nums">
                         {total} total
                     </span>
-                    <DownloadMenu busy={busy} onSelect={onDownload} />
+                    <ChartDownloadMenu busy={busy} onSelect={onDownload} />
                     <button
                         type="button"
                         onClick={() => close(onClose)}
@@ -1141,7 +1069,7 @@ export const PipelineFlow = ({
                                     className="icon-[lucide--maximize-2] block size-4"
                                 />
                             </button>
-                            <DownloadMenu
+                            <ChartDownloadMenu
                                 busy={!!pending}
                                 onSelect={setPending}
                             />

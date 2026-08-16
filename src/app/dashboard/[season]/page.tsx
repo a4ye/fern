@@ -63,6 +63,7 @@ const SeasonPage = async ({ params, searchParams }: Props) => {
             <div className="mt-4">
                 <ApplicationsTable
                     listId={detail.id}
+                    name={detail.name}
                     applications={detail.applications}
                 />
             </div>
