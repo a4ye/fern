@@ -15,6 +15,7 @@ const NOT_SIGNED_IN = "You are not signed in." as const;
 export const saveAccountSettings = async (input: {
     name: string;
     defaultCurrency: string;
+    cleanLinks: boolean;
 }): Promise<ActionResult> => {
     const requestHeaders = await headers();
     const session = await auth.api.getSession({ headers: requestHeaders });
@@ -27,6 +28,7 @@ export const saveAccountSettings = async (input: {
 
     await saveUserSettings(session.user.id, {
         defaultCurrency: parsed.data.defaultCurrency,
+        cleanLinks: parsed.data.cleanLinks,
     });
 
     // The name lives on the account record better-auth owns, and its endpoint

@@ -55,6 +55,7 @@ const SettingsPage = async ({
                 signedInAs={username ?? session.user.email}
                 image={session.user.image ?? null}
                 defaultCurrency={settings.defaultCurrency}
+                cleanLinks={settings.cleanLinks}
             />
         </div>
     );

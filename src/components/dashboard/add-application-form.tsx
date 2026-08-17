@@ -35,6 +35,7 @@ import {
     todayDateInput,
     type ApplicationStatus,
 } from "@/components/dashboard/data";
+import { cleanLink } from "@/lib/clean-link";
 import {
     hasPostingSuggestion,
     isScrapedPosting,
@@ -57,10 +58,12 @@ const employerHost = (raw: string): string => {
 export const AddApplicationForm = ({
     listId,
     defaultCurrency,
+    cleanLinks,
     onClose,
 }: {
     listId: string;
     defaultCurrency: string;
+    cleanLinks: boolean;
     onClose: () => void;
 }) => {
     const { ref: dialogRef, close } = useModalDialog();
@@ -236,12 +239,18 @@ export const AddApplicationForm = ({
         companyRef.current?.focus();
     };
 
+    // A link arriving from outside the app is the one carrying a campaign, so it
+    // is cleaned where it lands rather than on the way to the server: what the
+    // user is shown is then what is saved.
+    const arriving = (raw: string) => (cleanLinks ? cleanLink(raw) : raw);
+
     const onPaste = (event: ClipboardEvent<HTMLInputElement>) => {
         const pasted = event.clipboardData.getData("text");
         if (pasted.trim()) {
             event.preventDefault();
-            set("url", pasted);
-            scrape(pasted);
+            const link = arriving(pasted);
+            set("url", link);
+            scrape(link);
         }
     };
 
@@ -264,8 +273,9 @@ export const AddApplicationForm = ({
     };
 
     const onQrScan = (url: string) => {
-        onLinkChange(url);
-        scrape(url);
+        const link = arriving(url);
+        onLinkChange(link);
+        scrape(link);
     };
 
     const save = async () => {

@@ -48,25 +48,55 @@ const Row = ({
     </div>
 );
 
+const Toggle = ({
+    label,
+    on,
+    onChange,
+}: {
+    label: string;
+    on: boolean;
+    onChange: (on: boolean) => void;
+}) => (
+    <button
+        type="button"
+        role="switch"
+        aria-checked={on}
+        aria-label={label}
+        onClick={() => onChange(!on)}
+        className={`inline-flex h-6 w-11 shrink-0 cursor-pointer items-center border p-1 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${on ? "border-accent bg-accent" : "border-tile-border bg-background"}`}
+    >
+        <span
+            aria-hidden="true"
+            className={`size-4 transition-transform ${on ? "translate-x-4.5 bg-background" : "translate-x-0 bg-muted"}`}
+        />
+    </button>
+);
+
 export const AccountSettings = ({
     name,
     signedInAs,
     image,
     defaultCurrency,
+    cleanLinks,
 }: {
     name: string;
     signedInAs: string;
     image: string | null;
     defaultCurrency: string;
+    cleanLinks: boolean;
 }) => {
     const router = useRouter();
     const [draftName, setDraftName] = useState(name);
     const [draftCurrency, setDraftCurrency] = useState(defaultCurrency);
+    const [draftCleanLinks, setDraftCleanLinks] = useState(cleanLinks);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     const trimmedName = draftName.trim();
-    const changed = trimmedName !== name || draftCurrency !== defaultCurrency;
+    const changed =
+        trimmedName !== name ||
+        draftCurrency !== defaultCurrency ||
+        draftCleanLinks !== cleanLinks;
 
     const save = async () => {
         if (saving || !changed) return;
@@ -76,6 +106,7 @@ export const AccountSettings = ({
             const result = await saveAccountSettings({
                 name: draftName,
                 defaultCurrency: draftCurrency,
+                cleanLinks: draftCleanLinks,
             });
             if (result.ok) {
                 toast.success("Settings saved.");
@@ -144,6 +175,16 @@ export const AccountSettings = ({
                         onChange={setDraftCurrency}
                         variant="form"
                         searchable
+                    />
+                </Row>
+                <Row
+                    label="Remove link tracking"
+                    hint="Job links often include tracking codes. Job Tracker removes them."
+                >
+                    <Toggle
+                        label="Remove link tracking"
+                        on={draftCleanLinks}
+                        onChange={setDraftCleanLinks}
                     />
                 </Row>
             </Section>

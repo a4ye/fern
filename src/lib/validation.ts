@@ -253,7 +253,7 @@ export const stepEditsSchema = z.object({
 
 export const DISPLAY_NAME_MAX = 80;
 
-// The settings page saves both fields together, so one parse covers the form.
+// The settings page saves its fields together, so one parse covers the form.
 export const accountSettingsSchema = z.object({
     name: z
         .string()
@@ -264,6 +264,7 @@ export const accountSettingsSchema = z.object({
             `Name must be ${DISPLAY_NAME_MAX} characters or fewer.`,
         ),
     defaultCurrency: currencySchema,
+    cleanLinks: z.boolean(),
 });
 
 // Narrows a safeParse failure to a single message for display. Schemas above

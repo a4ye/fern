@@ -428,11 +428,13 @@ export const ApplicationsTable = ({
     name,
     applications,
     defaultCurrency,
+    cleanLinks,
 }: {
     listId: string;
     name: string;
     applications: ApplicationRow[];
     defaultCurrency: string;
+    cleanLinks: boolean;
 }) => {
     const [, startMutation] = useTransition();
     // The panel opens on more than the table carries, so the row it is opened
@@ -987,6 +989,7 @@ export const ApplicationsTable = ({
                 <AddApplicationForm
                     listId={listId}
                     defaultCurrency={defaultCurrency}
+                    cleanLinks={cleanLinks}
                     onClose={() => setAdding(false)}
                 />
             )}
