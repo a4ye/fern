@@ -5,7 +5,12 @@
 export type JobArrangement = "remote" | "hybrid" | "onsite";
 
 export type PostingSource =
-    "json-ld" | "opengraph" | "greenhouse" | "simplify" | "none";
+    | "json-ld"
+    | "opengraph"
+    | "greenhouse"
+    | "simplify"
+    | "rippling"
+    | "none";
 
 export type ScrapedPosting = {
     company: string | null;
@@ -184,8 +189,9 @@ const fromJsonLd = (html: string): ScrapedPosting | null => {
     return null;
 };
 
-// Simplify is an aggregator: its richer Next.js page data takes precedence over
-// schema.org and OpenGraph fallbacks when it is present.
+// Both Simplify and Rippling are Next.js boards that leave the posting itself
+// out of the markup. Their page data takes precedence over the schema.org and
+// OpenGraph fallbacks when it is present.
 const nextPageData = (html: string): unknown => {
     const match = html.match(
         /<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/i,
@@ -245,6 +251,61 @@ const fromSimplify = (html: string): ScrapedPosting | null => {
     };
 };
 
+// One range is the ordinary case. Where a board lists several they are per
+// location, and nothing in the payload says which one this posting is offered
+// at, so the choice is left to the person rather than made by picking a row.
+const ripplingPay = (job: JsonObject): string | null => {
+    const ranges = job["payRangeDetails"];
+    if (!Array.isArray(ranges) || ranges.length !== 1) return null;
+    const range: unknown = ranges[0];
+    if (!isObject(range)) return null;
+
+    const min = asNumeric(range["rangeStart"]);
+    const max = asNumeric(range["rangeEnd"]);
+    const amount = min && max && min !== max ? `${min}-${max}` : (min ?? max);
+    if (!amount) return null;
+    const frequency = asString(range["frequency"]);
+    const unit = frequency ? (PAY_PERIOD[frequency.toUpperCase()] ?? "") : "";
+    return (
+        [asString(range["currency"]), amount].filter(Boolean).join(" ") + unit
+    );
+};
+
+// The same shape whether it came from Rippling's board API or from the page
+// data the board ships to its own front end.
+export const parseRipplingJob = (value: unknown): ScrapedPosting | null => {
+    if (!isObject(value)) return null;
+    const role = asString(value["name"]);
+    const company =
+        asString(value["companyName"]) ??
+        asString(dig(value, "board", "companyName"));
+    if (!role && !company) return null;
+
+    // Rippling writes the arrangement into the location itself, as "Remote
+    // (San Francisco Bay Area)" or "Hybrid (Washington, ...)", and has no
+    // separate field for it.
+    const places = value["workLocations"];
+    const location = Array.isArray(places) ? asString(places[0]) : null;
+    return {
+        role,
+        company,
+        location,
+        arrangement: arrangementFromText(location),
+        pay: ripplingPay(value),
+        source: "rippling",
+        employerUrl: null,
+    };
+};
+
+// A Rippling posting read from its own page. Worth doing before the fallbacks
+// below get to it: the meta tags name the board rather than the employer, so
+// every posting on every Rippling board would otherwise come back as a job at
+// "Rippling Recruiting".
+const fromRippling = (html: string): ScrapedPosting | null =>
+    parseRipplingJob(
+        dig(nextPageData(html), "props", "pageProps", "apiData", "jobPost"),
+    );
+
 // Attributes are read out of the tag separately because Next.js can emit
 // `content` before `property`, and a single pattern would fix only one order.
 const metaContent = (html: string, property: string): string | null => {
@@ -276,7 +337,10 @@ const fromOpenGraph = (html: string): ScrapedPosting => {
 };
 
 export const parsePosting = (html: string): ScrapedPosting =>
-    fromSimplify(html) ?? fromJsonLd(html) ?? fromOpenGraph(html);
+    fromSimplify(html) ??
+    fromRippling(html) ??
+    fromJsonLd(html) ??
+    fromOpenGraph(html);
 
 const titleCase = (slug: string): string =>
     slug
@@ -349,6 +413,7 @@ const POSTING_SOURCES = new Set<PostingSource>([
     "opengraph",
     "greenhouse",
     "simplify",
+    "rippling",
     "none",
 ]);
 

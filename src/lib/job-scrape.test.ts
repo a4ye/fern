@@ -144,6 +144,48 @@ describe("parsePosting", () => {
             payPeriod: "yearly",
         });
     });
+
+    it("takes a Rippling posting from its page data rather than its meta tags", () => {
+        const page = {
+            props: {
+                pageProps: {
+                    apiData: {
+                        jobPost: {
+                            name: "Software Engineer, AI Platform",
+                            companyName: "Aalyria",
+                            workLocations: ["Remote (San Francisco Bay Area)"],
+                            payRangeDetails: [
+                                {
+                                    currency: "USD",
+                                    frequency: "YEAR",
+                                    rangeStart: 185000,
+                                    rangeEnd: 215000,
+                                },
+                            ],
+                        },
+                    },
+                },
+            },
+        };
+        // The meta tags name the board, so a page read that stopped at them
+        // would file this under "Rippling Recruiting".
+        const html = `<html><head>
+            <meta property="og:title" content="Software Engineer, AI Platform | Careers at Aalyria"/>
+            <meta property="og:site_name" content="Rippling Recruiting"/>
+            <script id="__NEXT_DATA__" type="application/json">${JSON.stringify(page)}</script>
+        </head></html>`;
+
+        const posting = parsePosting(html);
+
+        expect(posting).toMatchObject({
+            company: "Aalyria",
+            role: "Software Engineer, AI Platform",
+            location: "Remote (San Francisco Bay Area)",
+            arrangement: "remote",
+            pay: "USD 185000-215000/yr",
+            source: "rippling",
+        });
+    });
 });
 
 describe("scrapePosting", () => {
