@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, mock } from "bun:test";
 import { parseListSort } from "@/components/dashboard/data";
+import { MAX_EVENTS_PER_APPLICATION } from "@/lib/limits";
 
 type Row = {
     id: string;
@@ -81,6 +82,12 @@ const applicationDetailForUser = mock(async (..._args: unknown[]) => ({
     notes: applicationNotes,
 }));
 const insertApplicationEvent = mock(async (..._args: unknown[]) => undefined);
+// How many moves the application has already recorded. Zero unless a test is
+// about the cap, so nothing else has to think about it.
+let applicationEventCount = 0;
+const countApplicationEvents = mock(async (..._args: unknown[]) => ({
+    total: applicationEventCount,
+}));
 const suggestion = {
     id: "suggestion-1",
     applicationId: "app-1",
@@ -123,6 +130,7 @@ mock.module("@/db/queries", () => ({
     getApplicationForUser,
     applicationDetailForUser,
     insertApplicationEvent,
+    countApplicationEvents,
     getSuggestionForUser,
     setSuggestionState,
 }));
@@ -165,6 +173,7 @@ beforeEach(() => {
     rows = [];
     applicationEvents = [];
     applicationNotes = null;
+    applicationEventCount = 0;
     countListsForUser.mockClear();
     listListsForUser.mockClear();
     listsPageForUser.mockClear();
@@ -551,6 +560,20 @@ describe("applySuggestion", () => {
         expect(setApplicationStatus).not.toHaveBeenCalled();
         expect(insertApplicationEvent).not.toHaveBeenCalled();
         expect(setSuggestionState).not.toHaveBeenCalled();
+    });
+
+    it("leaves an application that has recorded its last move alone", async () => {
+        applicationEventCount = MAX_EVENTS_PER_APPLICATION;
+
+        expect(
+            await applySuggestion("user-1", "suggestion-1", "America/Toronto"),
+        ).toBe(true);
+        expect(setApplicationStatus).not.toHaveBeenCalled();
+        expect(insertApplicationEvent).not.toHaveBeenCalled();
+        // Still resolved: the suggestion has been dealt with either way.
+        expect(setSuggestionState.mock.calls[0]?.[1]).toMatchObject({
+            state: "accepted",
+        });
     });
 });
 

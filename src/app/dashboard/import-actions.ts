@@ -5,11 +5,15 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { importApplications } from "@/db/dashboard";
 import { getUserSettings } from "@/db/settings";
+import { withinBudget } from "@/db/rate-limit";
+import { applicationQuota } from "@/db/quotas";
 import {
+    FILE_TOO_LARGE,
+    MAX_IMPORT_BYTES,
     MAX_IMPORT_ROWS,
-    readSheet,
-    type SheetResult,
-} from "@/lib/import/sheet";
+    TOO_MANY_REQUESTS,
+} from "@/lib/limits";
+import { readSheet, type SheetResult } from "@/lib/import/sheet";
 import type { ImportDraft } from "@/lib/import/rows";
 import { importRowSchema, timeZoneSchema, firstIssue } from "@/lib/validation";
 
@@ -21,6 +25,16 @@ const NOT_SIGNED_IN = "You are not signed in." as const;
 export const readImportFile = async (file: File): Promise<SheetResult> => {
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session) return { ok: false, error: NOT_SIGNED_IN };
+
+    // The size the upload declares, before `arrayBuffer` copies it. The browser
+    // checks this too, and a caller that skipped the browser is exactly who this
+    // is here for. `readSheet` measures the bytes it is handed either way.
+    if (file.size > MAX_IMPORT_BYTES) {
+        return { ok: false, error: FILE_TOO_LARGE };
+    }
+    if (!(await withinBudget(session.user.id, "import"))) {
+        return { ok: false, error: TOO_MANY_REQUESTS };
+    }
 
     return readSheet(file.name, await file.arrayBuffer());
 };
@@ -46,14 +60,22 @@ export const commitImport = async (
     if (drafts.length > MAX_IMPORT_ROWS) {
         return {
             ok: false,
-            error: `You can import ${MAX_IMPORT_ROWS} rows at a time.`,
+            error: `You can import ${MAX_IMPORT_ROWS.toLocaleString()} rows at a time.`,
         };
+    }
+    if (!(await withinBudget(session.user.id, "import"))) {
+        return { ok: false, error: TOO_MANY_REQUESTS };
     }
 
     const parsedTimeZone = timeZoneSchema.safeParse(timeZone);
     if (!parsedTimeZone.success) {
         return { ok: false, error: firstIssue(parsedTimeZone.error) };
     }
+
+    // Asked before the rows are validated one by one, so a file with no room to
+    // land is answered without reading all 10,000 of them through the schema.
+    const room = await applicationQuota(session.user.id, listId, drafts.length);
+    if (!room.ok) return room;
 
     const rows: ImportDraft[] = [];
     for (const draft of drafts) {

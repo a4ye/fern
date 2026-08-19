@@ -5,3 +5,4 @@ export * from "@/db/gen/lists_sql";
 export * from "@/db/gen/applications_sql";
 export * from "@/db/gen/events_sql";
 export * from "@/db/gen/email_sql";
+export * from "@/db/gen/quotas_sql";

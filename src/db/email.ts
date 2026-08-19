@@ -5,6 +5,7 @@ import {
     type ApplicationStatus,
     type EmailSuggestion,
 } from "@/components/dashboard/data";
+import { MAX_EVENTS_PER_APPLICATION } from "@/lib/limits";
 
 export type UserApplication = {
     id: string;
@@ -129,8 +130,21 @@ export const applySuggestion = async (
         });
         if (!application) return false;
 
+        // An application that has recorded as many moves as it keeps stops
+        // moving, here as everywhere else. The suggestion is still resolved:
+        // it has been dealt with either way.
+        const events = await gen.countApplicationEvents(client, {
+            applicationId: suggestion.applicationId,
+            userId,
+        });
+        const hasRoom = (events?.total ?? 0) < MAX_EVENTS_PER_APPLICATION;
+
         const toStatus = suggestion.suggestedStatus;
-        if (isStatus(application.status) && application.status !== toStatus) {
+        if (
+            hasRoom &&
+            isStatus(application.status) &&
+            application.status !== toStatus
+        ) {
             await gen.setApplicationStatus(client, {
                 applicationId: suggestion.applicationId,
                 userId,

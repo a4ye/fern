@@ -11,19 +11,42 @@ where a.list_id = $1
 order by e.occurred_at desc
 limit 12;
 
+-- Every application's trail, which is what the flow chart is drawn from. Bounded
+-- per application rather than in total, so one row with a long history cannot
+-- decide how much of everyone else's comes back. The ceiling sits above the one
+-- a write enforces, so this trims nothing a person could have recorded; it is
+-- here to put a roof on what a single page load can cost. Should it ever bind,
+-- it keeps the recent end of the trail, which is the end that says where the
+-- application stands now.
 -- name: StatusEventsForList :many
+with trail as (
+    select
+        e.id,
+        e.application_id,
+        a.company_name,
+        e.from_status,
+        e.to_status,
+        e.note,
+        e.occurred_at,
+        row_number() over (
+            partition by e.application_id
+            order by e.occurred_at desc, e.id desc
+        ) as recency
+    from application_events e
+    join applications a on a.id = e.application_id
+    where a.list_id = sqlc.arg(list_id)
+)
 select
-    e.id,
-    e.application_id,
-    a.company_name,
-    e.from_status,
-    e.to_status,
-    e.note,
-    e.occurred_at
-from application_events e
-join applications a on a.id = e.application_id
-where a.list_id = $1
-order by e.application_id, e.occurred_at, e.id;
+    id,
+    application_id,
+    company_name,
+    from_status,
+    to_status,
+    note,
+    occurred_at
+from trail
+where recency <= sqlc.arg(max_events)::int
+order by application_id, occurred_at, id;
 
 -- name: StatusEventsForApplication :many
 select e.id, e.from_status, e.to_status, e.occurred_at

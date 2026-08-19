@@ -25,6 +25,10 @@ import {
     type Stat,
 } from "@/components/dashboard/data";
 import { parsePay } from "@/lib/pay";
+import {
+    MAX_APPLICATIONS_READ_PER_LIST,
+    MAX_EVENTS_READ_PER_APPLICATION,
+} from "@/lib/limits";
 
 const STATUS_ORDER = Object.keys(STATUS_META) as ApplicationStatus[];
 type QueryClient = Pick<PoolClient, "query">;
@@ -475,8 +479,14 @@ export const getListDetail = async (
     if (!list) return null;
 
     const [applicationRows, statusEventRows] = await Promise.all([
-        gen.listApplicationsForList(pool, { listId }),
-        gen.statusEventsForList(pool, { listId }),
+        gen.listApplicationsForList(pool, {
+            listId,
+            maxApplications: MAX_APPLICATIONS_READ_PER_LIST,
+        }),
+        gen.statusEventsForList(pool, {
+            listId,
+            maxEvents: MAX_EVENTS_READ_PER_APPLICATION,
+        }),
     ]);
 
     // Rows arrive ordered by application and time, so appending each event's

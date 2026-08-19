@@ -8,6 +8,8 @@ export type PostingSource =
     | "json-ld"
     | "opengraph"
     | "greenhouse"
+    | "lever"
+    | "ashby"
     | "simplify"
     | "rippling"
     | "none";
@@ -373,6 +375,41 @@ export const greenhouseIds = (
     return slug && id ? { slug, id } : null;
 };
 
+// Simplify's page names the job but reaches the employer's own posting through
+// a redirect, so that address is asked for by id rather than read out of the
+// markup. Null for any other link, and for a Simplify page that is not a
+// posting.
+export const simplifyClickUrl = (url: URL): string | null => {
+    if (!/(^|\.)simplify\.jobs$/.test(url.hostname)) return null;
+    const [section, id] = url.pathname.split("/").filter(Boolean);
+    return section === "p" && id
+        ? `https://simplify.jobs/jobs/click/${id}`
+        : null;
+};
+
+// Where that redirect led, minus the campaign Simplify tags it with. A
+// destination still on Simplify is the aggregator answering with itself, which
+// is no employer link at all.
+export const employerLink = (raw: string): string | null => {
+    let url: URL;
+    try {
+        url = new URL(raw);
+    } catch {
+        return null;
+    }
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    if (url.username || url.password) return null;
+    if (/(^|\.)simplify\.jobs$/.test(url.hostname)) return null;
+
+    for (const param of [...url.searchParams.keys()]) {
+        const normalized = param.toLowerCase();
+        if (normalized === "gh_src" || normalized.startsWith("utm_")) {
+            url.searchParams.delete(param);
+        }
+    }
+    return url.toString();
+};
+
 export const parseGreenhouseJob = (value: unknown): ScrapedPosting | null => {
     if (!isObject(value)) return null;
     const node = value["location"];
@@ -412,6 +449,8 @@ const POSTING_SOURCES = new Set<PostingSource>([
     "json-ld",
     "opengraph",
     "greenhouse",
+    "lever",
+    "ashby",
     "simplify",
     "rippling",
     "none",

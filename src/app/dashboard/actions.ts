@@ -38,9 +38,22 @@ import {
 } from "@/lib/job-import/shared";
 import {
     acquireJobImportBudget,
+    acquireProviderRead,
     getCachedJobImport,
     putCachedJobImport,
 } from "@/db/job-import";
+import { withinBudget } from "@/db/rate-limit";
+import {
+    applicationQuota,
+    applicationsAtEventCap,
+    listQuota,
+    statusEventQuota,
+} from "@/db/quotas";
+import {
+    MAX_APPLICATION_BATCH,
+    MAX_EVENTS_PER_APPLICATION,
+    TOO_MANY_REQUESTS,
+} from "@/lib/limits";
 import {
     applicationCreateSchema,
     applicationDetailSchema,
@@ -49,13 +62,31 @@ import {
     firstIssue,
     listCreateSchema,
     listUpdateSchema,
-    MAX_APPLICATION_BATCH,
     stepEditsSchema,
     timeZoneSchema,
     type ActionResult,
 } from "@/lib/validation";
 
 const NOT_SIGNED_IN = "You are not signed in." as const;
+
+// The table sends the rows it is showing, so a selection it cannot make sense
+// of means the two have drifted apart rather than that the user did anything.
+const INVALID_SELECTION = "Those applications are no longer there." as const;
+
+// Everything below answers for one signed-in account, and every write it makes
+// is counted against that account's budget. The two go together, so they are
+// asked for together, before anything is read or parsed. The refusal is already
+// an ActionResult, so an action that reports one can hand it straight back.
+type Writer = { ok: true; userId: string } | { ok: false; error: string };
+
+const writingUser = async (): Promise<Writer> => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) return { ok: false, error: NOT_SIGNED_IN };
+    if (!(await withinBudget(session.user.id, "write"))) {
+        return { ok: false, error: TOO_MANY_REQUESTS };
+    }
+    return { ok: true, userId: session.user.id };
+};
 
 const validApplicationIds = (ids: string[]): boolean =>
     ids.length <= MAX_APPLICATION_BATCH &&
@@ -76,19 +107,18 @@ export const createList = async (
     name: string,
     description: string | null,
 ): Promise<ActionResult> => {
-    const session = await auth.api.getSession({ headers: await headers() });
-    if (!session) return { ok: false, error: NOT_SIGNED_IN };
+    const writer = await writingUser();
+    if (!writer.ok) return writer;
 
     const parsed = listCreateSchema.safeParse({ name, description });
     if (!parsed.success) {
         return { ok: false, error: firstIssue(parsed.error) };
     }
 
-    await insertList(
-        session.user.id,
-        parsed.data.name,
-        parsed.data.description,
-    );
+    const room = await listQuota(writer.userId);
+    if (!room.ok) return room;
+
+    await insertList(writer.userId, parsed.data.name, parsed.data.description);
     revalidatePath("/dashboard");
     return { ok: true };
 };
@@ -123,7 +153,9 @@ export const suggestFromUrl = async (
             return { status: "rate-limited", posting: EMPTY_POSTING };
         }
 
-        const posting = await scrapePosting(normalizedUrl);
+        const posting = await scrapePosting(normalizedUrl, () =>
+            acquireProviderRead(providerHost),
+        );
         if (hasPostingSuggestion(posting)) {
             await putCachedJobImport(normalizedUrl, posting);
             return { status: "found", posting };
@@ -179,8 +211,8 @@ export const addApplication = async (
     input: NewApplicationDraft,
     timeZone: string,
 ): Promise<ActionResult> => {
-    const session = await auth.api.getSession({ headers: await headers() });
-    if (!session) return { ok: false, error: NOT_SIGNED_IN };
+    const writer = await writingUser();
+    if (!writer.ok) return writer;
 
     const parsedTimeZone = timeZoneSchema.safeParse(timeZone);
     if (!parsedTimeZone.success) {
@@ -192,8 +224,11 @@ export const addApplication = async (
         return { ok: false, error: firstIssue(parsed.error) };
     }
 
+    const room = await applicationQuota(writer.userId, listId, 1);
+    if (!room.ok) return room;
+
     await insertApplication(
-        session.user.id,
+        writer.userId,
         listId,
         parsed.data,
         parsedTimeZone.data,
@@ -212,8 +247,8 @@ export const updateApplicationsBulk = async (
     rows: { id: string; input: ApplicationDraft; payTyped: boolean }[],
     timeZone: string,
 ): Promise<ActionResult> => {
-    const session = await auth.api.getSession({ headers: await headers() });
-    if (!session) return { ok: false, error: NOT_SIGNED_IN };
+    const writer = await writingUser();
+    if (!writer.ok) return writer;
     if (rows.length > MAX_APPLICATION_BATCH) {
         return {
             ok: false,
@@ -246,9 +281,9 @@ export const updateApplicationsBulk = async (
         });
     }
 
-    const { defaultCurrency } = await getUserSettings(session.user.id);
+    const { defaultCurrency } = await getUserSettings(writer.userId);
     await updateApplicationsDb(
-        session.user.id,
+        writer.userId,
         parsedRows,
         parsedTimeZone.data,
         defaultCurrency,
@@ -269,8 +304,8 @@ export const saveApplicationDetail = async (
     steps: ApplicationStepEdits,
     timeZone: string,
 ): Promise<ActionResult> => {
-    const session = await auth.api.getSession({ headers: await headers() });
-    if (!session) return { ok: false, error: NOT_SIGNED_IN };
+    const writer = await writingUser();
+    if (!writer.ok) return writer;
 
     const parsedTimeZone = timeZoneSchema.safeParse(timeZone);
     if (!parsedTimeZone.success) {
@@ -287,8 +322,20 @@ export const saveApplicationDetail = async (
         return { ok: false, error: firstIssue(parsedSteps.error) };
     }
 
+    // Dropped steps make room, so only what the save adds beyond them counts.
+    const recording =
+        parsedSteps.data.added.length - parsedSteps.data.removed.length;
+    if (recording > 0) {
+        const room = await statusEventQuota(
+            writer.userId,
+            applicationId,
+            recording,
+        );
+        if (!room.ok) return room;
+    }
+
     await saveApplicationDetailDb(
-        session.user.id,
+        writer.userId,
         applicationId,
         parsed.data,
         parsedSteps.data,
@@ -304,92 +351,106 @@ export const setApplicationsStatus = async (
     applicationIds: string[],
     status: ApplicationStatus,
     timeZone: string,
-): Promise<void> => {
-    const session = await auth.api.getSession({ headers: await headers() });
-    if (
-        !session ||
-        applicationIds.length === 0 ||
-        !validApplicationIds(applicationIds)
-    )
-        return;
+): Promise<ActionResult> => {
+    const writer = await writingUser();
+    if (!writer.ok) return writer;
+    if (applicationIds.length === 0 || !validApplicationIds(applicationIds)) {
+        return { ok: false, error: INVALID_SELECTION };
+    }
 
     const parsedTimeZone = timeZoneSchema.safeParse(timeZone);
-    if (!parsedTimeZone.success) return;
+    if (!parsedTimeZone.success) {
+        return { ok: false, error: firstIssue(parsedTimeZone.error) };
+    }
+
+    // An application that has recorded as many moves as it keeps is left as it
+    // is, status and history together, rather than moving with no record of it.
+    const capped = await applicationsAtEventCap(applicationIds);
+    const recordable =
+        capped.size === 0
+            ? applicationIds
+            : applicationIds.filter((id) => !capped.has(id));
+    if (recordable.length === 0) {
+        return {
+            ok: false,
+            error: `An application keeps ${MAX_EVENTS_PER_APPLICATION} status changes, and these have recorded them all.`,
+        };
+    }
 
     await setApplicationsStatusDb(
-        session.user.id,
-        applicationIds,
+        writer.userId,
+        recordable,
         status,
         parsedTimeZone.data,
     );
     revalidatePath(`/dashboard/${listId}`);
     revalidatePath("/dashboard");
+    return { ok: true };
 };
 
 export const setApplicationsArrangement = async (
     listId: string,
     applicationIds: string[],
     arrangement: Arrangement | null,
-): Promise<void> => {
-    const session = await auth.api.getSession({ headers: await headers() });
-    if (
-        !session ||
-        applicationIds.length === 0 ||
-        !validApplicationIds(applicationIds)
-    )
-        return;
+): Promise<ActionResult> => {
+    const writer = await writingUser();
+    if (!writer.ok) return writer;
+    if (applicationIds.length === 0 || !validApplicationIds(applicationIds)) {
+        return { ok: false, error: INVALID_SELECTION };
+    }
 
     await setApplicationsArrangementDb(
-        session.user.id,
+        writer.userId,
         applicationIds,
         arrangement,
     );
     revalidatePath(`/dashboard/${listId}`);
     revalidatePath("/dashboard");
+    return { ok: true };
 };
 
 export const removeApplication = async (
     listId: string,
     applicationId: string,
-): Promise<void> => {
-    const session = await auth.api.getSession({ headers: await headers() });
-    if (!session) return;
+): Promise<ActionResult> => {
+    const writer = await writingUser();
+    if (!writer.ok) return writer;
 
-    await deleteApplicationDb(session.user.id, applicationId);
+    await deleteApplicationDb(writer.userId, applicationId);
     revalidatePath(`/dashboard/${listId}`);
     revalidatePath("/dashboard");
+    return { ok: true };
 };
 
 export const removeApplications = async (
     listId: string,
     applicationIds: string[],
-): Promise<void> => {
-    const session = await auth.api.getSession({ headers: await headers() });
-    if (
-        !session ||
-        applicationIds.length === 0 ||
-        !validApplicationIds(applicationIds)
-    )
-        return;
+): Promise<ActionResult> => {
+    const writer = await writingUser();
+    if (!writer.ok) return writer;
+    if (applicationIds.length === 0 || !validApplicationIds(applicationIds)) {
+        return { ok: false, error: INVALID_SELECTION };
+    }
 
-    await deleteApplicationsDb(session.user.id, applicationIds);
+    await deleteApplicationsDb(writer.userId, applicationIds);
     revalidatePath(`/dashboard/${listId}`);
     revalidatePath("/dashboard");
+    return { ok: true };
 };
 
 export const updateList = async (
     listId: string,
     input: { name: string; description: string | null; status: ListStatus },
 ): Promise<ActionResult> => {
-    const session = await auth.api.getSession({ headers: await headers() });
-    if (!session) return { ok: false, error: NOT_SIGNED_IN };
+    const writer = await writingUser();
+    if (!writer.ok) return writer;
 
     const parsed = listUpdateSchema.safeParse(input);
     if (!parsed.success) {
         return { ok: false, error: firstIssue(parsed.error) };
     }
 
-    await updateListDb(session.user.id, listId, {
+    await updateListDb(writer.userId, listId, {
         name: parsed.data.name,
         description: parsed.data.description,
         status: parsed.data.status,
@@ -400,10 +461,10 @@ export const updateList = async (
 };
 
 export const deleteList = async (listId: string): Promise<void> => {
-    const session = await auth.api.getSession({ headers: await headers() });
-    if (!session) return;
+    const writer = await writingUser();
+    if (!writer.ok) return;
 
-    await deleteListDb(session.user.id, listId);
+    await deleteListDb(writer.userId, listId);
     revalidatePath("/dashboard");
 };
 
@@ -411,9 +472,9 @@ export const togglePin = async (
     listId: string,
     pinned: boolean,
 ): Promise<void> => {
-    const session = await auth.api.getSession({ headers: await headers() });
-    if (!session) return;
+    const writer = await writingUser();
+    if (!writer.ok) return;
 
-    await setListPinned(session.user.id, listId, pinned);
+    await setListPinned(writer.userId, listId, pinned);
     revalidatePath("/dashboard");
 };

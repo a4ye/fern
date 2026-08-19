@@ -210,6 +210,66 @@ describe("scrapePosting", () => {
         expect(fetched).toBeFalse();
     });
 
+    it("stops asking a provider that has just turned it away", async () => {
+        // Greenhouse answers the API read with a refusal. The board page is the
+        // same provider, so reading it would be a second request inside that
+        // refusal, which is what turns a throttle into a block.
+        const asked: string[] = [];
+        globalThis.fetch = (async (input: string | URL | Request) => {
+            asked.push(String(input));
+            return new Response("", { status: 429 });
+        }) as typeof fetch;
+
+        const posting = await scrapePosting(
+            "https://job-boards.greenhouse.io/acme/jobs/5678",
+        );
+
+        expect(asked).toHaveLength(1);
+        expect(asked[0]).toContain("boards-api.greenhouse.io");
+        expect(posting.source).toBe("none");
+    });
+
+    it("still falls back to the board page when the API merely has nothing", async () => {
+        const asked: string[] = [];
+        globalThis.fetch = (async (input: string | URL | Request) => {
+            asked.push(String(input));
+            return String(input).includes("boards-api")
+                ? new Response("", { status: 404 })
+                : new Response(
+                      jsonLd({
+                          "@type": "JobPosting",
+                          title: "Platform Engineer",
+                      }),
+                      { headers: { "content-type": "text/html" } },
+                  );
+        }) as typeof fetch;
+
+        const posting = await scrapePosting(
+            "https://job-boards.greenhouse.io/acme/jobs/5678",
+        );
+
+        expect(asked).toHaveLength(2);
+        expect(posting.role).toBe("Platform Engineer");
+    });
+
+    it("leaves the board page unread when the provider cannot spare it", async () => {
+        // The API answered with nothing, so the page behind it would be a
+        // second read. It is charged for at that point, and refused here.
+        const asked: string[] = [];
+        globalThis.fetch = (async (input: string | URL | Request) => {
+            asked.push(String(input));
+            return new Response("", { status: 404 });
+        }) as typeof fetch;
+
+        const posting = await scrapePosting(
+            "https://job-boards.greenhouse.io/acme/jobs/5678",
+            async () => false,
+        );
+
+        expect(asked).toHaveLength(1);
+        expect(posting.source).toBe("none");
+    });
+
     it("normalizes tracking parameters before shared caching", () => {
         expect(
             normalizeImportUrl(
@@ -223,8 +283,15 @@ describe("scrapePosting", () => {
         expect(
             serverImportRequestCost("https://simplify.jobs/p/123/engineer"),
         ).toBe(2);
+        expect(serverImportRequestCost("https://jobs.lever.co/acme/123")).toBe(
+            1,
+        );
+        // Greenhouse reserves one read, not two: its API answers most links on
+        // its own, and the page behind it is charged for only when it is read.
         expect(
-            serverImportRequestCost("https://jobs.lever.co/acme/123"),
+            serverImportRequestCost(
+                "https://job-boards.greenhouse.io/acme/jobs/5678",
+            ),
         ).toBe(1);
     });
 

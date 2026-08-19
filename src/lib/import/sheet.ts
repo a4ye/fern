@@ -6,16 +6,11 @@
 import Papa from "papaparse";
 import { readSheet as readXlsxSheet } from "read-excel-file/node";
 import type { Sheet } from "@/lib/import/rows";
-
-// The write is one statement whatever the row count, so what this holds back is
-// the browser: the mapping step re-reads every row through the schema on each
-// change to a column or a status, and that is the work that grows with the file.
-export const MAX_IMPORT_ROWS = 2000;
-
-// Kept under the body a server action will carry, which this file both arrives
-// in and the parsed rows go back out through. See serverActions.bodySizeLimit
-// in next.config.ts; that ceiling has to stay the higher of the two.
-export const MAX_IMPORT_BYTES = 2 * 1024 * 1024;
+import {
+    FILE_TOO_LARGE,
+    MAX_IMPORT_BYTES,
+    MAX_IMPORT_ROWS,
+} from "@/lib/limits";
 
 export type SheetResult =
     { ok: true; sheet: Sheet } | { ok: false; error: string };
@@ -55,7 +50,7 @@ const toSheet = (grid: string[][]): SheetResult => {
     if (body.length > MAX_IMPORT_ROWS) {
         return {
             ok: false,
-            error: `That file has ${body.length} rows. You can import ${MAX_IMPORT_ROWS} at a time.`,
+            error: `That file has ${body.length.toLocaleString()} rows. You can import ${MAX_IMPORT_ROWS.toLocaleString()} at a time.`,
         };
     }
     return { ok: true, sheet: { headers, rows: body } };
@@ -91,7 +86,7 @@ export const readSheet = async (
     if (bytes.byteLength === 0)
         return { ok: false, error: "That file is empty." };
     if (bytes.byteLength > MAX_IMPORT_BYTES) {
-        return { ok: false, error: "That file is larger than 2 MB." };
+        return { ok: false, error: FILE_TOO_LARGE };
     }
 
     const extension = name.toLowerCase().split(".").pop() ?? "";

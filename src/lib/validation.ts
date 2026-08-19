@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MAX_STATUS_STEP_EDITS } from "@/lib/limits";
 import {
     APPLICATION_STATUSES,
     ARRANGEMENTS,
@@ -14,8 +15,6 @@ export type ActionResult = { ok: true } | { ok: false; error: string };
 
 export const LIST_NAME_MAX = 80;
 export const LIST_DESCRIPTION_MAX = 280;
-export const MAX_APPLICATION_BATCH = 2_000;
-export const MAX_STATUS_STEP_EDITS = 100;
 
 export const applicationIdSchema = z
     .string()

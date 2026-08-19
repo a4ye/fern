@@ -36,6 +36,7 @@ import {
     type ApplicationStatus,
 } from "@/components/dashboard/data";
 import { cleanLink } from "@/lib/clean-link";
+import { importDirect, isDirectlyReadable } from "@/lib/job-import/direct";
 import {
     hasPostingSuggestion,
     isScrapedPosting,
@@ -160,6 +161,19 @@ export const AddApplicationForm = ({
         setVisibleImportUrl(null);
         setEmployerUrl(null);
         startScrape(async () => {
+            // Read here first where the provider allows it. This browser is the
+            // cheapest reader there is: no server, no waiting on anyone else's
+            // budget, and it works on a phone, where there is no extension to
+            // ask. The two below are what it cannot reach.
+            if (isDirectlyReadable(url)) {
+                const posting = await importDirect(url);
+                if (fetchId.current !== id) return;
+                if (posting && hasPostingSuggestion(posting)) {
+                    applyPosting(posting, url);
+                    return;
+                }
+            }
+
             let localMiss = false;
             if (extension.availability === "available") {
                 const response = await extension.importFromUrl(url);

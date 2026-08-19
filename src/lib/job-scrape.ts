@@ -3,9 +3,11 @@
 
 import {
     EMPTY_POSTING,
+    employerLink,
     greenhouseIds,
     parseGreenhouseJob,
     parsePosting,
+    simplifyClickUrl,
     withUrlFallback,
     type ScrapedPosting,
 } from "@/lib/job-import/shared";
@@ -54,15 +56,15 @@ export const serverImportHost = (rawUrl: string): string | null => {
     return greenhouseIds(url) ? "boards-api.greenhouse.io" : url.hostname;
 };
 
-// Greenhouse can fall back from its API to the board page, while Simplify also
-// resolves its employer link. Budget their worst-case pair of outbound reads.
+// What a read is certain to spend. Simplify always makes two, since it resolves
+// the employer link alongside the posting. Greenhouse usually makes one: its API
+// answers most links on its own, and the board page behind it is only read when
+// that comes back empty, which is charged for at the point it happens rather
+// than reserved from everyone in advance.
 export const serverImportRequestCost = (rawUrl: string): number => {
     const url = webUrl(rawUrl);
     if (!url) return 1;
-    return greenhouseIds(url) ||
-        isHostOrSubdomain(url.hostname, "simplify.jobs")
-        ? 2
-        : 1;
+    return isHostOrSubdomain(url.hostname, "simplify.jobs") ? 2 : 1;
 };
 
 // Tracking parameters do not change a posting and would otherwise fragment the
@@ -81,10 +83,19 @@ export const normalizeImportUrl = (rawUrl: string): string | null => {
     return url.toString();
 };
 
+// A provider saying no, as opposed to saying nothing useful. The difference
+// decides whether it is reasonable to ask it a second time.
+const TURNED_AWAY = [429, 403] as const;
+
+export const isTurnedAway = (status: number): boolean =>
+    (TURNED_AWAY as readonly number[]).includes(status);
+
+type ProviderRead = ScrapedPosting | null | "turned-away";
+
 const fromGreenhouse = async (
     slug: string,
     id: string,
-): Promise<ScrapedPosting | null> => {
+): Promise<ProviderRead> => {
     const response = await fetch(
         `https://boards-api.greenhouse.io/v1/boards/${slug}/jobs/${id}`,
         {
@@ -92,40 +103,23 @@ const fromGreenhouse = async (
             signal: AbortSignal.timeout(8000),
         },
     );
+    if (isTurnedAway(response.status)) return "turned-away";
     if (!response.ok) return null;
     return parseGreenhouseJob(await response.json());
 };
 
-const simplifyId = (url: URL): string | null => {
-    if (!isHostOrSubdomain(url.hostname, "simplify.jobs")) return null;
-    const [section, id] = url.pathname.split("/").filter(Boolean);
-    return section === "p" && id ? id : null;
-};
-
-const cleanReferral = (raw: string): string | null => {
-    const url = webUrl(raw);
-    if (!url || isHostOrSubdomain(url.hostname, "simplify.jobs")) return null;
-    for (const param of [...url.searchParams.keys()]) {
-        const normalized = param.toLowerCase();
-        if (normalized === "gh_src" || normalized.startsWith("utm_")) {
-            url.searchParams.delete(param);
-        }
-    }
-    return url.toString();
-};
-
 // Read the employer destination without following it. The destination may be
 // arbitrary, but the backend never fetches it.
-const resolveSimplify = async (id: string): Promise<string | null> => {
+const resolveSimplify = async (clickUrl: string): Promise<string | null> => {
     try {
-        const response = await fetch(`https://simplify.jobs/jobs/click/${id}`, {
+        const response = await fetch(clickUrl, {
             redirect: "manual",
             headers: { "user-agent": USER_AGENT },
             signal: AbortSignal.timeout(8000),
         });
         if (response.status < 300 || response.status >= 400) return null;
         const location = response.headers.get("location");
-        return location ? cleanReferral(location) : null;
+        return location ? employerLink(location) : null;
     } catch {
         return null;
     }
@@ -151,23 +145,43 @@ const fetchKnownPage = async (initial: URL): Promise<Response | null> => {
     return null;
 };
 
+// Reading the board page after the API came back empty is a second request to
+// the same provider, so it is paid for separately. Left out, nothing is charged
+// and the fallback simply runs, which is what the tests want.
+export type SpendAnotherRead = () => Promise<boolean>;
+
 export const scrapePosting = async (
     rawUrl: string,
+    spendAnotherRead?: SpendAnotherRead,
 ): Promise<ScrapedPosting> => {
     const url = webUrl(rawUrl);
     if (!url || !serverImportHost(rawUrl)) return EMPTY_POSTING;
 
     // Resolve the original listing alongside the posting read so Simplify does
     // not add another serial network round trip.
-    const simplify = simplifyId(url);
-    const employerUrl = simplify ? resolveSimplify(simplify) : null;
+    const clickUrl = simplifyClickUrl(url);
+    const employerUrl = clickUrl ? resolveSimplify(clickUrl) : null;
 
     const greenhouse = greenhouseIds(url);
-    let result = greenhouse
+    const api = greenhouse
         ? await fromGreenhouse(greenhouse.slug, greenhouse.id)
         : null;
 
-    if (!result || result.source === "none") {
+    // A provider that has just refused us is the last one to ask again. Falling
+    // through to the board page here would be a second request inside the same
+    // refusal, which is how a moment's throttling turns into being blocked, and
+    // being blocked takes the feature away from everyone at once. The caller
+    // gets nothing, which is what it already shows when a link cannot be read.
+    const turnedAway = api === "turned-away";
+    let result: ScrapedPosting =
+        api === "turned-away" || api === null ? EMPTY_POSTING : api;
+
+    const canRead =
+        !turnedAway &&
+        result.source === "none" &&
+        (!spendAnotherRead || (await spendAnotherRead()));
+
+    if (canRead) {
         try {
             const response = await fetchKnownPage(url);
             const html =

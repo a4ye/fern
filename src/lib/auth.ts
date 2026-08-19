@@ -70,6 +70,32 @@ export const auth = betterAuth({
               }
             : {}),
     },
+    // Sign-in and the OAuth callbacks are the only endpoints anyone can reach
+    // without a session, so they are the only ones an anonymous caller can
+    // hammer. better-auth counts per IP; it is off outside production and
+    // counts in memory by default, which on serverless means per instance and
+    // so barely at all. Both are turned on here rather than left to the
+    // defaults, and the count is kept in the database every instance shares.
+    // These count per IP address, which means they are shared by everyone
+    // behind one: a campus, an office, a phone network. The numbers are set for
+    // a building full of people rather than for one, since the alternative is
+    // that the first thirty students to open the app in a lecture hall lock out
+    // the rest. What they are here to stop is a script, and a script goes
+    // orders of magnitude past these rather than a little.
+    rateLimit: {
+        enabled: true,
+        storage: "database",
+        modelName: "rate_limit",
+        window: 60,
+        max: 600,
+        customRules: {
+            // Starting a sign-in redirects to a provider, and a callback ends
+            // in a session write. A person does this once; a script would do it
+            // to make the app open connections on its behalf.
+            "/sign-in/social": { window: 60, max: 60 },
+            "/callback/*": { window: 60, max: 60 },
+        },
+    },
     plugins: [nextCookies()],
 });
 

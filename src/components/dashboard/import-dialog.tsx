@@ -24,6 +24,7 @@ import {
     type ColumnMapping,
     type ImportField,
 } from "@/lib/import/fields";
+import { FILE_TOO_LARGE, MAX_IMPORT_BYTES } from "@/lib/limits";
 import {
     arrangementFor,
     buildRows,
@@ -210,7 +211,7 @@ const FileStep = ({
                     {busy ? "Reading your file" : "Drop a spreadsheet here"}
                 </p>
                 <p className="mt-1 text-xs text-sub">
-                    CSV or Excel, up to 2 MB.
+                    CSV or Excel, up to 5 MB.
                 </p>
                 <label
                     className={`${secondaryButtonClass} mt-4 ${busy ? "pointer-events-none opacity-50" : ""}`}
@@ -823,6 +824,13 @@ export const ImportDialog = ({
     );
 
     const pickFile = async (file: File) => {
+        // The file travels to the server as the body of an action, so its size
+        // is settled here rather than after an upload nobody wanted to wait for.
+        if (file.size > MAX_IMPORT_BYTES) {
+            setError(FILE_TOO_LARGE);
+            return;
+        }
+
         setBusy(true);
         setError(null);
         try {

@@ -47,20 +47,37 @@ export async function recentEventsForList(client: Client, args: RecentEventsForL
 }
 
 export const statusEventsForListQuery = `-- name: StatusEventsForList :many
+with trail as (
+    select
+        e.id,
+        e.application_id,
+        a.company_name,
+        e.from_status,
+        e.to_status,
+        e.note,
+        e.occurred_at,
+        row_number() over (
+            partition by e.application_id
+            order by e.occurred_at desc, e.id desc
+        ) as recency
+    from application_events e
+    join applications a on a.id = e.application_id
+    where a.list_id = $2
+)
 select
-    e.id,
-    e.application_id,
-    a.company_name,
-    e.from_status,
-    e.to_status,
-    e.note,
-    e.occurred_at
-from application_events e
-join applications a on a.id = e.application_id
-where a.list_id = $1
-order by e.application_id, e.occurred_at, e.id`;
+    id,
+    application_id,
+    company_name,
+    from_status,
+    to_status,
+    note,
+    occurred_at
+from trail
+where recency <= $1::int
+order by application_id, occurred_at, id`;
 
 export interface StatusEventsForListArgs {
+    maxEvents: number;
     listId: string;
 }
 
@@ -77,7 +94,7 @@ export interface StatusEventsForListRow {
 export async function statusEventsForList(client: Client, args: StatusEventsForListArgs): Promise<StatusEventsForListRow[]> {
     const result = await client.query({
         text: statusEventsForListQuery,
-        values: [args.listId],
+        values: [args.maxEvents, args.listId],
         rowMode: "array"
     });
     return result.rows.map(row => {

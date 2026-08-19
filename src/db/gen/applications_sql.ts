@@ -173,10 +173,12 @@ select
     updated_at
 from applications
 where list_id = $1
-order by created_at desc, position desc`;
+order by created_at desc, position desc
+limit $2::int`;
 
 export interface ListApplicationsForListArgs {
     listId: string;
+    maxApplications: number;
 }
 
 export interface ListApplicationsForListRow {
@@ -200,7 +202,7 @@ export interface ListApplicationsForListRow {
 export async function listApplicationsForList(client: Client, args: ListApplicationsForListArgs): Promise<ListApplicationsForListRow[]> {
     const result = await client.query({
         text: listApplicationsForListQuery,
-        values: [args.listId],
+        values: [args.listId, args.maxApplications],
         rowMode: "array"
     });
     return result.rows.map(row => {

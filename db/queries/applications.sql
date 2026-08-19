@@ -121,8 +121,11 @@ select
     applied_at,
     updated_at
 from applications
-where list_id = $1
-order by created_at desc, position desc;
+where list_id = sqlc.arg(list_id)
+order by created_at desc, position desc
+-- A roof on what one page load reads, sitting above the number a list is
+-- allowed to hold so it trims nothing anyone could have added.
+limit sqlc.arg(max_applications)::int;
 
 -- What the detail panel needs and the table does not, read when a single row is
 -- opened rather than shipped for all of them.

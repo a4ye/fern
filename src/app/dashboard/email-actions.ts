@@ -13,6 +13,8 @@ import {
 import { classifyEmails } from "@/lib/email/classify";
 import { createGmailProvider } from "@/lib/email/gmail";
 import { EmailAuthError } from "@/lib/email/types";
+import { withinBudget } from "@/db/rate-limit";
+import { TOO_MANY_REQUESTS } from "@/lib/limits";
 import { timeZoneSchema } from "@/lib/validation";
 
 const MAX_EMAILS = 25;
@@ -49,6 +51,13 @@ export const syncInbox = async (): Promise<SyncResult> => {
             message:
                 "Inbox sync is not configured for privacy-safe processing.",
         };
+    }
+
+    // Taken before Google is asked for anything. A sync reads an inbox and then
+    // pays a model to read it, which is the only work here that costs money per
+    // call, so it is budgeted ahead of the token rather than after it.
+    if (!(await withinBudget(session.user.id, "inbox"))) {
+        return { ok: false, reason: "error", message: TOO_MANY_REQUESTS };
     }
 
     let accessToken: string;
@@ -149,6 +158,7 @@ export const acceptSuggestion = async (
 ): Promise<void> => {
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session) return;
+    if (!(await withinBudget(session.user.id, "write"))) return;
 
     const parsedTimeZone = timeZoneSchema.safeParse(timeZone);
     if (!parsedTimeZone.success) return;
@@ -162,6 +172,7 @@ export const dismissSuggestionAction = async (
 ): Promise<void> => {
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session) return;
+    if (!(await withinBudget(session.user.id, "write"))) return;
 
     await dismissSuggestion(session.user.id, suggestionId);
     revalidatePath("/dashboard");

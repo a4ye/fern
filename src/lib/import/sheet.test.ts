@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { MAX_IMPORT_ROWS, readSheet } from "@/lib/import/sheet";
+import {
+    FILE_TOO_LARGE,
+    MAX_IMPORT_BYTES,
+    MAX_IMPORT_ROWS,
+} from "@/lib/limits";
+import { readSheet } from "@/lib/import/sheet";
 import { buildXlsx } from "@/lib/xlsx";
 
 const bytes = (text: string): ArrayBuffer =>
@@ -80,6 +85,16 @@ describe("refusing a file", () => {
         const result = await read("resume.pdf", "Company\nAcme");
         expect(result).toMatchObject({ ok: false });
         if (!result.ok) expect(result.error).toContain(".xlsx");
+    });
+
+    test("refuses bytes past the size cap before parsing them", async () => {
+        // What a caller who skipped the browser's own check is met with. The
+        // extension is one it takes, so nothing else turns this away.
+        const result = await readSheet(
+            "jobs.csv",
+            new ArrayBuffer(MAX_IMPORT_BYTES + 1),
+        );
+        expect(result).toMatchObject({ ok: false, error: FILE_TOO_LARGE });
     });
 
     test("refuses a file longer than it will import", async () => {

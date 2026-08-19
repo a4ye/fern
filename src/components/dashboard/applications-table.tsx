@@ -8,6 +8,8 @@ import {
     useState,
     useTransition,
 } from "react";
+import { toast } from "sonner";
+import type { ActionResult } from "@/lib/validation";
 import {
     loadApplicationExtras,
     removeApplication,
@@ -644,11 +646,20 @@ export const ApplicationsTable = ({
             isSelected ? new Set(view.rows.map((app) => app.id)) : new Set(),
         );
 
+    // A refused write leaves the optimistic row to be discarded when the
+    // transition ends, which puts the table back the way it was. Saying so is
+    // the missing half: without it the row would slide back with no reason
+    // given. The refusals worth reaching a person are all things they can act
+    // on, and the wait behind them is seconds.
+    const reportRefusal = (result: ActionResult) => {
+        if (!result.ok) toast.error(result.error);
+    };
+
     const onDelete = (id: string) => {
         setDeletingId(null);
         startMutation(async () => {
             applyOptimistic({ type: "delete", ids: new Set([id]) });
-            await removeApplication(listId, id);
+            reportRefusal(await removeApplication(listId, id));
         });
     };
 
@@ -732,7 +743,9 @@ export const ApplicationsTable = ({
         clearSelection();
         startMutation(async () => {
             applyOptimistic({ type: "status", ids, status, appliedAt });
-            await setApplicationsStatus(listId, [...ids], status, timeZone);
+            reportRefusal(
+                await setApplicationsStatus(listId, [...ids], status, timeZone),
+            );
         });
     };
 
@@ -741,7 +754,9 @@ export const ApplicationsTable = ({
         clearSelection();
         startMutation(async () => {
             applyOptimistic({ type: "arrangement", ids, arrangement });
-            await setApplicationsArrangement(listId, [...ids], arrangement);
+            reportRefusal(
+                await setApplicationsArrangement(listId, [...ids], arrangement),
+            );
         });
     };
 
@@ -750,7 +765,7 @@ export const ApplicationsTable = ({
         clearSelection();
         startMutation(async () => {
             applyOptimistic({ type: "delete", ids });
-            await removeApplications(listId, [...ids]);
+            reportRefusal(await removeApplications(listId, [...ids]));
         });
     };
 

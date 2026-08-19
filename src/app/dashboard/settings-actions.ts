@@ -4,6 +4,8 @@ import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { saveUserSettings } from "@/db/settings";
+import { withinBudget } from "@/db/rate-limit";
+import { TOO_MANY_REQUESTS } from "@/lib/limits";
 import {
     accountSettingsSchema,
     firstIssue,
@@ -20,6 +22,9 @@ export const saveAccountSettings = async (input: {
     const requestHeaders = await headers();
     const session = await auth.api.getSession({ headers: requestHeaders });
     if (!session) return { ok: false, error: NOT_SIGNED_IN };
+    if (!(await withinBudget(session.user.id, "write"))) {
+        return { ok: false, error: TOO_MANY_REQUESTS };
+    }
 
     const parsed = accountSettingsSchema.safeParse(input);
     if (!parsed.success) {

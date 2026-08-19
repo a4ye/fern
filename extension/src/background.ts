@@ -8,11 +8,13 @@ import {
 } from "../../src/lib/job-import/protocol";
 import {
     EMPTY_POSTING,
+    employerLink,
     greenhouseIds,
     hasPostingSuggestion,
     isScrapedPosting,
     parseGreenhouseJob,
     parsePosting,
+    simplifyClickUrl,
     withUrlFallback,
     type ScrapedPosting,
 } from "../../src/lib/job-import/shared";
@@ -67,6 +69,25 @@ const publicWebUrl = (rawUrl: string): URL | null => {
     }
 };
 
+// A browser is not allowed to read a redirect it did not follow, so this one is
+// followed and the address it settled on is the answer. The page that arrives is
+// the employer's, and nothing here wants it, so the body is dropped unread.
+const resolveEmployerLink = async (
+    clickUrl: string,
+): Promise<string | null> => {
+    try {
+        const response = await fetch(clickUrl, {
+            credentials: "omit",
+            redirect: "follow",
+            signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        });
+        void response.body?.cancel();
+        return employerLink(response.url);
+    } catch {
+        return null;
+    }
+};
+
 const fetchPosting = async (url: URL): Promise<ScrapedPosting> => {
     const greenhouse = greenhouseIds(url);
     if (greenhouse) {
@@ -87,6 +108,11 @@ const fetchPosting = async (url: URL): Promise<ScrapedPosting> => {
         }
     }
 
+    // Started alongside the page read rather than after it, so an aggregator
+    // link costs one wait instead of two.
+    const clickUrl = simplifyClickUrl(url);
+    const employer = clickUrl ? resolveEmployerLink(clickUrl) : null;
+
     const response = await fetch(url, {
         credentials: "omit",
         redirect: "follow",
@@ -94,7 +120,11 @@ const fetchPosting = async (url: URL): Promise<ScrapedPosting> => {
     });
     if (!response.ok) return EMPTY_POSTING;
     const html = await readPostingHtml(response);
-    return html ? withUrlFallback(parsePosting(html), url) : EMPTY_POSTING;
+    if (!html) return EMPTY_POSTING;
+    return {
+        ...withUrlFallback(parsePosting(html), url),
+        employerUrl: employer ? await employer : null,
+    };
 };
 
 const resultFor = (
