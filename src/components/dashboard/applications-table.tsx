@@ -74,6 +74,7 @@ import {
     type Arrangement,
 } from "@/components/dashboard/data";
 import { fileSlug, saveBlob } from "@/lib/download";
+import type { ExchangeRates } from "@/lib/exchange";
 import { COMPANY_MAX, LOCATION_MAX, PAY_MAX, ROLE_MAX } from "@/lib/validation";
 
 type Draft = {
@@ -431,12 +432,14 @@ export const ApplicationsTable = ({
     applications,
     defaultCurrency,
     cleanLinks,
+    rates,
 }: {
     listId: string;
     name: string;
     applications: ApplicationRow[];
     defaultCurrency: string;
     cleanLinks: boolean;
+    rates: ExchangeRates;
 }) => {
     const [, startMutation] = useTransition();
     // The panel opens on more than the table carries, so the row it is opened
@@ -516,8 +519,8 @@ export const ApplicationsTable = ({
     );
 
     const view = useMemo(
-        () => applicationsView(optimisticApplications, filters, sort),
-        [optimisticApplications, filters, sort],
+        () => applicationsView(optimisticApplications, filters, sort, rates),
+        [optimisticApplications, filters, sort, rates],
     );
     const filtered = isFiltered(filters);
     const rowWindow = useRowWindow(

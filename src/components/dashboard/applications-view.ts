@@ -14,6 +14,7 @@ import {
     type PayPeriod,
 } from "@/components/dashboard/data";
 import { containsMatch } from "@/lib/fuzzy";
+import { RATE_BASE, inBaseCurrency, type ExchangeRates } from "@/lib/exchange";
 
 export type SortKey =
     | "company"
@@ -68,18 +69,25 @@ const PER_YEAR: Record<PayPeriod, number> = {
 };
 
 // The low end is the figure the cell leads with, so it is what the column reads
-// by. Currencies are compared as written, there being no rate here to convert
-// them; within one currency, which is how a list is nearly always kept, the
-// order is exact.
-const annualPay = (app: ApplicationRow): number | null => {
+// by. Once on a yearly clock it is carried into one currency as well, since a
+// number and a number are only ever comparable in the same money. A row the
+// rates cannot cover sorts where an empty cell sorts, at the bottom: no order
+// at all beats an order built on a currency this app has guessed the size of.
+const annualPay = (
+    app: ApplicationRow,
+    rates: ExchangeRates,
+): number | null => {
     const amount = app.payMin ?? app.payMax;
     if (amount === null) return null;
-    return Number(amount) * (app.payPeriod ? PER_YEAR[app.payPeriod] : 1);
+    const yearly =
+        Number(amount) * (app.payPeriod ? PER_YEAR[app.payPeriod] : 1);
+    return inBaseCurrency(yearly, app.payCurrency || RATE_BASE, rates);
 };
 
 const sortValue = (
     app: ApplicationRow,
     key: SortKey,
+    rates: ExchangeRates,
 ): string | number | null => {
     switch (key) {
         case "company":
@@ -95,7 +103,7 @@ const sortValue = (
                 ? null
                 : (ARRANGEMENT_RANK.get(app.arrangement) ?? null);
         case "pay":
-            return annualPay(app);
+            return annualPay(app, rates);
         case "appliedAt":
             return app.appliedAt;
         case "updatedAt":
@@ -203,6 +211,7 @@ export const applicationsView = (
     applications: ApplicationRow[],
     filters: Filters,
     sort: Sort | null,
+    rates: ExchangeRates,
 ): ApplicationsView => {
     const byStatus = (app: ApplicationRow) =>
         filters.statuses.length === 0 || filters.statuses.includes(app.status);
@@ -221,8 +230,8 @@ export const applicationsView = (
         rows: sort
             ? [...rows].sort((first, second) =>
                   compare(
-                      sortValue(first, sort.key),
-                      sortValue(second, sort.key),
+                      sortValue(first, sort.key, rates),
+                      sortValue(second, sort.key, rates),
                       sort.direction,
                   ),
               )

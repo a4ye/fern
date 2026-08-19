@@ -4,6 +4,7 @@ import { cache } from "react";
 import { notFound, redirect } from "next/navigation";
 import { getRequestSession } from "@/lib/auth";
 import { getListDetail } from "@/db/dashboard";
+import { getExchangeRates } from "@/db/exchange-rates";
 import { getUserSettings } from "@/db/settings";
 import { ApplicationsTable } from "@/components/dashboard/applications-table";
 import { listsHrefFrom } from "@/components/dashboard/data";
@@ -30,9 +31,10 @@ const SeasonPage = async ({ params, searchParams }: Props) => {
     const session = await getRequestSession();
     if (!session) redirect("/login");
 
-    const [detail, settings] = await Promise.all([
+    const [detail, settings, rates] = await Promise.all([
         loadListDetail(session.user.id, (await params).season),
         getUserSettings(session.user.id),
+        getExchangeRates(),
     ]);
     if (!detail) notFound();
 
@@ -73,6 +75,7 @@ const SeasonPage = async ({ params, searchParams }: Props) => {
                     applications={detail.applications}
                     defaultCurrency={settings.defaultCurrency}
                     cleanLinks={settings.cleanLinks}
+                    rates={rates}
                 />
             </div>
         </div>

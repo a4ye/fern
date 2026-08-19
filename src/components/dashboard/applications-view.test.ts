@@ -8,6 +8,7 @@ import {
     type SortKey,
 } from "@/components/dashboard/applications-view";
 import type { ApplicationRow } from "@/components/dashboard/data";
+import type { ExchangeRates } from "@/lib/exchange";
 
 const app = (
     company: string,
@@ -33,17 +34,22 @@ const app = (
     ...fields,
 });
 
+// What one US dollar buys, rounded to figures a reader can do in their head.
+// "XXX" stands for any currency the provider does not quote, and is left out.
+const RATES = { USD: 1, EUR: 0.5, JPY: 100 };
+
 const order = (
     rows: ApplicationRow[],
     key: SortKey,
     direction: "asc" | "desc" = "asc",
+    rates: ExchangeRates = RATES,
 ): string[] =>
-    applicationsView(rows, NO_FILTERS, { key, direction }).rows.map(
+    applicationsView(rows, NO_FILTERS, { key, direction }, rates).rows.map(
         (row) => row.company,
     );
 
 const found = (rows: ApplicationRow[], filters: Partial<Filters>): string[] =>
-    applicationsView(rows, { ...NO_FILTERS, ...filters }, null).rows.map(
+    applicationsView(rows, { ...NO_FILTERS, ...filters }, null, RATES).rows.map(
         (row) => row.company,
     );
 
@@ -105,6 +111,46 @@ describe("sorting", () => {
         ];
         // 108,000 a year, 124,800 a year, 115,000 a year.
         expect(order(rows, "pay")).toEqual(["monthly", "yearly", "hourly"]);
+    });
+
+    test("puts pay in one currency before comparing it", () => {
+        const rows = [
+            app("yen", {
+                payMin: "8000000.00",
+                payCurrency: "JPY",
+                payPeriod: "yearly",
+            }),
+            app("dollars", {
+                payMin: "120000.00",
+                payCurrency: "USD",
+                payPeriod: "yearly",
+            }),
+            app("euros", {
+                payMin: "90000.00",
+                payCurrency: "EUR",
+                payPeriod: "yearly",
+            }),
+        ];
+        // 80,000 dollars, 120,000 and 180,000. Read as written, the figures run
+        // the other way and the smallest of the three would lead the column.
+        expect(order(rows, "pay")).toEqual(["yen", "dollars", "euros"]);
+    });
+
+    test("leaves pay in a currency with no rate at the bottom", () => {
+        const rows = [
+            app("unquoted", { payMin: "900000.00", payCurrency: "XXX" }),
+            app("quoted", { payMin: "1.00", payCurrency: "USD" }),
+        ];
+        expect(order(rows, "pay")).toEqual(["quoted", "unquoted"]);
+        expect(order(rows, "pay", "desc")).toEqual(["quoted", "unquoted"]);
+    });
+
+    test("ranks nothing but the base currency when no rates are held", () => {
+        const rows = [
+            app("elsewhere", { payMin: "50000.00", payCurrency: "EUR" }),
+            app("home", { payMin: "1.00", payCurrency: "USD" }),
+        ];
+        expect(order(rows, "pay", "asc", {})).toEqual(["home", "elsewhere"]);
     });
 
     test("sorts a pay range by the end the cell leads with", () => {
@@ -233,6 +279,7 @@ describe("filtering", () => {
             rows,
             { ...NO_FILTERS, statuses: ["applied"] },
             null,
+            RATES,
         );
         // Rejected is filtered out, and its count still says what it holds.
         expect(view.statusCounts.get("rejected")).toBe(1);
@@ -247,6 +294,7 @@ describe("filtering", () => {
             rows,
             { ...NO_FILTERS, query: "b" },
             null,
+            RATES,
         );
         expect(view.statusCounts.get("rejected")).toBe(1);
         expect(view.statusCounts.get("applied")).toBeUndefined();
