@@ -78,17 +78,20 @@ export const AccountSettings = ({
     image,
     defaultCurrency,
     cleanLinks,
+    employerLinks,
 }: {
     name: string;
     signedInAs: string;
     image: string | null;
     defaultCurrency: string;
     cleanLinks: boolean;
+    employerLinks: boolean;
 }) => {
     const router = useRouter();
     const [draftName, setDraftName] = useState(name);
     const [draftCurrency, setDraftCurrency] = useState(defaultCurrency);
     const [draftCleanLinks, setDraftCleanLinks] = useState(cleanLinks);
+    const [draftEmployerLinks, setDraftEmployerLinks] = useState(employerLinks);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -96,7 +99,8 @@ export const AccountSettings = ({
     const changed =
         trimmedName !== name ||
         draftCurrency !== defaultCurrency ||
-        draftCleanLinks !== cleanLinks;
+        draftCleanLinks !== cleanLinks ||
+        draftEmployerLinks !== employerLinks;
 
     const save = async () => {
         if (saving || !changed) return;
@@ -107,6 +111,7 @@ export const AccountSettings = ({
                 name: draftName,
                 defaultCurrency: draftCurrency,
                 cleanLinks: draftCleanLinks,
+                employerLinks: draftEmployerLinks,
             });
             if (result.ok) {
                 toast.success("Settings saved.");
@@ -185,6 +190,16 @@ export const AccountSettings = ({
                         label="Remove link tracking"
                         on={draftCleanLinks}
                         onChange={setDraftCleanLinks}
+                    />
+                </Row>
+                <Row
+                    label="Auto convert Simplify links"
+                    hint="A Simplify link becomes the employer's own link. Turn this off to confirm each one first."
+                >
+                    <Toggle
+                        label="Auto convert Simplify links"
+                        on={draftEmployerLinks}
+                        onChange={setDraftEmployerLinks}
                     />
                 </Row>
             </Section>

@@ -75,6 +75,7 @@ const SeasonPage = async ({ params, searchParams }: Props) => {
                     applications={detail.applications}
                     defaultCurrency={settings.defaultCurrency}
                     cleanLinks={settings.cleanLinks}
+                    employerLinks={settings.employerLinks}
                     rates={rates}
                 />
             </div>

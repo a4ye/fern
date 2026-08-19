@@ -60,11 +60,13 @@ export const AddApplicationForm = ({
     listId,
     defaultCurrency,
     cleanLinks,
+    employerLinks,
     onClose,
 }: {
     listId: string;
     defaultCurrency: string;
     cleanLinks: boolean;
+    employerLinks: boolean;
     onClose: () => void;
 }) => {
     const { ref: dialogRef, close } = useModalDialog();
@@ -80,7 +82,8 @@ export const AddApplicationForm = ({
     );
     const [installOpen, setInstallOpen] = useState(false);
     // An aggregator link reads well but records the wrong page, so the
-    // employer's own is offered here for the user to accept or leave.
+    // employer's own is offered here for the user to accept or leave. A user who
+    // always accepts it says so in settings, and then it is swapped in instead.
     const [employerUrl, setEmployerUrl] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [fetching, setFetching] = useState(false);
@@ -138,11 +141,16 @@ export const AddApplicationForm = ({
                 defaultCurrency,
             ),
         );
-        setEmployerUrl(
+        const employer =
             found.employerUrl && found.employerUrl !== url
                 ? found.employerUrl
-                : null,
-        );
+                : null;
+        if (employer && employerLinks) {
+            set("url", employer);
+            setEmployerUrl(null);
+        } else {
+            setEmployerUrl(employer);
+        }
         setMissed(false);
         setRateLimited(false);
         setVisibleImportUrl(null);

@@ -264,6 +264,7 @@ export const accountSettingsSchema = z.object({
         ),
     defaultCurrency: currencySchema,
     cleanLinks: z.boolean(),
+    employerLinks: z.boolean(),
 });
 
 // Narrows a safeParse failure to a single message for display. Schemas above

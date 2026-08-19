@@ -56,6 +56,7 @@ const SettingsPage = async ({
                 image={session.user.image ?? null}
                 defaultCurrency={settings.defaultCurrency}
                 cleanLinks={settings.cleanLinks}
+                employerLinks={settings.employerLinks}
             />
         </div>
     );

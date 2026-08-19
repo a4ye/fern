@@ -5,7 +5,7 @@ interface Client {
 }
 
 export const getUserSettingsQuery = `-- name: GetUserSettings :one
-select default_currency, clean_links
+select default_currency, clean_links, employer_links
 from user_settings
 where user_id = $1`;
 
@@ -16,6 +16,7 @@ export interface GetUserSettingsArgs {
 export interface GetUserSettingsRow {
     defaultCurrency: string;
     cleanLinks: boolean;
+    employerLinks: boolean;
 }
 
 export async function getUserSettings(client: Client, args: GetUserSettingsArgs): Promise<GetUserSettingsRow | null> {
@@ -30,28 +31,31 @@ export async function getUserSettings(client: Client, args: GetUserSettingsArgs)
     const row = result.rows[0];
     return {
         defaultCurrency: row[0],
-        cleanLinks: row[1]
+        cleanLinks: row[1],
+        employerLinks: row[2]
     };
 }
 
 export const saveUserSettingsQuery = `-- name: SaveUserSettings :exec
-insert into user_settings (user_id, default_currency, clean_links)
-values ($1, $2, $3)
+insert into user_settings (user_id, default_currency, clean_links, employer_links)
+values ($1, $2, $3, $4)
 on conflict (user_id) do update
 set default_currency = excluded.default_currency,
     clean_links = excluded.clean_links,
+    employer_links = excluded.employer_links,
     updated_at = now()`;
 
 export interface SaveUserSettingsArgs {
     userId: string;
     defaultCurrency: string;
     cleanLinks: boolean;
+    employerLinks: boolean;
 }
 
 export async function saveUserSettings(client: Client, args: SaveUserSettingsArgs): Promise<void> {
     await client.query({
         text: saveUserSettingsQuery,
-        values: [args.userId, args.defaultCurrency, args.cleanLinks],
+        values: [args.userId, args.defaultCurrency, args.cleanLinks, args.employerLinks],
         rowMode: "array"
     });
 }
