@@ -445,7 +445,7 @@ export const hasPostingSuggestion = (posting: ScrapedPosting): boolean =>
         posting.pay,
     );
 
-const POSTING_SOURCES = new Set<PostingSource>([
+export const POSTING_SOURCES = [
     "json-ld",
     "opengraph",
     "greenhouse",
@@ -454,7 +454,9 @@ const POSTING_SOURCES = new Set<PostingSource>([
     "simplify",
     "rippling",
     "none",
-]);
+] as const satisfies readonly PostingSource[];
+
+const KNOWN_SOURCE = new Set<PostingSource>(POSTING_SOURCES);
 
 const nullableString = (value: unknown): value is string | null =>
     value === null || typeof value === "string";
@@ -470,7 +472,7 @@ export const isScrapedPosting = (value: unknown): value is ScrapedPosting => {
             value["arrangement"] === "hybrid" ||
             value["arrangement"] === "onsite") &&
         nullableString(value["pay"]) &&
-        POSTING_SOURCES.has(value["source"] as PostingSource) &&
+        KNOWN_SOURCE.has(value["source"] as PostingSource) &&
         nullableString(value["employerUrl"])
     );
 };

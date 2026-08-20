@@ -1,6 +1,14 @@
 import { z } from "zod";
 import { MAX_STATUS_STEP_EDITS } from "@/lib/limits";
 import {
+    POSTING_FIELD_COUNT,
+    POSTING_OUTCOMES,
+    POSTING_READERS,
+    POSTING_READ_MS_MAX,
+    isPostingReader,
+} from "@/lib/metrics";
+import { POSTING_SOURCES } from "@/lib/job-import/shared";
+import {
     APPLICATION_STATUSES,
     ARRANGEMENTS,
     PAY_PERIODS,
@@ -266,6 +274,35 @@ export const accountSettingsSchema = z.object({
     cleanLinks: z.boolean(),
     employerLinks: z.boolean(),
 });
+
+// What the browser says a pasted link did. This is the one thing the app records
+// on a caller's word, so the word is bounded: every name must be one this app
+// already knows, and neither number may exceed what the read it describes could
+// physically have reached. A caller cannot invent a bucket, and so cannot make
+// this table grow a row per employer.
+export const postingReadSchema = z
+    .object({
+        outcome: z.enum(POSTING_OUTCOMES),
+        attempted: z.array(z.enum(POSTING_READERS)),
+        source: z.enum(POSTING_SOURCES).nullable(),
+        waitedMs: z.number().int().min(0).max(POSTING_READ_MS_MAX),
+        fieldsFilled: z.number().int().min(0).max(POSTING_FIELD_COUNT),
+    })
+    // A reader named twice would be counted twice, which would sink its hit
+    // rate without a single extra link having been read.
+    .refine(
+        (read) => new Set(read.attempted).size === read.attempted.length,
+        "A reader cannot be attempted twice in one read.",
+    )
+    // A reader cannot have filled the form without having been given the link.
+    // Left unchecked, hits could outnumber attempts and a reader could report
+    // reading more than 100% of what it was shown.
+    .refine(
+        (read) =>
+            !isPostingReader(read.outcome) ||
+            read.attempted.includes(read.outcome),
+        "The reader that filled the form must be one that was attempted.",
+    );
 
 // Narrows a safeParse failure to a single message for display. Schemas above
 // validate one field at a time in practice, so the first issue is the relevant

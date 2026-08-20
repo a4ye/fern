@@ -44,6 +44,11 @@ const Cookies = () => (
                 The current service does not use advertising, analytics, or
                 cross-site tracking cookies.
             </p>
+            <p>
+                The service records aggregate usage measurements without
+                cookies, as described in the{" "}
+                <LegalLink href="/privacy">Privacy Policy</LegalLink>.
+            </p>
         </LegalSection>
 
         <LegalSection id="third-parties" title="3. Third-party cookies">

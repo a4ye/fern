@@ -2,6 +2,7 @@
 
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { auth, emailSyncEnabled, GOOGLE_PROVIDER_ID } from "@/lib/auth";
 import {
     applySuggestion,
@@ -13,7 +14,9 @@ import {
 import { classifyEmails } from "@/lib/email/classify";
 import { createGmailProvider } from "@/lib/email/gmail";
 import { EmailAuthError } from "@/lib/email/types";
+import { recordMetrics } from "@/db/metrics";
 import { withinBudget } from "@/db/rate-limit";
+import { INBOX_SCAN, INBOX_SUGGESTION, record } from "@/lib/metrics";
 import { TOO_MANY_REQUESTS } from "@/lib/limits";
 import { timeZoneSchema } from "@/lib/validation";
 
@@ -131,6 +134,15 @@ export const syncInbox = async (): Promise<SyncResult> => {
             }),
         );
         await recordEmailSync(userId);
+        // What the model was given and what it proposed, which together are the
+        // only measure of whether it is worth paying for. What becomes of each
+        // proposal is counted where the user answers it.
+        after(() =>
+            recordMetrics([
+                record(INBOX_SCAN, "read", { total: emails.length }),
+                record(INBOX_SUGGESTION, "offered", { count: found }),
+            ]),
+        );
         revalidatePath("/dashboard", "layout");
         return { ok: true, found, scanned: emails.length };
     } catch (error) {
@@ -164,6 +176,7 @@ export const acceptSuggestion = async (
     if (!parsedTimeZone.success) return;
 
     await applySuggestion(session.user.id, suggestionId, parsedTimeZone.data);
+    after(() => recordMetrics([record(INBOX_SUGGESTION, "accepted")]));
     revalidatePath("/dashboard", "layout");
 };
 
@@ -175,5 +188,6 @@ export const dismissSuggestionAction = async (
     if (!(await withinBudget(session.user.id, "write"))) return;
 
     await dismissSuggestion(session.user.id, suggestionId);
+    after(() => recordMetrics([record(INBOX_SUGGESTION, "dismissed")]));
     revalidatePath("/dashboard");
 };

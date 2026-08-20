@@ -2,6 +2,7 @@
 
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { auth } from "@/lib/auth";
 import {
     createApplication as insertApplication,
@@ -42,6 +43,8 @@ import {
     getCachedJobImport,
     putCachedJobImport,
 } from "@/db/job-import";
+import { recordMetrics } from "@/db/metrics";
+import { POSTING_FALLBACK, record } from "@/lib/metrics";
 import { withinBudget } from "@/db/rate-limit";
 import {
     applicationQuota,
@@ -137,12 +140,20 @@ export const suggestFromUrl = async (
     const normalizedUrl = normalizeImportUrl(url.trim());
     const providerHost = serverImportHost(url.trim());
     if (!normalizedUrl || !providerHost) {
+        after(() => recordMetrics([record(POSTING_FALLBACK, "unsupported")]));
         return { status: "unsupported", posting: EMPTY_POSTING };
     }
 
     try {
         const cached = await getCachedJobImport(normalizedUrl);
-        if (cached) return { status: "found", posting: cached };
+        if (cached) {
+            // Counted apart from the read the browser reports. That one measures
+            // whether the feature worked; this measures how often the shared
+            // cache spared a provider a request, which is the number that says
+            // whether the app is a good guest.
+            after(() => recordMetrics([record(POSTING_FALLBACK, "cache")]));
+            return { status: "found", posting: cached };
+        }
 
         const allowed = await acquireJobImportBudget(
             session.user.id,
@@ -150,6 +161,9 @@ export const suggestFromUrl = async (
             serverImportRequestCost(normalizedUrl),
         );
         if (!allowed) {
+            after(() =>
+                recordMetrics([record(POSTING_FALLBACK, "rate-limited")]),
+            );
             return { status: "rate-limited", posting: EMPTY_POSTING };
         }
 
@@ -158,10 +172,13 @@ export const suggestFromUrl = async (
         );
         if (hasPostingSuggestion(posting)) {
             await putCachedJobImport(normalizedUrl, posting);
+            after(() => recordMetrics([record(POSTING_FALLBACK, "fetched")]));
             return { status: "found", posting };
         }
+        after(() => recordMetrics([record(POSTING_FALLBACK, "missed")]));
         return { status: "missed", posting };
     } catch {
+        after(() => recordMetrics([record(POSTING_FALLBACK, "missed")]));
         return { status: "missed", posting: EMPTY_POSTING };
     }
 };

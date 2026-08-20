@@ -75,6 +75,14 @@ const Privacy = () => (
                     web request, such as an IP address, browser information, and
                     session data.
                 </li>
+                <li>
+                    <strong className="font-semibold text-ink">
+                        Usage measurements.
+                    </strong>{" "}
+                    The service records aggregate counts of how its features
+                    perform. These counts are not linked to you or to the
+                    information in your account.
+                </li>
             </LegalList>
         </LegalSection>
 
@@ -85,6 +93,7 @@ const Privacy = () => (
                 <li>authenticate users and protect accounts;</li>
                 <li>save and organize job-application information;</li>
                 <li>provide optional job-import and Gmail features;</li>
+                <li>measure how features perform;</li>
                 <li>
                     prevent abuse, investigate problems, and improve the app;
                 </li>
@@ -153,6 +162,10 @@ const Privacy = () => (
                 backups, security records, or where retention is required by
                 law. Information is not kept longer than reasonably necessary
                 for those purposes.
+            </p>
+            <p>
+                Aggregate usage measurements contain no personal information and
+                are retained indefinitely.
             </p>
         </LegalSection>
 

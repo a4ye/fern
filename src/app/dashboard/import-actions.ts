@@ -2,11 +2,14 @@
 
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { auth } from "@/lib/auth";
 import { importApplications } from "@/db/dashboard";
 import { getUserSettings } from "@/db/settings";
+import { recordMetrics } from "@/db/metrics";
 import { withinBudget } from "@/db/rate-limit";
 import { applicationQuota } from "@/db/quotas";
+import { SHEET_IMPORT, record } from "@/lib/metrics";
 import {
     FILE_TOO_LARGE,
     MAX_IMPORT_BYTES,
@@ -36,7 +39,18 @@ export const readImportFile = async (file: File): Promise<SheetResult> => {
         return { ok: false, error: TOO_MANY_REQUESTS };
     }
 
-    return readSheet(file.name, await file.arrayBuffer());
+    const sheet = await readSheet(file.name, await file.arrayBuffer());
+    // Counted apart from the commit below, since the gap between the two is the
+    // interesting part: a file read and then abandoned is a mapping step that
+    // did not convince anyone.
+    after(() =>
+        recordMetrics([
+            record(SHEET_IMPORT, sheet.ok ? "read" : "unreadable", {
+                total: sheet.ok ? sheet.sheet.rows.length : 0,
+            }),
+        ]),
+    );
+    return sheet;
 };
 
 export type ImportResult =
@@ -95,6 +109,9 @@ export const commitImport = async (
         defaultCurrency,
     );
 
+    after(() =>
+        recordMetrics([record(SHEET_IMPORT, "committed", { total: added })]),
+    );
     revalidatePath(`/dashboard/${listId}`);
     revalidatePath("/dashboard");
     return { ok: true, added };

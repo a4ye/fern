@@ -9,6 +9,7 @@ import {
     type KeyboardEvent,
 } from "react";
 import { addApplication, suggestFromUrl } from "@/app/dashboard/actions";
+import { recordPostingRead } from "@/app/dashboard/metrics-actions";
 import {
     BasicsFields,
     Drawer,
@@ -38,6 +39,11 @@ import {
 import { cleanLink } from "@/lib/clean-link";
 import { importDirect, isDirectlyReadable } from "@/lib/job-import/direct";
 import {
+    postingFieldsFilled,
+    type PostingOutcome,
+    type PostingReader,
+} from "@/lib/metrics";
+import {
     hasPostingSuggestion,
     isScrapedPosting,
     type ScrapedPosting,
@@ -54,6 +60,30 @@ const employerHost = (raw: string): string => {
     } catch {
         return "Employer website";
     }
+};
+
+// Which readers a link was put in front of, and which one filled the form, is
+// only knowable here: two of the three never reach the server. Sent rather than
+// awaited, since a read has already done its job by the time it is counted, and
+// reported only past the guard that drops a superseded read, so an abandoned
+// paste counts as nothing at all.
+const reportRead = (
+    startedAt: number,
+    attempted: PostingReader[],
+    outcome: PostingOutcome,
+    posting?: ScrapedPosting,
+) => {
+    void recordPostingRead({
+        outcome,
+        attempted,
+        // Sent whenever a posting came back, `none` included. A Workday link
+        // whose page would not parse still fills the company in off the
+        // address, and calling that no source at all would leave those reads
+        // out of the tally rather than showing them for what they are.
+        source: posting?.source ?? null,
+        waitedMs: Date.now() - startedAt,
+        fieldsFilled: posting ? postingFieldsFilled(posting) : 0,
+    });
 };
 
 export const AddApplicationForm = ({
@@ -168,15 +198,21 @@ export const AddApplicationForm = ({
         setRateLimited(false);
         setVisibleImportUrl(null);
         setEmployerUrl(null);
+        const startedAt = Date.now();
+        // Grows as each reader is reached, so what is reported is what was
+        // actually tried rather than what might have been.
+        const attempted: PostingReader[] = [];
         startScrape(async () => {
             // Read here first where the provider allows it. This browser is the
             // cheapest reader there is: no server, no waiting on anyone else's
             // budget, and it works on a phone, where there is no extension to
             // ask. The two below are what it cannot reach.
             if (isDirectlyReadable(url)) {
+                attempted.push("browser");
                 const posting = await importDirect(url);
                 if (fetchId.current !== id) return;
                 if (posting && hasPostingSuggestion(posting)) {
+                    reportRead(startedAt, attempted, "browser", posting);
                     applyPosting(posting, url);
                     return;
                 }
@@ -184,6 +220,7 @@ export const AddApplicationForm = ({
 
             let localMiss = false;
             if (extension.availability === "available") {
+                attempted.push("extension");
                 const response = await extension.importFromUrl(url);
                 if (fetchId.current !== id) return;
                 if (
@@ -191,6 +228,12 @@ export const AddApplicationForm = ({
                     isScrapedPosting(response.posting) &&
                     hasPostingSuggestion(response.posting)
                 ) {
+                    reportRead(
+                        startedAt,
+                        attempted,
+                        "extension",
+                        response.posting,
+                    );
                     applyPosting(response.posting, url);
                     return;
                 }
@@ -200,15 +243,25 @@ export const AddApplicationForm = ({
             // Supported ATS/API providers retain a shared-cache-first backend
             // fallback. Unknown employer domains are never fetched by the app
             // server.
+            attempted.push("server");
             const fallback = await suggestFromUrl(url);
             if (fetchId.current !== id) return;
             if (
                 fallback.status === "found" &&
                 hasPostingSuggestion(fallback.posting)
             ) {
+                reportRead(startedAt, attempted, "server", fallback.posting);
                 applyPosting(fallback.posting, url);
                 return;
             }
+
+            // A fallback that found a posting with nothing worth suggesting in
+            // it left the form as empty as a miss did, so it is counted as one.
+            reportRead(
+                startedAt,
+                attempted,
+                fallback.status === "found" ? "missed" : fallback.status,
+            );
 
             setFetching(false);
             if (localMiss && extension.availability === "available") {
@@ -229,6 +282,7 @@ export const AddApplicationForm = ({
         setFetching(true);
         setMissed(false);
         setRateLimited(false);
+        const startedAt = Date.now();
         startScrape(async () => {
             const response = await extension.openAndImport(url);
             if (fetchId.current !== id) return;
@@ -237,9 +291,16 @@ export const AddApplicationForm = ({
                 isScrapedPosting(response.posting) &&
                 hasPostingSuggestion(response.posting)
             ) {
+                reportRead(
+                    startedAt,
+                    ["extension"],
+                    "extension",
+                    response.posting,
+                );
                 applyPosting(response.posting, url);
                 return;
             }
+            reportRead(startedAt, ["extension"], "missed");
             setFetching(false);
             setVisibleImportUrl(null);
             setMissed(true);

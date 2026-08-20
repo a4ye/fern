@@ -38,6 +38,12 @@ export const RATE_LIMITS = {
     // paste has to be read, filled over and saved before the next one.
     scrapeUser: { requests: 60, windowSeconds: 60 },
 
+    // Reporting what a paste did. The browser sends this because the two readers
+    // worth knowing about, its own and the extension's, never reach this server
+    // any other way. Set to match the paste it follows, since there is one
+    // report per read and no report without a read that could have happened.
+    metrics: { requests: 60, windowSeconds: 60 },
+
     // What every account together may ask of one provider in that same window,
     // which is what that provider actually sees coming from this app. This is
     // the only ceiling in the file that a crowd shares, so it is the only one
