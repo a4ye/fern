@@ -147,12 +147,14 @@ export const BasicsFields = ({
     disabled = false,
     omitLink = false,
     companyRef,
+    roleNote,
 }: {
     draft: ApplicationFields;
     set: SetField;
     disabled?: boolean;
     omitLink?: boolean;
     companyRef?: RefObject<HTMLInputElement | null>;
+    roleNote?: ReactNode;
 }) => (
     <Section title="Basics">
         <Field label="Company" required>
@@ -175,6 +177,9 @@ export const BasicsFields = ({
                 className={fieldClass}
             />
         </Field>
+        {/* Anything said about the role belongs under the field it would
+        change, indented to start where that field starts. */}
+        {roleNote && <div className="ml-28">{roleNote}</div>}
         {!omitLink && (
             <Field label="Link">
                 <input

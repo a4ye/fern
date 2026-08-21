@@ -6,6 +6,7 @@ export type UserSettings = {
     defaultCurrency: string;
     cleanLinks: boolean;
     employerLinks: boolean;
+    tidyTitles: boolean;
 };
 
 // A user who has never changed a preference has no row, so a read falls back to
@@ -14,6 +15,7 @@ const DEFAULT_SETTINGS: UserSettings = {
     defaultCurrency: DEFAULT_CURRENCY,
     cleanLinks: true,
     employerLinks: false,
+    tidyTitles: false,
 };
 
 export const getUserSettings = async (
@@ -25,6 +27,7 @@ export const getUserSettings = async (
               defaultCurrency: row.defaultCurrency,
               cleanLinks: row.cleanLinks,
               employerLinks: row.employerLinks,
+              tidyTitles: row.tidyTitles,
           }
         : DEFAULT_SETTINGS;
 };
@@ -38,5 +41,6 @@ export const saveUserSettings = async (
         defaultCurrency: settings.defaultCurrency,
         cleanLinks: settings.cleanLinks,
         employerLinks: settings.employerLinks,
+        tidyTitles: settings.tidyTitles,
     });
 };

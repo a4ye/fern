@@ -57,6 +57,7 @@ const SettingsPage = async ({
                 defaultCurrency={settings.defaultCurrency}
                 cleanLinks={settings.cleanLinks}
                 employerLinks={settings.employerLinks}
+                tidyTitles={settings.tidyTitles}
             />
         </div>
     );

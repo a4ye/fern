@@ -19,6 +19,7 @@ export const saveAccountSettings = async (input: {
     defaultCurrency: string;
     cleanLinks: boolean;
     employerLinks: boolean;
+    tidyTitles: boolean;
 }): Promise<ActionResult> => {
     const requestHeaders = await headers();
     const session = await auth.api.getSession({ headers: requestHeaders });
@@ -36,6 +37,7 @@ export const saveAccountSettings = async (input: {
         defaultCurrency: parsed.data.defaultCurrency,
         cleanLinks: parsed.data.cleanLinks,
         employerLinks: parsed.data.employerLinks,
+        tidyTitles: parsed.data.tidyTitles,
     });
 
     // The name lives on the account record better-auth owns, and its endpoint

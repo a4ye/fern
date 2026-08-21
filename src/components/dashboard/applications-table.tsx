@@ -433,6 +433,7 @@ export const ApplicationsTable = ({
     defaultCurrency,
     cleanLinks,
     employerLinks,
+    tidyTitles,
     rates,
 }: {
     listId: string;
@@ -441,6 +442,7 @@ export const ApplicationsTable = ({
     defaultCurrency: string;
     cleanLinks: boolean;
     employerLinks: boolean;
+    tidyTitles: boolean;
     rates: ExchangeRates;
 }) => {
     const [, startMutation] = useTransition();
@@ -1011,6 +1013,7 @@ export const ApplicationsTable = ({
                     defaultCurrency={defaultCurrency}
                     cleanLinks={cleanLinks}
                     employerLinks={employerLinks}
+                    tidyTitles={tidyTitles}
                     onClose={() => setAdding(false)}
                 />
             )}

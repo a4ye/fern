@@ -273,6 +273,7 @@ export const accountSettingsSchema = z.object({
     defaultCurrency: currencySchema,
     cleanLinks: z.boolean(),
     employerLinks: z.boolean(),
+    tidyTitles: z.boolean(),
 });
 
 // What the browser says a pasted link did. This is the one thing the app records

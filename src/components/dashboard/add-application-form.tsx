@@ -37,6 +37,7 @@ import {
     type ApplicationStatus,
 } from "@/components/dashboard/data";
 import { cleanLink } from "@/lib/clean-link";
+import { tidyRoleTitle } from "@/lib/tidy-title";
 import { importDirect, isDirectlyReadable } from "@/lib/job-import/direct";
 import {
     postingFieldsFilled,
@@ -91,12 +92,14 @@ export const AddApplicationForm = ({
     defaultCurrency,
     cleanLinks,
     employerLinks,
+    tidyTitles,
     onClose,
 }: {
     listId: string;
     defaultCurrency: string;
     cleanLinks: boolean;
     employerLinks: boolean;
+    tidyTitles: boolean;
     onClose: () => void;
 }) => {
     const { ref: dialogRef, close } = useModalDialog();
@@ -115,6 +118,10 @@ export const AddApplicationForm = ({
     // employer's own is offered here for the user to accept or leave. A user who
     // always accepts it says so in settings, and then it is swapped in instead.
     const [employerUrl, setEmployerUrl] = useState<string | null>(null);
+    // A posting title is written for a careers page, so the same offer is made
+    // for it: the shorter reading is proposed rather than taken, because only
+    // the user knows which of the words left out mattered to them.
+    const [tidyRole, setTidyRole] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [fetching, setFetching] = useState(false);
     const [, startScrape] = useTransition();
@@ -181,6 +188,21 @@ export const AddApplicationForm = ({
         } else {
             setEmployerUrl(employer);
         }
+
+        // Only worth offering where the merge above is going to write the role.
+        // A role the user typed themselves is theirs, however it reads.
+        const posted = editedFields.current.has("role")
+            ? ""
+            : (found.role?.trim() ?? "");
+        const tidied = posted ? tidyRoleTitle(posted, found.company ?? "") : "";
+        const shorter = tidied && tidied !== posted ? tidied : null;
+        if (shorter && tidyTitles) {
+            set("role", shorter);
+            setTidyRole(null);
+        } else {
+            setTidyRole(shorter);
+        }
+
         setMissed(false);
         setRateLimited(false);
         setVisibleImportUrl(null);
@@ -198,6 +220,7 @@ export const AddApplicationForm = ({
         setRateLimited(false);
         setVisibleImportUrl(null);
         setEmployerUrl(null);
+        setTidyRole(null);
         const startedAt = Date.now();
         // Grows as each reader is reached, so what is reported is what was
         // actually tried rather than what might have been.
@@ -317,6 +340,13 @@ export const AddApplicationForm = ({
         setEmployerUrl(null);
     };
 
+    // Accepting marks the role as the user's own, so a second read of the same
+    // link cannot put the posting's wording back over their choice.
+    const acceptTidyRole = () => {
+        if (tidyRole) set("role", tidyRole);
+        setTidyRole(null);
+    };
+
     const skipFetch = () => {
         dropFetch();
         companyRef.current?.focus();
@@ -343,6 +373,7 @@ export const AddApplicationForm = ({
         dropFetch();
         set("url", value);
         setEmployerUrl(null);
+        setTidyRole(null);
         setVisibleImportUrl(null);
         setMissed(false);
         setRateLimited(false);
@@ -612,6 +643,43 @@ export const AddApplicationForm = ({
                         disabled={fetching}
                         companyRef={companyRef}
                         omitLink
+                        roleNote={
+                            tidyRole && (
+                                <div className="bg-surface px-3 py-2.5 shadow-sm">
+                                    <p
+                                        role="status"
+                                        className="flex items-start gap-1.5 text-xs text-sub"
+                                    >
+                                        <span
+                                            aria-hidden="true"
+                                            className="icon-[lucide--scissors] mt-px size-3.5 shrink-0 text-accent-deep"
+                                        />
+                                        <span className="text-pretty">
+                                            Shorter title available
+                                        </span>
+                                    </p>
+                                    <p className="mt-1.5 text-pretty text-sm font-medium text-ink">
+                                        {tidyRole}
+                                    </p>
+                                    <div className="mt-2 flex justify-end gap-1 border-t border-faint pt-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setTidyRole(null)}
+                                            className={`${LINK_CHOICE_BUTTON_CLASS} text-sub hover:bg-background hover:text-ink`}
+                                        >
+                                            Keep as posted
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={acceptTidyRole}
+                                            className={`${LINK_CHOICE_BUTTON_CLASS} bg-accent text-background hover:bg-accent-deep`}
+                                        >
+                                            Use shorter title
+                                        </button>
+                                    </div>
+                                </div>
+                            )
+                        }
                     />
 
                     <Section title="Status">

@@ -79,6 +79,7 @@ export const AccountSettings = ({
     defaultCurrency,
     cleanLinks,
     employerLinks,
+    tidyTitles,
 }: {
     name: string;
     signedInAs: string;
@@ -86,12 +87,14 @@ export const AccountSettings = ({
     defaultCurrency: string;
     cleanLinks: boolean;
     employerLinks: boolean;
+    tidyTitles: boolean;
 }) => {
     const router = useRouter();
     const [draftName, setDraftName] = useState(name);
     const [draftCurrency, setDraftCurrency] = useState(defaultCurrency);
     const [draftCleanLinks, setDraftCleanLinks] = useState(cleanLinks);
     const [draftEmployerLinks, setDraftEmployerLinks] = useState(employerLinks);
+    const [draftTidyTitles, setDraftTidyTitles] = useState(tidyTitles);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -100,7 +103,8 @@ export const AccountSettings = ({
         trimmedName !== name ||
         draftCurrency !== defaultCurrency ||
         draftCleanLinks !== cleanLinks ||
-        draftEmployerLinks !== employerLinks;
+        draftEmployerLinks !== employerLinks ||
+        draftTidyTitles !== tidyTitles;
 
     const save = async () => {
         if (saving || !changed) return;
@@ -112,6 +116,7 @@ export const AccountSettings = ({
                 defaultCurrency: draftCurrency,
                 cleanLinks: draftCleanLinks,
                 employerLinks: draftEmployerLinks,
+                tidyTitles: draftTidyTitles,
             });
             if (result.ok) {
                 toast.success("Settings saved.");
@@ -200,6 +205,16 @@ export const AccountSettings = ({
                         label="Auto convert Simplify links"
                         on={draftEmployerLinks}
                         onChange={setDraftEmployerLinks}
+                    />
+                </Row>
+                <Row
+                    label="Auto shorten role titles"
+                    hint="Job titles often include dates and extra wording. Job Tracker shortens them. Turn this off to confirm each one first."
+                >
+                    <Toggle
+                        label="Auto shorten role titles"
+                        on={draftTidyTitles}
+                        onChange={setDraftTidyTitles}
                     />
                 </Row>
             </Section>
