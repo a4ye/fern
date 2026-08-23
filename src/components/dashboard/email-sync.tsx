@@ -193,133 +193,129 @@ export const EmailSyncMenu = ({ panel }: { panel: EmailSyncPanel }) => {
                 )}
             </button>
 
-            {open && (
-                <div className="absolute right-0 top-full z-50 mt-2 w-[calc(100vw-1.5rem)] border border-hairline bg-background shadow-sm sm:w-96">
-                    <div className="flex h-12 items-center justify-between gap-3 border-b border-hairline px-4">
-                        <div className="flex min-w-0 items-center gap-2">
-                            <span
-                                aria-hidden="true"
-                                className="icon-[lucide--mail] size-4 shrink-0 text-accent"
-                            />
-                            <h2 className="text-sm font-medium text-ink">
-                                Inbox sync
-                            </h2>
-                            {panel.connected && panel.lastSyncedAt && (
-                                <span className="truncate text-xs text-muted">
-                                    Synced{" "}
-                                    {formatRelative(
-                                        new Date(panel.lastSyncedAt),
-                                    )}
-                                </span>
-                            )}
-                        </div>
-                        {!panel.enabled ? (
-                            <span className="shrink-0 text-xs text-muted">
-                                Setup required
-                            </span>
-                        ) : panel.connected ? (
-                            <button
-                                type="button"
-                                onClick={sync}
-                                disabled={isSyncing}
-                                className="focus-frame inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 border border-hairline bg-background px-3 text-sm text-ink transition-colors hover:border-tile-border disabled:cursor-not-allowed disabled:opacity-40"
-                            >
-                                <span
-                                    aria-hidden="true"
-                                    className={`icon-[lucide--refresh-cw] size-3.5 ${isSyncing ? "animate-spin" : ""}`}
-                                />
-                                {isSyncing ? "Syncing" : "Sync now"}
-                            </button>
-                        ) : (
-                            <span className="shrink-0 text-xs text-muted">
-                                Not connected
+            <div
+                data-open={open || undefined}
+                className="popup absolute right-0 top-full z-50 mt-2 w-[calc(100vw-1.5rem)] flex-col border border-hairline bg-background shadow-sm sm:w-96"
+            >
+                <div className="flex h-12 items-center justify-between gap-3 border-b border-hairline px-4">
+                    <div className="flex min-w-0 items-center gap-2">
+                        <span
+                            aria-hidden="true"
+                            className="icon-[lucide--mail] size-4 shrink-0 text-accent"
+                        />
+                        <h2 className="text-sm font-medium text-ink">
+                            Inbox sync
+                        </h2>
+                        {panel.connected && panel.lastSyncedAt && (
+                            <span className="truncate text-xs text-muted">
+                                Synced{" "}
+                                {formatRelative(new Date(panel.lastSyncedAt))}
                             </span>
                         )}
                     </div>
-
                     {!panel.enabled ? (
-                        <p className="px-4 py-6 text-sm text-sub">
-                            Email sync isn&apos;t configured yet. Add{" "}
-                            <code className="text-ink">GOOGLE_CLIENT_ID</code>,{" "}
-                            <code className="text-ink">
-                                GOOGLE_CLIENT_SECRET
-                            </code>
-                            , and{" "}
-                            <code className="text-ink">
-                                GOOGLE_GENERATIVE_AI_API_KEY
-                            </code>
-                            , and confirm paid processing with{" "}
-                            <code className="text-ink">
-                                GOOGLE_GENERATIVE_AI_PAID_SERVICE=true
-                            </code>{" "}
-                            in your <code className="text-ink">.env</code>, then
-                            restart the dev server to connect your inbox.
-                        </p>
+                        <span className="shrink-0 text-xs text-muted">
+                            Setup required
+                        </span>
                     ) : panel.connected ? (
-                        suggestions.length > 0 ? (
-                            <ul className="max-h-[60vh] overflow-y-auto">
-                                {suggestions.map((suggestion) => (
-                                    <SuggestionRow
-                                        key={suggestion.id}
-                                        suggestion={suggestion}
-                                        onResolve={onResolve}
-                                    />
-                                ))}
-                            </ul>
-                        ) : (
-                            <p className="px-4 py-6 text-center text-sm text-sub">
-                                No changes to review. Sync to check your inbox
-                                for application updates.
-                            </p>
-                        )
+                        <button
+                            type="button"
+                            onClick={sync}
+                            disabled={isSyncing}
+                            className="focus-frame inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 border border-hairline bg-background px-3 text-sm text-ink transition-colors hover:border-tile-border disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                            <span
+                                aria-hidden="true"
+                                className={`icon-[lucide--refresh-cw] size-3.5 ${isSyncing ? "animate-spin" : ""}`}
+                            />
+                            {isSyncing ? "Syncing" : "Sync now"}
+                        </button>
                     ) : (
-                        <div className="px-4 py-5">
-                            <h3 className="text-sm font-semibold text-balance text-ink">
-                                Before you connect Gmail
-                            </h3>
-                            <div className="mt-3 space-y-3 text-pretty text-xs leading-5 text-sub">
-                                <p>
-                                    Job Tracker uses Gmail read-only access to
-                                    review recent inbox messages for possible
-                                    job application updates. It cannot send,
-                                    change, or delete email.
-                                </p>
-                                <p>
-                                    Relevant message content and information
-                                    about your tracked applications are
-                                    processed by Google Gemini to create
-                                    suggestions.
-                                </p>
-                                <p>
-                                    Job Tracker stores limited details needed to
-                                    show the suggestion, but not a permanent
-                                    copy of the complete email. Every suggestion
-                                    requires your review. See the{" "}
-                                    <Link
-                                        href="/privacy#gmail"
-                                        className="font-medium text-accent-deep underline decoration-hairline underline-offset-3 transition-colors hover:decoration-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                                    >
-                                        Privacy Policy
-                                    </Link>
-                                    .
-                                </p>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={connect}
-                                disabled={isConnecting}
-                                className="mt-5 inline-flex h-10 w-full cursor-pointer items-center justify-center gap-2 bg-accent px-4 text-sm font-medium text-background transition-[background-color,transform] hover:bg-accent-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-accent"
-                            >
-                                <span
-                                    aria-hidden="true"
-                                    className="icon-[simple-icons--google] size-4"
-                                />
-                                {isConnecting ? "Connecting" : "Connect Gmail"}
-                            </button>
-                        </div>
+                        <span className="shrink-0 text-xs text-muted">
+                            Not connected
+                        </span>
                     )}
                 </div>
-            )}
+
+                {!panel.enabled ? (
+                    <p className="px-4 py-6 text-sm text-sub">
+                        Email sync isn&apos;t configured yet. Add{" "}
+                        <code className="text-ink">GOOGLE_CLIENT_ID</code>,{" "}
+                        <code className="text-ink">GOOGLE_CLIENT_SECRET</code>,
+                        and{" "}
+                        <code className="text-ink">
+                            GOOGLE_GENERATIVE_AI_API_KEY
+                        </code>
+                        , and confirm paid processing with{" "}
+                        <code className="text-ink">
+                            GOOGLE_GENERATIVE_AI_PAID_SERVICE=true
+                        </code>{" "}
+                        in your <code className="text-ink">.env</code>, then
+                        restart the dev server to connect your inbox.
+                    </p>
+                ) : panel.connected ? (
+                    suggestions.length > 0 ? (
+                        <ul className="max-h-[60vh] overflow-y-auto">
+                            {suggestions.map((suggestion) => (
+                                <SuggestionRow
+                                    key={suggestion.id}
+                                    suggestion={suggestion}
+                                    onResolve={onResolve}
+                                />
+                            ))}
+                        </ul>
+                    ) : (
+                        <p className="px-4 py-6 text-center text-sm text-sub">
+                            No changes to review. Sync to check your inbox for
+                            application updates.
+                        </p>
+                    )
+                ) : (
+                    <div className="px-4 py-5">
+                        <h3 className="text-sm font-semibold text-balance text-ink">
+                            Before you connect Gmail
+                        </h3>
+                        <div className="mt-3 space-y-3 text-pretty text-xs leading-5 text-sub">
+                            <p>
+                                Job Tracker uses Gmail read-only access to
+                                review recent inbox messages for possible job
+                                application updates. It cannot send, change, or
+                                delete email.
+                            </p>
+                            <p>
+                                Relevant message content and information about
+                                your tracked applications are processed by
+                                Google Gemini to create suggestions.
+                            </p>
+                            <p>
+                                Job Tracker stores limited details needed to
+                                show the suggestion, but not a permanent copy of
+                                the complete email. Every suggestion requires
+                                your review. See the{" "}
+                                <Link
+                                    href="/privacy#gmail"
+                                    className="font-medium text-accent-deep underline decoration-hairline underline-offset-3 transition-colors hover:decoration-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                                >
+                                    Privacy Policy
+                                </Link>
+                                .
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={connect}
+                            disabled={isConnecting}
+                            className="mt-5 inline-flex h-10 w-full cursor-pointer items-center justify-center gap-2 bg-accent px-4 text-sm font-medium text-background transition-[background-color,transform] hover:bg-accent-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-accent"
+                        >
+                            <span
+                                aria-hidden="true"
+                                className="icon-[simple-icons--google] size-4"
+                            />
+                            {isConnecting ? "Connecting" : "Connect Gmail"}
+                        </button>
+                    </div>
+                )}
+            </div>
         </div>
     );
 };
