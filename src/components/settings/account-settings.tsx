@@ -63,7 +63,7 @@ const Toggle = ({
         aria-checked={on}
         aria-label={label}
         onClick={() => onChange(!on)}
-        className={`inline-flex h-6 w-11 shrink-0 cursor-pointer items-center border p-1 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${on ? "border-accent bg-accent" : "border-tile-border bg-background"}`}
+        className={`focus-frame inline-flex h-6 w-11 shrink-0 cursor-pointer items-center border p-1 transition-colors ${on ? "border-accent bg-accent" : "border-tile-border bg-background"}`}
     >
         <span
             aria-hidden="true"
