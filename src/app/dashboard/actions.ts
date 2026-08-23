@@ -19,6 +19,11 @@ import {
     updateList as updateListDb,
 } from "@/db/dashboard";
 import { getUserSettings } from "@/db/settings";
+import {
+    getListHistory,
+    undoHistoryAction,
+    type ListHistoryPage,
+} from "@/db/history";
 import type {
     ApplicationExtras,
     ApplicationStatus,
@@ -95,6 +100,8 @@ const validApplicationIds = (ids: string[]): boolean =>
     ids.length <= MAX_APPLICATION_BATCH &&
     ids.every((id) => applicationIdSchema.safeParse(id).success);
 
+const validHistoryActionId = (id: string): boolean => /^\d{1,19}$/.test(id);
+
 // Read when a row is opened rather than sent with the table. Returning null for
 // an application that is gone or was never this user's lets the panel open on
 // what the row already holds instead of refusing to open at all.
@@ -104,6 +111,36 @@ export const loadApplicationExtras = async (
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session) return null;
     return getApplicationExtras(session.user.id, applicationId);
+};
+
+export const loadListHistory = async (
+    listId: string,
+    beforeId: string,
+): Promise<ListHistoryPage | null> => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session || !applicationIdSchema.safeParse(listId).success) return null;
+    if (!validHistoryActionId(beforeId)) return null;
+    return getListHistory(session.user.id, listId, beforeId);
+};
+
+export const undoListHistoryAction = async (
+    listId: string,
+    actionId: string,
+): Promise<ActionResult> => {
+    const writer = await writingUser();
+    if (!writer.ok) return writer;
+    if (
+        !applicationIdSchema.safeParse(listId).success ||
+        !validHistoryActionId(actionId)
+    ) {
+        return { ok: false, error: "That change is no longer available." };
+    }
+
+    const result = await undoHistoryAction(writer.userId, listId, actionId);
+    if (!result.ok) return result;
+    revalidatePath(`/dashboard/${listId}`);
+    revalidatePath("/dashboard");
+    return { ok: true };
 };
 
 export const createList = async (

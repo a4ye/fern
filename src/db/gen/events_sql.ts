@@ -170,20 +170,29 @@ export async function deleteApplicationEvent(client: Client, args: DeleteApplica
 }
 
 export const insertApplicationEventQuery = `-- name: InsertApplicationEvent :exec
-insert into application_events (application_id, from_status, to_status, note)
-values ($1, $2, $3, $4)`;
+insert into application_events (
+    application_id, from_status, to_status, note, history_action_id
+)
+values (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5::bigint
+)`;
 
 export interface InsertApplicationEventArgs {
     applicationId: string;
     fromStatus: string | null;
     toStatus: string | null;
     note: string | null;
+    historyActionId: string | null;
 }
 
 export async function insertApplicationEvent(client: Client, args: InsertApplicationEventArgs): Promise<void> {
     await client.query({
         text: insertApplicationEventQuery,
-        values: [args.applicationId, args.fromStatus, args.toStatus, args.note],
+        values: [args.applicationId, args.fromStatus, args.toStatus, args.note, args.historyActionId],
         rowMode: "array"
     });
 }
@@ -232,7 +241,8 @@ inserted as (
         application_id,
         from_status,
         to_status,
-        occurred_at
+        occurred_at,
+        history_action_id
     )
     select
         base.id,
@@ -242,7 +252,8 @@ inserted as (
         end,
         addition.status,
         statement_timestamp()
-            + ((addition.ordinality - 1) * interval '1 microsecond')
+            + ((addition.ordinality - 1) * interval '1 microsecond'),
+        $6::bigint
     from base
     cross join additions addition
     returning to_status, occurred_at
@@ -282,12 +293,13 @@ export interface ApplyStatusStepEditsArgs {
     userId: string;
     removedEventIds: string[];
     addedStatuses: string[];
+    historyActionId: string;
 }
 
 export async function applyStatusStepEdits(client: Client, args: ApplyStatusStepEditsArgs): Promise<void> {
     await client.query({
         text: applyStatusStepEditsQuery,
-        values: [args.timeZone, args.applicationId, args.userId, args.removedEventIds, args.addedStatuses],
+        values: [args.timeZone, args.applicationId, args.userId, args.removedEventIds, args.addedStatuses, args.historyActionId],
         rowMode: "array"
     });
 }

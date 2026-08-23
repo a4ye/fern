@@ -339,7 +339,7 @@ const DeleteRow = ({
         className={`${ROW_HEIGHT} ${ROW_MIN_WIDTH} flex items-center gap-4 border-b border-faint bg-surface px-5 last:border-b-0`}
     >
         <p className="min-w-0 flex-1 truncate text-xs text-ink">
-            Delete {label}? This cannot be undone.
+            Delete {label}? You can undo this from History.
         </p>
         <div className="flex shrink-0 items-center gap-1">
             <button
@@ -1155,7 +1155,7 @@ export const ApplicationsTable = ({
             {confirmingDelete && (
                 <ConfirmDialog
                     title={`Delete ${countLabel(selection.length)}?`}
-                    detail="This cannot be undone."
+                    detail="You can undo this from History."
                     confirmLabel="Delete"
                     tone="danger"
                     onConfirm={() => {

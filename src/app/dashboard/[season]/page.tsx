@@ -4,6 +4,7 @@ import { cache } from "react";
 import { notFound, redirect } from "next/navigation";
 import { getRequestSession } from "@/lib/auth";
 import { getListDetail } from "@/db/dashboard";
+import { getListHistory } from "@/db/history";
 import { getExchangeRates } from "@/db/exchange-rates";
 import { getUserSettings } from "@/db/settings";
 import { ApplicationsTable } from "@/components/dashboard/applications-table";
@@ -30,11 +31,13 @@ export const generateMetadata = async ({
 const SeasonPage = async ({ params, searchParams }: Props) => {
     const session = await getRequestSession();
     if (!session) redirect("/login");
+    const { season } = await params;
 
-    const [detail, settings, rates] = await Promise.all([
-        loadListDetail(session.user.id, (await params).season),
+    const [detail, settings, rates, history] = await Promise.all([
+        loadListDetail(session.user.id, season),
         getUserSettings(session.user.id),
         getExchangeRates(),
+        getListHistory(session.user.id, season),
     ]);
     if (!detail) notFound();
 
@@ -60,11 +63,12 @@ const SeasonPage = async ({ params, searchParams }: Props) => {
 
             <div className="mt-6">
                 <ListInsights
+                    listId={detail.id}
                     name={detail.name}
                     stats={detail.stats}
                     pipeline={detail.pipeline}
                     flow={detail.flow}
-                    activity={detail.activity}
+                    history={history}
                 />
             </div>
 

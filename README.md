@@ -49,3 +49,16 @@ See [`extension/README.md`](extension/README.md) for local installation,
 production-origin configuration, and store-release settings. Deploy the latest
 database migrations before enabling the supported-ATS fallback; they provide
 the shared import cache and distributed provider rate budgets.
+
+## Version history storage
+
+Version history stays entirely in PostgreSQL. Recent user actions are stored as
+one sparse row per action, including bulk edits and imports. Older rows move
+into lossless gzip-compressed `bytea` chunks while the newest 100 actions per
+list remain directly queryable.
+
+Archiving is self-maintaining and needs no cron job. A small fraction of normal
+history writes checks for one eligible chunk after the user's edit commits.
+Each pass archives up to 500 actions older than 90 days, and row locks make
+concurrent passes safe. Apply database migrations before deploying code that
+writes history.

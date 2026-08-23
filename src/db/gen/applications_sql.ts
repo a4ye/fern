@@ -8,7 +8,7 @@ export const createApplicationQuery = `-- name: CreateApplication :one
 insert into applications (
     list_id, position, company_name, role_title, status, url, location,
     arrangement, applied_at, pay_min, pay_max, pay_currency, pay_period,
-    bonus_amount, pay_note, notes
+    bonus_amount, pay_note, notes, created_by_history_action_id
 )
 select
     l.id,
@@ -35,9 +35,10 @@ select
     $12::pay_period,
     $13::numeric,
     $14,
-    $15
+    $15,
+    $16::bigint
 from lists l
-where l.id = $16 and l.user_id = $17
+where l.id = $17 and l.user_id = $18
 returning id`;
 
 export interface CreateApplicationArgs {
@@ -56,6 +57,7 @@ export interface CreateApplicationArgs {
     bonusAmount: string | null;
     payNote: string | null;
     notes: string | null;
+    historyActionId: string;
     listId: string;
     userId: string;
 }
@@ -67,7 +69,7 @@ export interface CreateApplicationRow {
 export async function createApplication(client: Client, args: CreateApplicationArgs): Promise<CreateApplicationRow | null> {
     const result = await client.query({
         text: createApplicationQuery,
-        values: [args.companyName, args.roleTitle, args.status, args.url, args.location, args.arrangement, args.appliedAt, args.timeZone, args.payMin, args.payMax, args.payCurrency, args.payPeriod, args.bonusAmount, args.payNote, args.notes, args.listId, args.userId],
+        values: [args.companyName, args.roleTitle, args.status, args.url, args.location, args.arrangement, args.appliedAt, args.timeZone, args.payMin, args.payMax, args.payCurrency, args.payPeriod, args.bonusAmount, args.payNote, args.notes, args.historyActionId, args.listId, args.userId],
         rowMode: "array"
     });
     if (result.rows.length !== 1) {
@@ -83,7 +85,7 @@ export const createApplicationsQuery = `-- name: CreateApplications :many
 insert into applications (
     list_id, position, company_name, role_title, status, url, location,
     arrangement, applied_at, pay_min, pay_max, pay_currency, pay_period,
-    pay_note, notes
+    pay_note, notes, created_by_history_action_id
 )
 select
     l.id,
@@ -109,9 +111,10 @@ select
     row.pay_currency,
     row.pay_period::pay_period,
     row.pay_note,
-    row.notes
+    row.notes,
+    $2::bigint
 from lists l
-cross join jsonb_to_recordset($2::jsonb) as row(
+cross join jsonb_to_recordset($3::jsonb) as row(
     "offset" int,
     company_name text,
     role_title text,
@@ -127,11 +130,12 @@ cross join jsonb_to_recordset($2::jsonb) as row(
     pay_note text,
     notes text
 )
-where l.id = $3 and l.user_id = $4
+where l.id = $4 and l.user_id = $5
 returning id`;
 
 export interface CreateApplicationsArgs {
     timeZone: string;
+    historyActionId: string;
     rows: any;
     listId: string;
     userId: string;
@@ -144,7 +148,7 @@ export interface CreateApplicationsRow {
 export async function createApplications(client: Client, args: CreateApplicationsArgs): Promise<CreateApplicationsRow[]> {
     const result = await client.query({
         text: createApplicationsQuery,
-        values: [args.timeZone, args.rows, args.listId, args.userId],
+        values: [args.timeZone, args.historyActionId, args.rows, args.listId, args.userId],
         rowMode: "array"
     });
     return result.rows.map(row => {
@@ -413,9 +417,9 @@ with locked as materialized (
         input.value ->> 'pay_note' as pay_note
     from applications a
     join lists l on l.id = a.list_id
-    join jsonb_array_elements($1::jsonb) as input(value)
+    join jsonb_array_elements($2::jsonb) as input(value)
         on (input.value ->> 'id')::uuid = a.id
-    where l.user_id = $2
+    where l.user_id = $3
     order by a.id
     for update of a
 ),
@@ -433,7 +437,7 @@ updated as (
                 and a.status <> 'applied'
                 and row.status::application_status = 'applied'
                 and row.applied_at::date is null
-            then (current_timestamp at time zone $3::text)::date
+            then (current_timestamp at time zone $4::text)::date
             else row.applied_at::date
         end,
         pay_min = case
@@ -455,12 +459,15 @@ updated as (
     where a.id = row.id
     returning a.id, row.old_status, a.status as new_status
 )
-insert into application_events (application_id, from_status, to_status)
-select id, old_status, new_status
+insert into application_events (
+    application_id, from_status, to_status, history_action_id
+)
+select id, old_status, new_status, $1::bigint
 from updated
 where old_status <> new_status`;
 
 export interface UpdateApplicationsBulkArgs {
+    historyActionId: string;
     rows: any;
     userId: string;
     timeZone: string;
@@ -469,7 +476,7 @@ export interface UpdateApplicationsBulkArgs {
 export async function updateApplicationsBulk(client: Client, args: UpdateApplicationsBulkArgs): Promise<void> {
     await client.query({
         text: updateApplicationsBulkQuery,
-        values: [args.rows, args.userId, args.timeZone],
+        values: [args.historyActionId, args.rows, args.userId, args.timeZone],
         rowMode: "array"
     });
 }
@@ -658,16 +665,23 @@ export async function deleteApplications(client: Client, args: DeleteApplication
 }
 
 export const insertStatusEventsQuery = `-- name: InsertStatusEvents :exec
-insert into application_events (application_id, from_status, to_status)
-select a.id, a.status, $1::application_status
+insert into application_events (
+    application_id, from_status, to_status, history_action_id
+)
+select
+    a.id,
+    a.status,
+    $1::application_status,
+    $2::bigint
 from applications a
 join lists l on l.id = a.list_id
-where a.id = any($2::uuid[])
-    and l.user_id = $3
+where a.id = any($3::uuid[])
+    and l.user_id = $4
     and a.status <> $1::application_status`;
 
 export interface InsertStatusEventsArgs {
     status: string;
+    historyActionId: string;
     applicationIds: string[];
     userId: string;
 }
@@ -675,7 +689,7 @@ export interface InsertStatusEventsArgs {
 export async function insertStatusEvents(client: Client, args: InsertStatusEventsArgs): Promise<void> {
     await client.query({
         text: insertStatusEventsQuery,
-        values: [args.status, args.applicationIds, args.userId],
+        values: [args.status, args.historyActionId, args.applicationIds, args.userId],
         rowMode: "array"
     });
 }

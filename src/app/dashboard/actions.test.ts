@@ -41,6 +41,7 @@ const putCachedJobImport = mock(async () => {});
 
 mock.module("next/headers", () => ({ headers: async () => new Headers() }));
 mock.module("next/cache", () => ({ revalidatePath }));
+mock.module("next/server", () => ({ after: () => {} }));
 mock.module("@/lib/auth", () => ({
     auth: { api: { getSession: async () => session } },
 }));
