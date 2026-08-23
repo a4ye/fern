@@ -385,7 +385,7 @@ const SearchField = ({
             }}
             placeholder="Search rows"
             aria-label="Search applications"
-            className="h-8 w-full border border-hairline bg-background pr-2.5 pl-8 text-sm text-ink transition-colors placeholder:text-muted hover:border-tile-border focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            className="focus-frame h-8 w-full border border-hairline bg-background pr-2.5 pl-8 text-sm text-ink transition-colors placeholder:text-muted hover:border-tile-border"
         />
     </div>
 );

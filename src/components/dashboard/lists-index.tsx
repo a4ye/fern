@@ -457,7 +457,7 @@ const SortSelect = ({
                 onClick={() => setOpen((prev) => !prev)}
                 aria-haspopup="listbox"
                 aria-expanded={open}
-                className="flex h-8 w-44 cursor-pointer items-center justify-between gap-2 border border-hairline bg-background pr-2 pl-2.5 text-sm text-ink transition-colors hover:border-tile-border focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                className="focus-frame flex h-8 w-44 cursor-pointer items-center justify-between gap-2 border border-hairline bg-background pr-2 pl-2.5 text-sm text-ink transition-colors hover:border-tile-border"
             >
                 <span className="flex min-w-0 items-center gap-2">
                     <span
@@ -719,7 +719,7 @@ export const ListsIndex = ({
                             onChange={(event) => setQuery(event.target.value)}
                             placeholder="Search lists"
                             aria-label="Search lists"
-                            className="h-8 w-full border border-hairline bg-background pr-2.5 pl-8 text-sm text-ink transition-colors placeholder:text-muted hover:border-tile-border focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                            className="focus-frame h-8 w-full border border-hairline bg-background pr-2.5 pl-8 text-sm text-ink transition-colors placeholder:text-muted hover:border-tile-border"
                         />
                     </div>
                     <div className="flex items-center gap-3">
@@ -806,7 +806,7 @@ export const ListsIndex = ({
                                     type="button"
                                     onClick={() => goToPage(page - 1)}
                                     disabled={!hasPrev}
-                                    className="inline-flex h-8 cursor-pointer items-center border border-hairline bg-background px-3 text-sm text-ink transition-colors hover:border-tile-border focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-hairline"
+                                    className="focus-frame inline-flex h-8 cursor-pointer items-center border border-hairline bg-background px-3 text-sm text-ink transition-colors hover:border-tile-border disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-hairline"
                                 >
                                     Previous
                                 </button>
@@ -814,7 +814,7 @@ export const ListsIndex = ({
                                     type="button"
                                     onClick={() => goToPage(page + 1)}
                                     disabled={!hasNext}
-                                    className="inline-flex h-8 cursor-pointer items-center border border-hairline bg-background px-3 text-sm text-ink transition-colors hover:border-tile-border focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-hairline"
+                                    className="focus-frame inline-flex h-8 cursor-pointer items-center border border-hairline bg-background px-3 text-sm text-ink transition-colors hover:border-tile-border disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-hairline"
                                 >
                                     Next
                                 </button>

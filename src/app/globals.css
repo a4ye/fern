@@ -25,6 +25,14 @@
     --color-tile-border: #d9ded0;
 }
 
+/* Bordered controls focus as one continuous frame. The border and adjacent
+   outline share a colour, avoiding the detached halo made by an offset ring. */
+.focus-frame:focus-visible {
+    border-color: var(--color-accent);
+    outline: 1px solid var(--color-accent);
+    outline-offset: 0;
+}
+
 @media (prefers-reduced-motion: no-preference) {
     html {
         scroll-behavior: smooth;

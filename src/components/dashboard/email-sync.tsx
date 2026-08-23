@@ -179,7 +179,7 @@ export const EmailSyncMenu = ({ panel }: { panel: EmailSyncPanel }) => {
                 onClick={() => setOpen((prev) => !prev)}
                 aria-haspopup="dialog"
                 aria-expanded={open}
-                className="inline-flex h-8 cursor-pointer items-center gap-2 border border-hairline bg-background pr-3 pl-2.5 text-sm text-ink transition-colors hover:border-tile-border focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                className="focus-frame inline-flex h-8 cursor-pointer items-center gap-2 border border-hairline bg-background pr-3 pl-2.5 text-sm text-ink transition-colors hover:border-tile-border"
             >
                 <span
                     aria-hidden="true"
@@ -222,7 +222,7 @@ export const EmailSyncMenu = ({ panel }: { panel: EmailSyncPanel }) => {
                                 type="button"
                                 onClick={sync}
                                 disabled={isSyncing}
-                                className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 border border-hairline bg-background px-3 text-sm text-ink transition-colors hover:border-tile-border focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-40"
+                                className="focus-frame inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 border border-hairline bg-background px-3 text-sm text-ink transition-colors hover:border-tile-border disabled:cursor-not-allowed disabled:opacity-40"
                             >
                                 <span
                                     aria-hidden="true"

@@ -20,7 +20,7 @@ export const SignOutButton = () => {
                     },
                 })
             }
-            className="cursor-pointer flex h-8 items-center border border-hairline px-3 text-xs font-medium text-sub transition-colors hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            className="focus-frame flex h-8 cursor-pointer items-center border border-hairline px-3 text-xs font-medium text-sub transition-colors hover:bg-surface hover:text-ink"
         >
             Sign out
         </button>
