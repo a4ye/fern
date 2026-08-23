@@ -1,31 +1,31 @@
 "use client";
 
 import { useState } from "react";
-import { ActivityFeed } from "@/components/dashboard/activity-feed";
+import { FunnelSummary } from "@/components/dashboard/funnel-summary";
 import { PipelineFlow } from "@/components/dashboard/pipeline-flow";
-import { PipelineSummary } from "@/components/dashboard/pipeline-summary";
 import { StatStrip } from "@/components/dashboard/stat-strip";
+import { VolumeChart } from "@/components/dashboard/volume-chart";
 import type {
-    ActivityItem,
     FlowEntry,
-    PipelineEntry,
+    Funnel,
     Stat,
+    Volume,
 } from "@/components/dashboard/data";
 
-// Sits above the applications table, so the charts and feed stay one click away
-// without pushing the table below a list that can run to hundreds of rows.
+// Sits above the applications table, so the charts and panels stay one click
+// away without pushing the table below a list that can run to hundreds of rows.
 export const ListInsights = ({
     name,
     stats,
-    pipeline,
+    funnel,
     flow,
-    activity,
+    volume,
 }: {
     name: string;
     stats: Stat[];
-    pipeline: PipelineEntry[];
+    funnel: Funnel;
     flow: FlowEntry[];
-    activity: ActivityItem[];
+    volume: Volume;
 }) => {
     const [open, setOpen] = useState(false);
 
@@ -57,8 +57,8 @@ export const ListInsights = ({
                         of labelled nodes, which crowd badly in half a row. */}
                     <PipelineFlow flow={flow} name={name} />
                     <div className="grid items-start gap-4 lg:grid-cols-2">
-                        <PipelineSummary pipeline={pipeline} />
-                        <ActivityFeed activity={activity} />
+                        <FunnelSummary funnel={funnel} />
+                        <VolumeChart volume={volume} />
                     </div>
                 </div>
             )}

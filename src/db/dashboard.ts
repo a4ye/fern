@@ -5,7 +5,6 @@ import {
     ACTIVE_STATUSES,
     INTERVIEWING_STATUSES,
     OFFER_STATUSES,
-    STATUS_META,
     formatPay,
     formatRelative,
     toDateInput,
@@ -13,24 +12,26 @@ import {
     type ApplicationRow,
     type ApplicationStatus,
     type Arrangement,
-    type ActivityItem,
     type FlowEntry,
     type ListDetail,
     type ListSort,
     type ListStatus,
     type ListSummary,
     type PayPeriod,
-    type PipelineEntry,
     type StatusStep,
     type Stat,
 } from "@/components/dashboard/data";
+import {
+    funnelFrom,
+    volumeFrom,
+    wasSent,
+} from "@/components/dashboard/insights";
 import { parsePay } from "@/lib/pay";
 import {
     MAX_APPLICATIONS_READ_PER_LIST,
     MAX_EVENTS_READ_PER_APPLICATION,
 } from "@/lib/limits";
 
-const STATUS_ORDER = Object.keys(STATUS_META) as ApplicationStatus[];
 type QueryClient = Pick<PoolClient, "query">;
 
 export type ListsPage = {
@@ -565,10 +566,6 @@ export const getListDetail = async (
             0,
         );
 
-    const pipeline: PipelineEntry[] = STATUS_ORDER.filter((status) =>
-        counts.has(status),
-    ).map((status) => ({ status, count: counts.get(status) as number }));
-
     // Read from the trails rather than from the rows, which no longer carry
     // their history: the chart wants the path each application took, and only
     // the statuses along it, not the steps that recorded them.
@@ -587,20 +584,17 @@ export const getListDetail = async (
         { label: "Offers", value: String(sumOf(OFFER_STATUSES)) },
     ];
 
-    const activity: ActivityItem[] = [...statusEventRows]
-        .sort(
-            (left, right) =>
-                right.occurredAt.getTime() - left.occurredAt.getTime() ||
-                right.id.localeCompare(left.id),
-        )
-        .slice(0, 12)
-        .map((row) => ({
-            id: row.id,
-            company: row.companyName,
-            toStatus: row.toStatus ? (row.toStatus as ApplicationStatus) : null,
-            note: row.note,
-            when: formatRelative(row.occurredAt),
-        }));
+    // When an application went out. The date the user gave is the real answer;
+    // the first recorded step stands in for a row that never got one, and only
+    // then the row's own timestamp, which a later edit will have moved.
+    const sentAt = applicationRows.flatMap((row) => {
+        const trail = historyOf(row.id, row.status as ApplicationStatus);
+        if (!wasSent(trail.map((step) => step.status))) return [];
+        const recorded = trail.find((step) => step.at)?.at;
+        return [
+            row.appliedAt ?? (recorded ? new Date(recorded) : row.updatedAt),
+        ];
+    });
 
     return {
         id: list.id,
@@ -609,9 +603,9 @@ export const getListDetail = async (
         status: list.status as ListStatus,
         stats,
         applications,
-        pipeline,
+        funnel: funnelFrom(flow),
         flow,
-        activity,
+        volume: volumeFrom(sentAt),
     };
 };
 
