@@ -91,27 +91,26 @@ export const DownloadMenu = <T extends string>({
             >
                 {children}
             </button>
-            {open && (
-                <div
-                    role="menu"
-                    aria-label={title}
-                    className="absolute top-full right-0 z-30 mt-1 w-max min-w-32 border border-hairline bg-background shadow-sm"
-                >
-                    <p className="border-b border-hairline px-3 py-1.5 text-xs font-medium text-muted">
-                        {heading}
-                    </p>
-                    {formats.map((format) => (
-                        <Choice
-                            key={format.id}
-                            format={format}
-                            onSelect={() => {
-                                setOpen(false);
-                                onSelect(format.id);
-                            }}
-                        />
-                    ))}
-                </div>
-            )}
+            <div
+                role="menu"
+                aria-label={title}
+                data-open={open || undefined}
+                className="popup absolute top-full right-0 z-30 mt-1 w-max min-w-32 flex-col border border-hairline bg-background shadow-sm"
+            >
+                <p className="border-b border-hairline px-3 py-1.5 text-xs font-medium text-muted">
+                    {heading}
+                </p>
+                {formats.map((format) => (
+                    <Choice
+                        key={format.id}
+                        format={format}
+                        onSelect={() => {
+                            setOpen(false);
+                            onSelect(format.id);
+                        }}
+                    />
+                ))}
+            </div>
         </div>
     );
 };

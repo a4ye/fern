@@ -132,80 +132,79 @@ export const ApplicationsFilterMenu = ({
                     </span>
                 )}
             </button>
-            {open && (
-                <div className="absolute right-0 z-30 mt-1 w-60 max-w-[calc(100vw-2.5rem)] border border-hairline bg-background shadow-sm">
-                    <div className="flex items-center justify-between border-b border-hairline px-3 py-2">
-                        <p className="text-xs font-medium text-muted">
-                            Filter rows
-                        </p>
-                        <button
-                            type="button"
-                            onClick={() =>
-                                onChange({
-                                    ...filters,
-                                    statuses: [],
-                                    arrangements: [],
-                                })
-                            }
-                            disabled={count === 0}
-                            className="cursor-pointer text-xs text-sub transition-colors hover:text-ink focus-visible:outline-1 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-sub"
-                        >
-                            Clear
-                        </button>
-                    </div>
-                    <div className="max-h-80 overflow-y-auto py-1">
-                        <p className="px-3 py-1 text-xs font-medium text-muted">
-                            Status
-                        </p>
-                        <ul>
-                            {APPLICATION_STATUSES.map((status) => (
-                                <FilterValue
-                                    key={status}
-                                    label={STATUS_META[status].label}
-                                    text={STATUS_META[status].text}
-                                    count={statusCounts.get(status) ?? 0}
-                                    checked={filters.statuses.includes(status)}
-                                    onChange={(checked) =>
-                                        onChange({
-                                            ...filters,
-                                            statuses: toggled(
-                                                filters.statuses,
-                                                status,
-                                                checked,
-                                            ),
-                                        })
-                                    }
-                                />
-                            ))}
-                        </ul>
-                        <p className="border-t border-faint px-3 pt-2 pb-1 text-xs font-medium text-muted">
-                            Arrangement
-                        </p>
-                        <ul>
-                            {ARRANGEMENT_VALUES.map((value) => (
-                                <FilterValue
-                                    key={value}
-                                    label={arrangementValueLabel(value)}
-                                    count={arrangementCounts.get(value) ?? 0}
-                                    checked={filters.arrangements.includes(
-                                        value,
-                                    )}
-                                    onChange={(checked) =>
-                                        onChange({
-                                            ...filters,
-                                            arrangements: toggled(
-                                                filters.arrangements,
-                                                value,
-                                                checked,
-                                            ),
-                                        })
-                                    }
-                                />
-                            ))}
-                        </ul>
-                    </div>
+            <div
+                data-open={open || undefined}
+                className="popup absolute right-0 z-30 mt-1 w-60 max-w-[calc(100vw-2.5rem)] flex-col border border-hairline bg-background shadow-sm"
+            >
+                <div className="flex items-center justify-between border-b border-hairline px-3 py-2">
+                    <p className="text-xs font-medium text-muted">
+                        Filter rows
+                    </p>
+                    <button
+                        type="button"
+                        onClick={() =>
+                            onChange({
+                                ...filters,
+                                statuses: [],
+                                arrangements: [],
+                            })
+                        }
+                        disabled={count === 0}
+                        className="cursor-pointer text-xs text-sub transition-colors hover:text-ink focus-visible:outline-1 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-sub"
+                    >
+                        Clear
+                    </button>
                 </div>
-            )}
+                <div className="max-h-80 overflow-y-auto py-1">
+                    <p className="px-3 py-1 text-xs font-medium text-muted">
+                        Status
+                    </p>
+                    <ul>
+                        {APPLICATION_STATUSES.map((status) => (
+                            <FilterValue
+                                key={status}
+                                label={STATUS_META[status].label}
+                                text={STATUS_META[status].text}
+                                count={statusCounts.get(status) ?? 0}
+                                checked={filters.statuses.includes(status)}
+                                onChange={(checked) =>
+                                    onChange({
+                                        ...filters,
+                                        statuses: toggled(
+                                            filters.statuses,
+                                            status,
+                                            checked,
+                                        ),
+                                    })
+                                }
+                            />
+                        ))}
+                    </ul>
+                    <p className="border-t border-faint px-3 pt-2 pb-1 text-xs font-medium text-muted">
+                        Arrangement
+                    </p>
+                    <ul>
+                        {ARRANGEMENT_VALUES.map((value) => (
+                            <FilterValue
+                                key={value}
+                                label={arrangementValueLabel(value)}
+                                count={arrangementCounts.get(value) ?? 0}
+                                checked={filters.arrangements.includes(value)}
+                                onChange={(checked) =>
+                                    onChange({
+                                        ...filters,
+                                        arrangements: toggled(
+                                            filters.arrangements,
+                                            value,
+                                            checked,
+                                        ),
+                                    })
+                                }
+                            />
+                        ))}
+                    </ul>
+                </div>
+            </div>
         </div>
     );
 };
