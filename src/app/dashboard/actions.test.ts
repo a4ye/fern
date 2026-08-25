@@ -38,6 +38,10 @@ const acquireJobImportBudget = mock(
     async (..._args: unknown[]) => importBudget,
 );
 const putCachedJobImport = mock(async () => {});
+const restoreHistoryVersion = mock(async (..._args: unknown[]) => ({
+    ok: true,
+}));
+const undoHistoryAction = mock(async (..._args: unknown[]) => ({ ok: true }));
 
 mock.module("next/headers", () => ({ headers: async () => new Headers() }));
 mock.module("next/cache", () => ({ revalidatePath }));
@@ -64,6 +68,15 @@ mock.module("@/db/quotas", () => ({
     statusEventQuota: async () => quota,
     applicationsAtEventCap: async () => atEventCap,
 }));
+mock.module("@/db/history", () => ({
+    getListHistory: async () => ({
+        items: [],
+        nextCursor: null,
+        hasMore: false,
+    }),
+    restoreHistoryVersion,
+    undoHistoryAction,
+}));
 
 const {
     addApplication,
@@ -72,6 +85,7 @@ const {
     updateList,
     updateApplicationsBulk,
     deleteList,
+    restoreListHistoryVersion,
     setApplicationsArrangement,
     setApplicationsStatus,
     suggestFromUrl,
@@ -95,6 +109,8 @@ beforeEach(() => {
     getCachedJobImport.mockClear();
     acquireJobImportBudget.mockClear();
     putCachedJobImport.mockClear();
+    restoreHistoryVersion.mockClear();
+    undoHistoryAction.mockClear();
 });
 
 describe("suggestFromUrl", () => {
@@ -213,6 +229,41 @@ describe("updateList", () => {
         });
         expect(result).toEqual({ ok: false, error: "Choose a valid status." });
         expect(db.updateList).not.toHaveBeenCalled();
+    });
+});
+
+describe("restoreListHistoryVersion", () => {
+    it("refuses to restore when signed out", async () => {
+        session = null;
+        expect(await restoreListHistoryVersion(APPLICATION_ID, "123")).toEqual(
+            SIGNED_OUT,
+        );
+        expect(restoreHistoryVersion).not.toHaveBeenCalled();
+    });
+
+    it("restores only the signed-in user's validated list and version", async () => {
+        expect(await restoreListHistoryVersion(APPLICATION_ID, "123")).toEqual({
+            ok: true,
+        });
+        expect(restoreHistoryVersion.mock.calls[0]).toEqual([
+            "user-1",
+            APPLICATION_ID,
+            "123",
+        ]);
+        expect(revalidated()).toEqual([
+            `/dashboard/${APPLICATION_ID}`,
+            "/dashboard",
+        ]);
+    });
+
+    it("rejects an invalid version before reading history", async () => {
+        expect(
+            await restoreListHistoryVersion(APPLICATION_ID, "not-an-id"),
+        ).toEqual({
+            ok: false,
+            error: "That version is no longer available.",
+        });
+        expect(restoreHistoryVersion).not.toHaveBeenCalled();
     });
 });
 

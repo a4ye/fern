@@ -59,16 +59,15 @@ const SeasonPage = async ({ params, searchParams }: Props) => {
                 name={detail.name}
                 description={detail.description}
                 status={detail.status}
+                history={history}
             />
 
             <div className="mt-6">
                 <ListInsights
-                    listId={detail.id}
                     name={detail.name}
                     stats={detail.stats}
                     pipeline={detail.pipeline}
                     flow={detail.flow}
-                    history={history}
                 />
             </div>
 

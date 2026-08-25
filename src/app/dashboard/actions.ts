@@ -21,6 +21,8 @@ import {
 import { getUserSettings } from "@/db/settings";
 import {
     getListHistory,
+    HISTORY_LOAD_PAGE_SIZE,
+    restoreHistoryVersion,
     undoHistoryAction,
     type ListHistoryPage,
 } from "@/db/history";
@@ -120,7 +122,12 @@ export const loadListHistory = async (
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session || !applicationIdSchema.safeParse(listId).success) return null;
     if (!validHistoryActionId(beforeId)) return null;
-    return getListHistory(session.user.id, listId, beforeId);
+    return getListHistory(
+        session.user.id,
+        listId,
+        beforeId,
+        HISTORY_LOAD_PAGE_SIZE,
+    );
 };
 
 export const undoListHistoryAction = async (
@@ -137,6 +144,26 @@ export const undoListHistoryAction = async (
     }
 
     const result = await undoHistoryAction(writer.userId, listId, actionId);
+    if (!result.ok) return result;
+    revalidatePath(`/dashboard/${listId}`);
+    revalidatePath("/dashboard");
+    return { ok: true };
+};
+
+export const restoreListHistoryVersion = async (
+    listId: string,
+    actionId: string,
+): Promise<ActionResult> => {
+    const writer = await writingUser();
+    if (!writer.ok) return writer;
+    if (
+        !applicationIdSchema.safeParse(listId).success ||
+        !validHistoryActionId(actionId)
+    ) {
+        return { ok: false, error: "That version is no longer available." };
+    }
+
+    const result = await restoreHistoryVersion(writer.userId, listId, actionId);
     if (!result.ok) return result;
     revalidatePath(`/dashboard/${listId}`);
     revalidatePath("/dashboard");

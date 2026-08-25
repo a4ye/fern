@@ -57,6 +57,19 @@ one sparse row per action, including bulk edits and imports. Older rows move
 into lossless gzip-compressed `bytea` chunks while the newest 100 actions per
 list remain directly queryable.
 
+Recent actions can be undone and redone repeatedly. Ordinary edits reuse their
+sparse before/after patch in both directions. An undo that removes applications
+or status events keeps the deleted snapshots inside that undo row, so redo is
+possible without making every normal history action larger.
+
+Every entry is also a restorable version of the whole list. The restore path
+starts with the current list and reverses the later lossless actions, including
+actions inside compressed archives. It writes one compact before/after delta
+for the restoration itself, which makes the restore undoable and redoable
+without storing a full list snapshot for every action. New imports retain only
+compact company and role summaries for their history details. Full application
+rows are stored only when a delete or an actual undo needs them.
+
 Archiving is self-maintaining and needs no cron job. A small fraction of normal
 history writes checks for one eligible chunk after the user's edit commits.
 Each pass archives up to 500 actions older than 90 days, and row locks make

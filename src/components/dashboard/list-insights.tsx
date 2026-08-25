@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { HistoryFeed } from "@/components/dashboard/history-feed";
 import { PipelineFlow } from "@/components/dashboard/pipeline-flow";
 import { PipelineSummary } from "@/components/dashboard/pipeline-summary";
 import { StatStrip } from "@/components/dashboard/stat-strip";
@@ -10,24 +9,19 @@ import type {
     PipelineEntry,
     Stat,
 } from "@/components/dashboard/data";
-import type { ListHistoryPage } from "@/db/history";
 
-// Sits above the applications table, so the charts and feed stay one click away
-// without pushing the table below a list that can run to hundreds of rows.
+// Sits above the applications table, so the charts stay one click away without
+// pushing the table below a visualization that can be several rows tall.
 export const ListInsights = ({
-    listId,
     name,
     stats,
     pipeline,
     flow,
-    history,
 }: {
-    listId: string;
     name: string;
     stats: Stat[];
     pipeline: PipelineEntry[];
     flow: FlowEntry[];
-    history: ListHistoryPage;
 }) => {
     const [open, setOpen] = useState(false);
 
@@ -46,7 +40,7 @@ export const ListInsights = ({
                     aria-expanded={open}
                     className="flex h-11 w-full cursor-pointer items-center justify-between border-t border-faint px-4 text-sm text-sub transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:h-8 sm:w-auto sm:shrink-0 sm:justify-start sm:gap-1.5 sm:border-t-0 sm:px-0"
                 >
-                    Insights &amp; history
+                    Insights
                     <span
                         aria-hidden="true"
                         className={`icon-[lucide--chevron-down] size-4 transition-transform ${open ? "rotate-180" : ""}`}
@@ -58,14 +52,7 @@ export const ListInsights = ({
                     {/* The flow takes the full width: it can run to six columns
                         of labelled nodes, which crowd badly in half a row. */}
                     <PipelineFlow flow={flow} name={name} />
-                    <div className="grid items-start gap-4 lg:grid-cols-2">
-                        <PipelineSummary pipeline={pipeline} />
-                        <HistoryFeed
-                            key={history.items[0]?.id ?? "empty"}
-                            listId={listId}
-                            initialPage={history}
-                        />
-                    </div>
+                    <PipelineSummary pipeline={pipeline} />
                 </div>
             )}
         </div>
