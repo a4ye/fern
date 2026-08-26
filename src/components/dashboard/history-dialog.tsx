@@ -8,9 +8,18 @@ import {
     restoreListHistoryVersion,
     undoListHistoryAction,
 } from "@/app/dashboard/actions";
+import {
+    STATUS_META,
+    arrangementLabel,
+    type ApplicationStatus,
+    type Arrangement,
+} from "@/components/dashboard/data";
 import { useModalDialog } from "@/components/dashboard/use-modal-dialog";
 import type {
     HistoryCategory,
+    HistoryValueChange,
+    HistoryValueToken,
+    ListHistoryChange,
     ListHistoryItem,
     ListHistoryPage,
 } from "@/db/history";
@@ -24,6 +33,105 @@ const CATEGORY_ICONS: Record<HistoryCategory, string> = {
     deleted: "icon-[lucide--trash-2]",
     reverted: "icon-[lucide--rotate-ccw]",
     restored: "icon-[lucide--history]",
+};
+
+const CATEGORY_PLATES: Record<HistoryCategory, string> = {
+    added: "bg-accent-tint text-accent-deep",
+    edited: "bg-hairline text-sub",
+    moved: "bg-accent-tint text-accent-deep",
+    deleted: "bg-rose-tint text-rose",
+    reverted: "bg-gold-tint text-gold",
+    restored: "bg-gold-tint text-gold",
+};
+
+const valueLabel = (token: HistoryValueToken): string => {
+    if (token.field === "status" && token.value in STATUS_META) {
+        return STATUS_META[token.value as ApplicationStatus].label;
+    }
+    if (
+        token.field === "arrangement" &&
+        ["remote", "hybrid", "onsite"].includes(token.value)
+    ) {
+        return arrangementLabel(token.value as Arrangement);
+    }
+    return token.value;
+};
+
+const HistoryValue = ({ token }: { token: HistoryValueToken }) => {
+    const status =
+        token.field === "status" && token.value in STATUS_META
+            ? STATUS_META[token.value as ApplicationStatus]
+            : null;
+    return (
+        <span
+            className={`mx-0.5 inline-flex items-center px-1.5 py-0.5 text-xs leading-4 font-medium align-baseline ${status ? status.plate : "bg-accent-tint text-accent-deep"}`}
+        >
+            {valueLabel(token)}
+        </span>
+    );
+};
+
+const HistoryTitle = ({ item }: { item: ListHistoryItem }) => {
+    if (!item.titleValue) return item.title;
+    const label = valueLabel(item.titleValue);
+    const valueIndex = item.title.lastIndexOf(label);
+    if (valueIndex < 0) return item.title;
+    return (
+        <>
+            {item.title.slice(0, valueIndex)}
+            <HistoryValue token={item.titleValue} />
+            {item.title.slice(valueIndex + label.length)}
+        </>
+    );
+};
+
+const semanticToken = (
+    change: HistoryValueChange,
+    value: string,
+): HistoryValueToken => ({ field: change.field, value });
+
+const HistoryChangeDescription = ({
+    change,
+}: {
+    change: ListHistoryChange;
+}) => {
+    if (!change.valueChange) return change.description;
+    const { before, after, count, field, subject } = change.valueChange;
+    const prefix = subject ? `${subject}: ` : "";
+    const label = field === "status" ? "Status" : "Arrangement";
+    const suffix =
+        count > 1 ? ` for ${count.toLocaleString()} applications` : "";
+    if (before === null || before === "") {
+        return (
+            <>
+                {prefix}
+                {label} set to{" "}
+                {after && (
+                    <HistoryValue
+                        token={semanticToken(change.valueChange, after)}
+                    />
+                )}
+                {suffix}
+            </>
+        );
+    }
+    if (after === null || after === "") {
+        return (
+            <>
+                {prefix}
+                {label} cleared{suffix}
+            </>
+        );
+    }
+    return (
+        <>
+            {prefix}
+            {label} changed from{" "}
+            <HistoryValue token={semanticToken(change.valueChange, before)} />{" "}
+            to <HistoryValue token={semanticToken(change.valueChange, after)} />
+            {suffix}
+        </>
+    );
 };
 
 const groupByDay = (items: ListHistoryItem[]) => {
@@ -209,9 +317,15 @@ export const HistoryDialog = ({
                         <div className="space-y-7">
                             {groups.map((group) => (
                                 <section key={group.day}>
-                                    <h3 className="px-3 text-xs font-medium text-muted tabular-nums">
-                                        {group.day}
-                                    </h3>
+                                    <div className="flex items-center gap-3 px-3">
+                                        <h3 className="shrink-0 text-xs font-medium text-sub tabular-nums">
+                                            {group.day}
+                                        </h3>
+                                        <span
+                                            aria-hidden="true"
+                                            className="h-px flex-1 bg-faint"
+                                        />
+                                    </div>
                                     <ol className="mt-2 space-y-1">
                                         {group.items.map((item) => {
                                             const isExpanded = expanded.has(
@@ -230,11 +344,7 @@ export const HistoryDialog = ({
                                             return (
                                                 <li
                                                     key={item.id}
-                                                    className={
-                                                        isExpanded
-                                                            ? "bg-surface"
-                                                            : ""
-                                                    }
+                                                    className={`border-l-2 ${isExpanded ? "border-accent bg-surface" : "border-transparent"}`}
                                                 >
                                                     <button
                                                         type="button"
@@ -257,13 +367,19 @@ export const HistoryDialog = ({
                                                     >
                                                         <span
                                                             aria-hidden="true"
-                                                            className={`${CATEGORY_ICONS[item.category]} block size-4 shrink-0 text-muted`}
-                                                        />
+                                                            className={`flex size-8 shrink-0 items-center justify-center ${CATEGORY_PLATES[item.category]}`}
+                                                        >
+                                                            <span
+                                                                className={`${CATEGORY_ICONS[item.category]} block size-4`}
+                                                            />
+                                                        </span>
                                                         <span className="min-w-0 flex-1">
                                                             <span
-                                                                className={`block text-pretty text-sm leading-5 font-medium ${item.undone ? "text-sub" : "text-ink"}`}
+                                                                className={`block text-pretty text-sm leading-5 ${isExpanded ? "font-semibold" : "font-medium"} ${item.undone ? "text-sub" : "text-ink"}`}
                                                             >
-                                                                {item.title}
+                                                                <HistoryTitle
+                                                                    item={item}
+                                                                />
                                                             </span>
                                                             <span className="mt-0.5 block text-xs text-muted tabular-nums">
                                                                 {item.undone
@@ -290,7 +406,7 @@ export const HistoryDialog = ({
                                                     {isExpanded && (
                                                         <div
                                                             id={detailsId}
-                                                            className="px-10 pb-5 sm:pr-5 sm:pl-10"
+                                                            className="pr-4 pb-5 pl-14 sm:pr-5"
                                                         >
                                                             {item.restoreTarget && (
                                                                 <div className="border-y border-hairline py-3">
@@ -332,11 +448,11 @@ export const HistoryDialog = ({
                                                             {item.changes
                                                                 .length > 0 ? (
                                                                 <div className="mt-4">
-                                                                    <p className="text-xs font-medium text-muted">
+                                                                    <p className="text-xs font-semibold text-sub">
                                                                         What
                                                                         changed
                                                                     </p>
-                                                                    <ul className="mt-2 space-y-2">
+                                                                    <ul className="mt-2 divide-y divide-faint border-y border-faint">
                                                                         {item.changes.map(
                                                                             (
                                                                                 change,
@@ -344,18 +460,20 @@ export const HistoryDialog = ({
                                                                             ) => (
                                                                                 <li
                                                                                     key={`${item.id}-${index}`}
-                                                                                    className="text-pretty text-xs leading-5 text-sub"
+                                                                                    className={`text-pretty text-xs leading-5 text-sub ${change.applications.length > 1 ? "" : "py-2.5"}`}
                                                                                 >
                                                                                     {change
                                                                                         .applications
                                                                                         .length >
                                                                                     1 ? (
                                                                                         <details className="group/change">
-                                                                                            <summary className="-mx-2 flex min-h-10 cursor-pointer list-none items-center gap-3 px-2 transition-colors duration-150 ease-out hover:bg-background focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&::-webkit-details-marker]:hidden">
+                                                                                            <summary className="flex min-h-10 cursor-pointer list-none items-center gap-3 px-2 transition-[background-color] duration-150 ease-out hover:bg-background focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&::-webkit-details-marker]:hidden">
                                                                                                 <span className="min-w-0 flex-1">
-                                                                                                    {
-                                                                                                        change.description
-                                                                                                    }
+                                                                                                    <HistoryChangeDescription
+                                                                                                        change={
+                                                                                                            change
+                                                                                                        }
+                                                                                                    />
                                                                                                 </span>
                                                                                                 <span className="shrink-0 text-muted">
                                                                                                     View
@@ -366,7 +484,7 @@ export const HistoryDialog = ({
                                                                                                     className="icon-[lucide--chevron-right] block size-3.5 shrink-0 text-muted transition-transform duration-150 ease-out group-open/change:rotate-90"
                                                                                                 />
                                                                                             </summary>
-                                                                                            <ul className="grid gap-x-5 gap-y-1 border-l border-hairline pb-2 pl-3 sm:grid-cols-2">
+                                                                                            <ul className="grid max-h-48 gap-x-5 gap-y-1 overflow-y-auto overscroll-contain border-l border-hairline py-2 pr-3 pl-3 sm:grid-cols-2">
                                                                                                 {change.applications.map(
                                                                                                     (
                                                                                                         application,
@@ -403,7 +521,11 @@ export const HistoryDialog = ({
                                                                                             </ul>
                                                                                         </details>
                                                                                     ) : (
-                                                                                        change.description
+                                                                                        <HistoryChangeDescription
+                                                                                            change={
+                                                                                                change
+                                                                                            }
+                                                                                        />
                                                                                     )}
                                                                                 </li>
                                                                             ),

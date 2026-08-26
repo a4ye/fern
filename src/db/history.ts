@@ -153,15 +153,30 @@ export type HistoryRestoreTarget = {
     time: string;
 };
 
+export type HistoryValueToken = {
+    field: "status" | "arrangement";
+    value: string;
+};
+
+export type HistoryValueChange = {
+    field: HistoryValueToken["field"];
+    subject: string | null;
+    before: string | null;
+    after: string | null;
+    count: number;
+};
+
 export type ListHistoryChange = {
     description: string;
     applications: string[];
     applicationCount: number;
+    valueChange?: HistoryValueChange;
 };
 
 export type ListHistoryItem = {
     id: string;
     title: string;
+    titleValue: HistoryValueToken | null;
     changes: ListHistoryChange[];
     category: HistoryCategory;
     occurredAt: string;
@@ -1012,6 +1027,23 @@ const changeDescription = (
     return `${prefix}${label} changed from ${displayValue(code, before)} to ${displayValue(code, after)}`;
 };
 
+const valueChangeFor = (
+    code: string,
+    subject: string | null,
+    values: FieldChange,
+    count: number,
+): HistoryValueChange | undefined => {
+    const field = code === "s" ? "status" : code === "a" ? "arrangement" : null;
+    if (!field) return undefined;
+    return {
+        field,
+        subject,
+        before: values[0],
+        after: values[1],
+        count,
+    };
+};
+
 const applicationNames = (names: string[]): string | null => {
     const unique = [...new Set(names)];
     if (unique.length === 0) return null;
@@ -1036,16 +1068,26 @@ const groupedPatchChanges = (
         direction === 1 ? values : [values[1], values[0]];
 
     if (row.affectedCount === 1 && patches.length === 1) {
-        return Object.entries(patches[0].f).map(([code, values]) => ({
-            description: changeDescription(
-                patches[0].n,
-                FIELD_LABELS[code as keyof typeof FIELD_MAP] ?? code,
+        return Object.entries(patches[0].f).map(([code, values]) => {
+            const directedValues = directed(values);
+            const valueChange = valueChangeFor(
                 code,
-                directed(values),
-            ),
-            applications: [],
-            applicationCount: 0,
-        }));
+                patches[0].n,
+                directedValues,
+                1,
+            );
+            return {
+                description: changeDescription(
+                    patches[0].n,
+                    FIELD_LABELS[code as keyof typeof FIELD_MAP] ?? code,
+                    code,
+                    directedValues,
+                ),
+                applications: [],
+                applicationCount: 0,
+                ...(valueChange ? { valueChange } : {}),
+            };
+        });
     }
 
     const groups = new Map<string, ChangeGroup>();
@@ -1070,25 +1112,34 @@ const groupedPatchChanges = (
             patches.length === 1 && row.affectedCount > 1
                 ? row.affectedCount
                 : recorded;
+        const directedValues = directed(group.values);
+        const valueChange = valueChangeFor(
+            group.code,
+            count === 1 ? (group.names[0] ?? null) : null,
+            directedValues,
+            count,
+        );
         if (count === 1) {
             return {
                 description: changeDescription(
                     group.names[0] ?? null,
                     group.label,
                     group.code,
-                    directed(group.values),
+                    directedValues,
                 ),
                 applications: [],
                 applicationCount: 0,
+                ...(valueChange ? { valueChange } : {}),
             };
         }
         return {
-            description: `${changeDescription(null, group.label, group.code, directed(group.values))} for ${count.toLocaleString()} applications`,
+            description: `${changeDescription(null, group.label, group.code, directedValues)} for ${count.toLocaleString()} applications`,
             applications:
                 recorded === count
                     ? group.names.slice(0, HISTORY_APPLICATION_NAMES_LIMIT)
                     : [],
             applicationCount: recorded === count ? count : 0,
+            ...(valueChange ? { valueChange } : {}),
         };
     });
     if (entries.length > lines.length) {
@@ -1296,6 +1347,31 @@ const historyCategoryFor = (kind: number): HistoryCategory => {
     return "edited";
 };
 
+const historyTitleValueFor = (
+    row: StoredHistoryAction,
+): HistoryValueToken | null => {
+    if (
+        row.kind !== HISTORY_KIND.status &&
+        row.kind !== HISTORY_KIND.arrangement
+    ) {
+        return null;
+    }
+    const code = row.kind === HISTORY_KIND.status ? "s" : "a";
+    const values = new Set(
+        asPatch(row.data).flatMap((patch) =>
+            patch.f[code]?.[1] ? [patch.f[code][1]] : [],
+        ),
+    );
+    if (values.size !== 1) return null;
+    const [value] = values;
+    return value
+        ? {
+              field: code === "s" ? "status" : "arrangement",
+              value,
+          }
+        : null;
+};
+
 const historyDay = (date: Date): string =>
     date.toLocaleDateString("en-US", {
         weekday: "long",
@@ -1336,6 +1412,7 @@ const toItem = (
     return {
         id: row.id,
         title: historyTitleFor(row),
+        titleValue: historyTitleValueFor(row),
         changes:
             row.kind === HISTORY_KIND.undo
                 ? undoRoot

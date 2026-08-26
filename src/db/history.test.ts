@@ -298,8 +298,46 @@ describe("history wording", () => {
                     "Arrangement changed from Remote to Hybrid for 2 applications",
                 applications: ["Northstar Labs", "Juniper Systems"],
                 applicationCount: 2,
+                valueChange: {
+                    field: "arrangement",
+                    subject: null,
+                    before: "remote",
+                    after: "hybrid",
+                    count: 2,
+                },
             },
         ]);
+    });
+
+    it("keeps status values structured for history chips", () => {
+        expect(
+            historyChangeDetailsFor(
+                historyAction({
+                    kind: HISTORY_KIND.status,
+                    affectedCount: 2,
+                    data: {
+                        a: [
+                            {
+                                i: "00000000-0000-4000-8000-000000000001",
+                                n: "Northstar Labs",
+                                f: { s: ["applied", "interviewing"] },
+                            },
+                            {
+                                i: "00000000-0000-4000-8000-000000000002",
+                                n: "Juniper Systems",
+                                f: { s: ["applied", "interviewing"] },
+                            },
+                        ],
+                    },
+                }),
+            )[0]?.valueChange,
+        ).toEqual({
+            field: "status",
+            subject: null,
+            before: "applied",
+            after: "interviewing",
+            count: 2,
+        });
     });
 
     it("describes the values applied by an undo", () => {
