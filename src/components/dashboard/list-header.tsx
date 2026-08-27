@@ -47,12 +47,14 @@ export const ListHeader = ({
     description: initialDescription,
     status: initialStatus,
     history,
+    defaultCurrency,
 }: {
     listId: string;
     name: string;
     description: string | null;
     status: ListStatus;
     history: ListHistoryPage;
+    defaultCurrency: string;
 }) => {
     const router = useRouter();
     const [isEditing, setIsEditing] = useState(false);
@@ -267,6 +269,7 @@ export const ListHeader = ({
                 <HistoryDialog
                     listId={listId}
                     initialPage={history}
+                    defaultCurrency={defaultCurrency}
                     onClose={() => setShowingHistory(false)}
                 />
             )}

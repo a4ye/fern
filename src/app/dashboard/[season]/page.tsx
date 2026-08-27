@@ -60,6 +60,7 @@ const SeasonPage = async ({ params, searchParams }: Props) => {
                 description={detail.description}
                 status={detail.status}
                 history={history}
+                defaultCurrency={settings.defaultCurrency}
             />
 
             <div className="mt-6">

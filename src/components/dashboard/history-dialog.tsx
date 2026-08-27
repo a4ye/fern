@@ -9,14 +9,20 @@ import {
     undoListHistoryAction,
 } from "@/app/dashboard/actions";
 import {
+    PAY_PERIODS,
     STATUS_META,
     arrangementLabel,
+    formatDay,
+    formatPay,
+    payPeriodLabel,
     type ApplicationStatus,
     type Arrangement,
+    type PayPeriod,
 } from "@/components/dashboard/data";
 import { useModalDialog } from "@/components/dashboard/use-modal-dialog";
 import type {
     HistoryCategory,
+    HistoryFieldChange,
     HistoryValueChange,
     HistoryValueToken,
     ListHistoryChange,
@@ -90,6 +96,95 @@ const semanticToken = (
     value: string,
 ): HistoryValueToken => ({ field: change.field, value });
 
+const PAY_AMOUNT_CODES = ["mi", "ma", "b"];
+
+const formattedFieldValue = (
+    change: HistoryFieldChange,
+    value: string | null,
+    currency: string | null | undefined,
+    defaultCurrency: string,
+): string => {
+    if (value === null || value === "") return "Not set";
+    if (PAY_AMOUNT_CODES.includes(change.code)) {
+        return (
+            formatPay({
+                payMin: value,
+                payMax: null,
+                payCurrency: currency || defaultCurrency,
+                payPeriod: null,
+                payNote: null,
+            }) ?? value
+        );
+    }
+    if (change.code === "pe" && PAY_PERIODS.includes(value as PayPeriod)) {
+        return payPeriodLabel(value as PayPeriod);
+    }
+    if (change.code === "d" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        return formatDay(value);
+    }
+    return value.replace(/\s+/g, " ");
+};
+
+const HistoryFieldValue = ({
+    change,
+    value,
+    currency,
+    defaultCurrency,
+    current,
+}: {
+    change: HistoryFieldChange;
+    value: string | null;
+    currency: string | null | undefined;
+    defaultCurrency: string;
+    current: boolean;
+}) => {
+    const empty = value === null || value === "";
+    return (
+        <span
+            className={`inline-flex min-h-7 max-w-full items-center px-2 py-1 text-xs leading-5 ${PAY_AMOUNT_CODES.includes(change.code) ? "tabular-nums" : ""} ${change.code === "u" ? "break-all" : "break-words"} ${current ? "bg-accent-tint text-accent-deep font-medium" : empty ? "bg-faint text-muted" : "bg-hairline text-sub"}`}
+        >
+            {formattedFieldValue(change, value, currency, defaultCurrency)}
+        </span>
+    );
+};
+
+const HistoryFieldChangeRow = ({
+    change,
+    defaultCurrency,
+}: {
+    change: HistoryFieldChange;
+    defaultCurrency: string;
+}) => (
+    <div className="grid gap-2 sm:grid-cols-[7.5rem_minmax(0,1fr)] sm:items-center sm:gap-4">
+        <span className="font-semibold text-ink">{change.label}</span>
+        <span className="flex min-w-0 flex-wrap items-center gap-2">
+            <HistoryFieldValue
+                change={change}
+                value={change.before}
+                currency={change.currencyBefore}
+                defaultCurrency={defaultCurrency}
+                current={false}
+            />
+            <span
+                aria-hidden="true"
+                className="icon-[lucide--arrow-right] block size-3.5 shrink-0 text-muted"
+            />
+            <HistoryFieldValue
+                change={change}
+                value={change.after}
+                currency={change.currencyAfter}
+                defaultCurrency={defaultCurrency}
+                current
+            />
+            {change.count > 1 && (
+                <span className="ml-auto shrink-0 text-muted tabular-nums">
+                    {change.count.toLocaleString()} applications
+                </span>
+            )}
+        </span>
+    </div>
+);
+
 const HistoryChangeDescription = ({
     change,
 }: {
@@ -134,6 +229,71 @@ const HistoryChangeDescription = ({
     );
 };
 
+const HistoryChangeDetail = ({
+    change,
+    defaultCurrency,
+}: {
+    change: ListHistoryChange;
+    defaultCurrency: string;
+}) =>
+    change.fieldChange ? (
+        <HistoryFieldChangeRow
+            change={change.fieldChange}
+            defaultCurrency={defaultCurrency}
+        />
+    ) : (
+        <HistoryChangeDescription change={change} />
+    );
+
+const ApplicationList = ({
+    applications,
+    count,
+    label,
+    keyPrefix,
+}: {
+    applications: string[];
+    count: number;
+    label: string;
+    keyPrefix: string;
+}) => {
+    const shown = applications.length;
+    return (
+        <div>
+            <div className="flex min-h-9 items-center gap-2 border-b border-hairline px-1">
+                <span
+                    aria-hidden="true"
+                    className="icon-[lucide--briefcase-business] block size-3.5 shrink-0 text-muted"
+                />
+                <span className="font-medium text-ink">{label}</span>
+                <span className="ml-auto shrink-0 text-muted tabular-nums">
+                    {shown < count
+                        ? `${shown.toLocaleString()} of ${count.toLocaleString()} shown`
+                        : count.toLocaleString()}
+                </span>
+            </div>
+            <ul className="grid max-h-48 gap-x-6 overflow-y-auto overscroll-contain sm:grid-cols-2">
+                {applications.map((application, index) => (
+                    <li
+                        key={`${keyPrefix}-${index}`}
+                        title={application}
+                        className="flex min-h-10 min-w-0 items-center gap-2.5 border-b border-faint px-1 py-2"
+                    >
+                        <span
+                            aria-hidden="true"
+                            className="flex size-6 shrink-0 items-center justify-center bg-hairline text-xs font-medium text-sub"
+                        >
+                            {application.trim().charAt(0).toUpperCase()}
+                        </span>
+                        <span className="min-w-0 truncate text-ink">
+                            {application}
+                        </span>
+                    </li>
+                ))}
+            </ul>
+        </div>
+    );
+};
+
 const groupByDay = (items: ListHistoryItem[]) => {
     const groups = new Map<string, { day: string; items: ListHistoryItem[] }>();
     for (const item of items) {
@@ -153,10 +313,12 @@ const primaryButtonClass =
 export const HistoryDialog = ({
     listId,
     initialPage,
+    defaultCurrency,
     onClose,
 }: {
     listId: string;
     initialPage: ListHistoryPage;
+    defaultCurrency: string;
     onClose: () => void;
 }) => {
     const router = useRouter();
@@ -164,7 +326,7 @@ export const HistoryDialog = ({
     const [items, setItems] = useState(initialPage.items);
     const [cursor, setCursor] = useState(initialPage.nextCursor);
     const [hasMore, setHasMore] = useState(initialPage.hasMore);
-    const [expanded, setExpanded] = useState<Set<string>>(new Set());
+    const [expanded, setExpanded] = useState<string | null>(null);
     const [undoing, setUndoing] = useState<string | null>(null);
     const [restoring, setRestoring] = useState<string | null>(null);
     const [confirmingRestore, setConfirmingRestore] = useState<string | null>(
@@ -172,6 +334,7 @@ export const HistoryDialog = ({
     );
     const [isLoading, startLoading] = useTransition();
     const loadedOlder = useRef(false);
+    const historyScrollRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         setItems((current) => {
@@ -192,14 +355,20 @@ export const HistoryDialog = ({
 
     const dismiss = () => close(onClose);
 
-    const toggle = (id: string) => {
-        setConfirmingRestore(null);
-        setExpanded((current) => {
-            const next = new Set(current);
-            if (next.has(id)) next.delete(id);
-            else next.add(id);
-            return next;
+    const keepTriggerInPlace = (trigger: HTMLElement) => {
+        const scroller = historyScrollRef.current;
+        if (!scroller) return;
+        const top = trigger.getBoundingClientRect().top;
+        requestAnimationFrame(() => {
+            if (!trigger.isConnected) return;
+            scroller.scrollTop += trigger.getBoundingClientRect().top - top;
         });
+    };
+
+    const toggle = (id: string, trigger: HTMLElement) => {
+        keepTriggerInPlace(trigger);
+        setConfirmingRestore(null);
+        setExpanded((current) => (current === id ? null : id));
     };
 
     const undo = (item: ListHistoryItem) => {
@@ -274,11 +443,11 @@ export const HistoryDialog = ({
             onClick={(event) => {
                 if (event.target === dialogRef.current) dismiss();
             }}
-            className="m-auto max-h-[min(45rem,calc(100dvh-2rem))] w-[calc(100dvw-2rem)] max-w-3xl overflow-hidden border-0 bg-background p-0 shadow-lg backdrop:bg-ink/25 sm:max-h-[min(45rem,calc(100dvh-3rem))] sm:w-[calc(100dvw-3rem)]"
+            className="m-auto h-[min(45rem,calc(100dvh-2rem))] w-[calc(100dvw-2rem)] max-w-3xl overflow-hidden border-0 bg-background p-0 shadow-lg backdrop:bg-ink/25 sm:h-[min(45rem,calc(100dvh-3rem))] sm:w-[calc(100dvw-3rem)]"
         >
             {/* Keep flex on an inner element so the browser can restore
                 dialog:not([open]) to display:none during the closing fade. */}
-            <div className="flex max-h-[min(45rem,calc(100dvh-2rem))] min-h-0 flex-col border border-hairline sm:max-h-[min(45rem,calc(100dvh-3rem))]">
+            <div className="flex h-full min-h-0 flex-col border border-hairline">
                 <header className="flex h-14 shrink-0 items-center justify-between gap-5 border-b border-hairline px-5 sm:px-6">
                     <h2
                         id={TITLE_ID}
@@ -313,7 +482,10 @@ export const HistoryDialog = ({
                         </div>
                     </div>
                 ) : (
-                    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-5 sm:px-5 sm:py-6">
+                    <div
+                        ref={historyScrollRef}
+                        className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-5 [overflow-anchor:none] sm:px-5 sm:py-6"
+                    >
                         <div className="space-y-7">
                             {groups.map((group) => (
                                 <section key={group.day}>
@@ -328,9 +500,8 @@ export const HistoryDialog = ({
                                     </div>
                                     <ol className="mt-2 space-y-1">
                                         {group.items.map((item) => {
-                                            const isExpanded = expanded.has(
-                                                item.id,
-                                            );
+                                            const isExpanded =
+                                                expanded === item.id;
                                             const detailsId = `history-details-${item.id}`;
                                             const hasDetails =
                                                 item.changes.length > 0 ||
@@ -344,14 +515,21 @@ export const HistoryDialog = ({
                                             return (
                                                 <li
                                                     key={item.id}
-                                                    className={`border-l-2 ${isExpanded ? "border-accent bg-surface" : "border-transparent"}`}
+                                                    className={
+                                                        isExpanded
+                                                            ? "bg-surface"
+                                                            : ""
+                                                    }
                                                 >
                                                     <button
                                                         type="button"
                                                         disabled={!hasDetails}
-                                                        onClick={() =>
+                                                        onClick={(event) =>
                                                             hasDetails &&
-                                                            toggle(item.id)
+                                                            toggle(
+                                                                item.id,
+                                                                event.currentTarget,
+                                                            )
                                                         }
                                                         aria-expanded={
                                                             hasDetails
@@ -460,21 +638,49 @@ export const HistoryDialog = ({
                                                                             ) => (
                                                                                 <li
                                                                                     key={`${item.id}-${index}`}
-                                                                                    className={`text-pretty text-xs leading-5 text-sub ${change.applications.length > 1 ? "" : "py-2.5"}`}
+                                                                                    className={`text-pretty text-xs leading-5 text-sub ${change.applicationList || change.applications.length > 0 ? "py-2" : "py-2.5"}`}
                                                                                 >
-                                                                                    {change
-                                                                                        .applications
-                                                                                        .length >
-                                                                                    1 ? (
+                                                                                    {change.applicationList ? (
+                                                                                        <ApplicationList
+                                                                                            applications={
+                                                                                                change.applications
+                                                                                            }
+                                                                                            count={
+                                                                                                change.applicationCount
+                                                                                            }
+                                                                                            label={
+                                                                                                change.applicationCount ===
+                                                                                                1
+                                                                                                    ? "Application"
+                                                                                                    : "Applications"
+                                                                                            }
+                                                                                            keyPrefix={`${item.id}-${index}`}
+                                                                                        />
+                                                                                    ) : change
+                                                                                          .applications
+                                                                                          .length >
+                                                                                      0 ? (
                                                                                         <details className="group/change">
-                                                                                            <summary className="flex min-h-10 cursor-pointer list-none items-center gap-3 px-2 transition-[background-color] duration-150 ease-out hover:bg-background focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&::-webkit-details-marker]:hidden">
-                                                                                                <span className="min-w-0 flex-1">
-                                                                                                    <HistoryChangeDescription
+                                                                                            <summary
+                                                                                                onClick={(
+                                                                                                    event,
+                                                                                                ) =>
+                                                                                                    keepTriggerInPlace(
+                                                                                                        event.currentTarget,
+                                                                                                    )
+                                                                                                }
+                                                                                                className="flex min-h-10 cursor-pointer list-none items-center gap-3 px-2 transition-[background-color] duration-150 ease-out hover:bg-background focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&::-webkit-details-marker]:hidden"
+                                                                                            >
+                                                                                                <div className="min-w-0 flex-1">
+                                                                                                    <HistoryChangeDetail
                                                                                                         change={
                                                                                                             change
                                                                                                         }
+                                                                                                        defaultCurrency={
+                                                                                                            defaultCurrency
+                                                                                                        }
                                                                                                     />
-                                                                                                </span>
+                                                                                                </div>
                                                                                                 <span className="shrink-0 text-muted">
                                                                                                     View
                                                                                                     applications
@@ -484,46 +690,24 @@ export const HistoryDialog = ({
                                                                                                     className="icon-[lucide--chevron-right] block size-3.5 shrink-0 text-muted transition-transform duration-150 ease-out group-open/change:rotate-90"
                                                                                                 />
                                                                                             </summary>
-                                                                                            <ul className="grid max-h-48 gap-x-5 gap-y-1 overflow-y-auto overscroll-contain border-l border-hairline py-2 pr-3 pl-3 sm:grid-cols-2">
-                                                                                                {change.applications.map(
-                                                                                                    (
-                                                                                                        application,
-                                                                                                        applicationIndex,
-                                                                                                    ) => (
-                                                                                                        <li
-                                                                                                            key={`${item.id}-${index}-${applicationIndex}`}
-                                                                                                            className="min-w-0 truncate"
-                                                                                                            title={
-                                                                                                                application
-                                                                                                            }
-                                                                                                        >
-                                                                                                            {
-                                                                                                                application
-                                                                                                            }
-                                                                                                        </li>
-                                                                                                    ),
-                                                                                                )}
-                                                                                                {change.applicationCount >
-                                                                                                    change
-                                                                                                        .applications
-                                                                                                        .length && (
-                                                                                                    <li className="text-muted tabular-nums">
-                                                                                                        and{" "}
-                                                                                                        {(
-                                                                                                            change.applicationCount -
-                                                                                                            change
-                                                                                                                .applications
-                                                                                                                .length
-                                                                                                        ).toLocaleString()}{" "}
-                                                                                                        more
-                                                                                                    </li>
-                                                                                                )}
-                                                                                            </ul>
+                                                                                            <ApplicationList
+                                                                                                applications={
+                                                                                                    change.applications
+                                                                                                }
+                                                                                                count={
+                                                                                                    change.applicationCount
+                                                                                                }
+                                                                                                label="Affected applications"
+                                                                                                keyPrefix={`${item.id}-${index}`}
+                                                                                            />
                                                                                         </details>
                                                                                     ) : (
-                                                                                        <HistoryChangeDescription
+                                                                                        <HistoryChangeDetail
                                                                                             change={
                                                                                                 change
+                                                                                            }
+                                                                                            defaultCurrency={
+                                                                                                defaultCurrency
                                                                                             }
                                                                                         />
                                                                                     )}

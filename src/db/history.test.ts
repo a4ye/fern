@@ -340,6 +340,61 @@ describe("history wording", () => {
         });
     });
 
+    it("keeps currency context with pay changes", () => {
+        const details = historyChangeDetailsFor(
+            historyAction({
+                data: {
+                    a: [
+                        {
+                            i: "00000000-0000-4000-8000-000000000001",
+                            n: "Kite Labs",
+                            p: ["CAD", "CAD"],
+                            f: {
+                                mi: [null, "125000.00"],
+                                ma: [null, "165000.00"],
+                                pe: [null, "yearly"],
+                            },
+                        },
+                    ],
+                },
+            }),
+        );
+
+        expect(details.map((detail) => detail.fieldChange)).toEqual([
+            {
+                code: "mi",
+                label: "Minimum pay",
+                subject: "Kite Labs",
+                before: null,
+                after: "125000.00",
+                count: 1,
+                currencyBefore: "CAD",
+                currencyAfter: "CAD",
+            },
+            {
+                code: "ma",
+                label: "Maximum pay",
+                subject: "Kite Labs",
+                before: null,
+                after: "165000.00",
+                count: 1,
+                currencyBefore: "CAD",
+                currencyAfter: "CAD",
+            },
+            {
+                code: "pe",
+                label: "Pay period",
+                subject: "Kite Labs",
+                before: null,
+                after: "yearly",
+                count: 1,
+            },
+        ]);
+        expect(details[2]?.description).toBe(
+            "Kite Labs: Pay period set to Yearly",
+        );
+    });
+
     it("describes the values applied by an undo", () => {
         expect(
             historyChangesFor(
@@ -403,20 +458,28 @@ describe("history wording", () => {
     });
 
     it("shows compact company and role details for imports", () => {
-        expect(
-            historyChangesFor(
-                historyAction({
-                    kind: HISTORY_KIND.import,
-                    affectedCount: 2,
-                    data: {
-                        m: [
-                            { n: "Acme", r: "Engineer" },
-                            { n: "Northwind", r: null },
-                        ],
-                    },
-                }),
-            ),
-        ).toEqual(["Applications: Acme (Engineer), Northwind"]);
+        const imported = historyAction({
+            kind: HISTORY_KIND.import,
+            affectedCount: 2,
+            data: {
+                m: [
+                    { n: "Acme", r: "Engineer" },
+                    { n: "Northwind", r: null },
+                ],
+            },
+        });
+
+        expect(historyChangesFor(imported)).toEqual([
+            "Applications: Acme (Engineer), Northwind",
+        ]);
+        expect(historyChangeDetailsFor(imported)).toEqual([
+            {
+                description: "Applications: Acme (Engineer), Northwind",
+                applications: ["Acme (Engineer)", "Northwind"],
+                applicationCount: 2,
+                applicationList: true,
+            },
+        ]);
     });
 
     it("describes a restore without exposing an internal timestamp", () => {
@@ -572,5 +635,19 @@ describe("point-in-time history restoration", () => {
         expect(before.applications.values().next().value?.role_title).toBe(
             "Senior Engineer",
         );
+    });
+
+    it("keeps pay currency in a version delta without duplicating a field edit", () => {
+        const before = versionState(
+            storedApplication({ pay_min: null, pay_currency: "CAD" }),
+        );
+        const after = versionState(
+            storedApplication({ pay_min: "125000.00", pay_currency: "CAD" }),
+        );
+
+        expect(versionDeltaBetween(before, after).a?.[0]).toMatchObject({
+            f: { mi: [null, "125000.00"] },
+            p: ["CAD", "CAD"],
+        });
     });
 });

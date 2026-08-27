@@ -2,11 +2,14 @@ import { gzipSync, gunzipSync } from "node:zlib";
 import type { PoolClient } from "@neondatabase/serverless";
 import { getPool, withTransaction } from "@/db/client";
 import {
+    PAY_PERIODS,
     STATUS_META,
     arrangementLabel,
     formatRelative,
+    payPeriodLabel,
     type ApplicationStatus,
     type Arrangement,
+    type PayPeriod,
 } from "@/components/dashboard/data";
 
 type QueryClient = Pick<PoolClient, "query">;
@@ -66,6 +69,8 @@ type ApplicationPatch = {
     i: string;
     n: string;
     f: FieldChanges;
+    /** Currency context for amount changes when currency itself did not change. */
+    p?: FieldChange;
 };
 
 type ListSnapshot = {
@@ -166,11 +171,24 @@ export type HistoryValueChange = {
     count: number;
 };
 
+export type HistoryFieldChange = {
+    code: string;
+    label: string;
+    subject: string | null;
+    before: string | null;
+    after: string | null;
+    count: number;
+    currencyBefore?: string | null;
+    currencyAfter?: string | null;
+};
+
 export type ListHistoryChange = {
     description: string;
     applications: string[];
     applicationCount: number;
+    applicationList?: boolean;
     valueChange?: HistoryValueChange;
+    fieldChange?: HistoryFieldChange;
 };
 
 export type ListHistoryItem = {
@@ -449,8 +467,23 @@ const changesBetween = (
             const to = valueOf(row, code);
             if (from !== to) fields[code] = [from, to];
         }
+        const amountChanged = ["mi", "ma", "b"].some((code) => code in fields);
         return Object.keys(fields).length > 0
-            ? [{ i: row.id, n: old.companyName, f: fields }]
+            ? [
+                  {
+                      i: row.id,
+                      n: old.companyName,
+                      f: fields,
+                      ...(amountChanged && !("cu" in fields)
+                          ? {
+                                p: [
+                                    old.payCurrency,
+                                    row.payCurrency,
+                                ] as FieldChange,
+                            }
+                          : {}),
+                  },
+              ]
             : [];
     });
 };
@@ -797,6 +830,9 @@ const displayValue = (code: string, value: Scalar): string => {
     if (code === "a" && ["remote", "hybrid", "onsite"].includes(value)) {
         return arrangementLabel(value as Arrangement);
     }
+    if (code === "pe" && PAY_PERIODS.includes(value as PayPeriod)) {
+        return payPeriodLabel(value as PayPeriod);
+    }
     const oneLine = value.replace(/\s+/g, " ");
     return oneLine.length > 100 ? `${oneLine.slice(0, 97)}...` : oneLine;
 };
@@ -1044,6 +1080,31 @@ const valueChangeFor = (
     };
 };
 
+const fieldChangeFor = (
+    code: string,
+    label: string,
+    subject: string | null,
+    values: FieldChange,
+    count: number,
+    currency?: FieldChange,
+): HistoryFieldChange | undefined => {
+    if (code === "s" || code === "a") return undefined;
+    return {
+        code,
+        label,
+        subject,
+        before: values[0],
+        after: values[1],
+        count,
+        ...(currency
+            ? {
+                  currencyBefore: currency[0],
+                  currencyAfter: currency[1],
+              }
+            : {}),
+    };
+};
+
 const applicationNames = (names: string[]): string | null => {
     const unique = [...new Set(names)];
     if (unique.length === 0) return null;
@@ -1056,8 +1117,15 @@ type ChangeGroup = {
     code: string;
     label: string;
     values: FieldChange;
+    currency?: FieldChange;
     names: string[];
 };
+
+const amountCurrencyFor = (
+    patch: ApplicationPatch,
+    code: string,
+): FieldChange | undefined =>
+    ["mi", "ma", "b"].includes(code) ? (patch.p ?? patch.f.cu) : undefined;
 
 const groupedPatchChanges = (
     row: StoredHistoryAction,
@@ -1070,22 +1138,34 @@ const groupedPatchChanges = (
     if (row.affectedCount === 1 && patches.length === 1) {
         return Object.entries(patches[0].f).map(([code, values]) => {
             const directedValues = directed(values);
+            const currency = amountCurrencyFor(patches[0], code);
+            const directedCurrency = currency ? directed(currency) : undefined;
+            const label = FIELD_LABELS[code as keyof typeof FIELD_MAP] ?? code;
             const valueChange = valueChangeFor(
                 code,
                 patches[0].n,
                 directedValues,
                 1,
             );
+            const fieldChange = fieldChangeFor(
+                code,
+                label,
+                patches[0].n,
+                directedValues,
+                1,
+                directedCurrency,
+            );
             return {
                 description: changeDescription(
                     patches[0].n,
-                    FIELD_LABELS[code as keyof typeof FIELD_MAP] ?? code,
+                    label,
                     code,
                     directedValues,
                 ),
                 applications: [],
                 applicationCount: 0,
                 ...(valueChange ? { valueChange } : {}),
+                ...(fieldChange ? { fieldChange } : {}),
             };
         });
     }
@@ -1093,11 +1173,13 @@ const groupedPatchChanges = (
     const groups = new Map<string, ChangeGroup>();
     for (const patch of patches) {
         for (const [code, values] of Object.entries(patch.f)) {
-            const key = `${code}:${JSON.stringify(values)}`;
+            const currency = amountCurrencyFor(patch, code);
+            const key = `${code}:${JSON.stringify(values)}:${JSON.stringify(currency)}`;
             const group = groups.get(key) ?? {
                 code,
                 label: FIELD_LABELS[code as keyof typeof FIELD_MAP] ?? code,
                 values,
+                ...(currency ? { currency } : {}),
                 names: [],
             };
             group.names.push(patch.n);
@@ -1113,11 +1195,22 @@ const groupedPatchChanges = (
                 ? row.affectedCount
                 : recorded;
         const directedValues = directed(group.values);
+        const directedCurrency = group.currency
+            ? directed(group.currency)
+            : undefined;
         const valueChange = valueChangeFor(
             group.code,
             count === 1 ? (group.names[0] ?? null) : null,
             directedValues,
             count,
+        );
+        const fieldChange = fieldChangeFor(
+            group.code,
+            group.label,
+            count === 1 ? (group.names[0] ?? null) : null,
+            directedValues,
+            count,
+            directedCurrency,
         );
         if (count === 1) {
             return {
@@ -1130,6 +1223,7 @@ const groupedPatchChanges = (
                 applications: [],
                 applicationCount: 0,
                 ...(valueChange ? { valueChange } : {}),
+                ...(fieldChange ? { fieldChange } : {}),
             };
         }
         return {
@@ -1140,6 +1234,7 @@ const groupedPatchChanges = (
                     : [],
             applicationCount: recorded === count ? count : 0,
             ...(valueChange ? { valueChange } : {}),
+            ...(fieldChange ? { fieldChange } : {}),
         };
     });
     if (entries.length > lines.length) {
@@ -1192,24 +1287,32 @@ export const historyChangeDetailsFor = (
         row.kind === HISTORY_KIND.import ||
         row.kind === HISTORY_KIND.delete
     ) {
-        const names = applicationNames(
+        const applicationDetails =
             data.m?.map((application) =>
                 application.r
                     ? `${application.n} (${application.r})`
                     : application.n,
             ) ??
-                data.d?.map((application) =>
-                    application.role_title
-                        ? `${application.company_name} (${application.role_title})`
-                        : application.company_name,
-                ) ??
-                [],
-        );
+            data.d?.map((application) =>
+                application.role_title
+                    ? `${application.company_name} (${application.role_title})`
+                    : application.company_name,
+            ) ??
+            [];
+        const uniqueApplications = [...new Set(applicationDetails)];
+        const names = applicationNames(uniqueApplications);
         if (names) {
             lines.push({
                 description: names,
-                applications: [],
-                applicationCount: 0,
+                applications: uniqueApplications.slice(
+                    0,
+                    HISTORY_APPLICATION_NAMES_LIMIT,
+                ),
+                applicationCount: Math.max(
+                    row.affectedCount,
+                    uniqueApplications.length,
+                ),
+                applicationList: true,
             });
         } else if (row.kind === HISTORY_KIND.import) {
             lines.push({
@@ -1697,10 +1800,21 @@ export const versionDeltaBetween = (
             if (from !== to) changed[code] = [from, to];
         }
         if (Object.keys(changed).length > 0) {
+            const amountChanged = ["mi", "ma", "b"].some(
+                (code) => code in changed,
+            );
             patches.push({
                 i: application.id,
                 n: old.company_name,
                 f: changed,
+                ...(amountChanged && !("cu" in changed)
+                    ? {
+                          p: [
+                              old.pay_currency,
+                              application.pay_currency,
+                          ] as FieldChange,
+                      }
+                    : {}),
             });
         }
     }
