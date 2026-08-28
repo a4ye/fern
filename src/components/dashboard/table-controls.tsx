@@ -55,7 +55,7 @@ export const secondaryButtonClass =
     "focus-frame inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap border border-hairline bg-background px-3 text-sm text-ink transition-colors hover:border-tile-border";
 
 export const dangerButtonClass =
-    "inline-flex h-8 shrink-0 cursor-pointer items-center whitespace-nowrap bg-rose px-3 text-sm font-medium text-background transition-colors hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+    "inline-flex h-8 shrink-0 cursor-pointer items-center whitespace-nowrap bg-rose px-3 text-sm font-medium text-background transition-colors hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:opacity-40";
 
 export const quietButtonClass =
     "inline-flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap text-xs text-sub transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";

@@ -157,11 +157,16 @@ const Privacy = () => (
                 lists from the dashboard. Related records are deleted with them.
             </p>
             <p>
-                You may request deletion of your account and associated personal
-                information. Some limited information may remain temporarily in
-                backups, security records, or where retention is required by
-                law. Information is not kept longer than reasonably necessary
-                for those purposes.
+                You can delete your account at any time from the settings page.
+                Doing so permanently removes your account and the information
+                saved in it, including your lists and applications. This cannot
+                be undone. You may also request deletion instead.
+            </p>
+            <p>
+                After a deletion, some limited information may remain
+                temporarily in backups, security records, or where retention is
+                required by law. Information is not kept longer than reasonably
+                necessary for those purposes.
             </p>
             <p>
                 Aggregate usage measurements contain no personal information and
@@ -172,7 +177,8 @@ const Privacy = () => (
         <LegalSection id="rights" title="7. Your choices and rights">
             <p>
                 You may choose not to connect Gmail, and you may revoke access
-                through your Google Account at any time. You may also ask to
+                through your Google Account at any time. You may delete your
+                account yourself from the settings page. You may also ask to
                 access, correct, export, or delete personal information
                 associated with your account. We may need to verify that you
                 control the account before completing a request.

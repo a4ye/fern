@@ -4,10 +4,15 @@ import { useState, type ReactNode } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { saveAccountSettings } from "@/app/dashboard/settings-actions";
+import {
+    deleteAccount,
+    saveAccountSettings,
+} from "@/app/dashboard/settings-actions";
+import { ConfirmDialog } from "@/components/dashboard/confirm-dialog";
 import {
     CURRENCY_OPTIONS,
     CellSelect,
+    dangerButtonClass,
     formInputClass,
     primaryButtonClass,
 } from "@/components/dashboard/table-controls";
@@ -97,6 +102,8 @@ export const AccountSettings = ({
     const [draftTidyTitles, setDraftTidyTitles] = useState(tidyTitles);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [confirmingDelete, setConfirmingDelete] = useState(false);
+    const [deleting, setDeleting] = useState(false);
 
     const trimmedName = draftName.trim();
     const changed =
@@ -128,6 +135,23 @@ export const AccountSettings = ({
             setError("Could not save your settings. Try again.");
         }
         setSaving(false);
+    };
+
+    // Left in the deleting state on success: the account is gone, so there is
+    // nothing for the button to go back to offering.
+    const remove = async () => {
+        setDeleting(true);
+        try {
+            const result = await deleteAccount();
+            if (result.ok) {
+                router.replace("/login");
+                return;
+            }
+            toast.error(result.error);
+        } catch {
+            toast.error("Could not delete your account. Try again.");
+        }
+        setDeleting(false);
     };
 
     return (
@@ -234,6 +258,48 @@ export const AccountSettings = ({
                     {saving ? "Saving" : "Save changes"}
                 </button>
             </div>
+
+            {/* Outside the settings grid on purpose. In a labelled row it read
+                as one more preference sitting under the save button, which is
+                the last thing a button that empties the account should look
+                like. */}
+            <section className="mt-16 border-t border-hairline pt-6">
+                <div className="flex flex-wrap items-start justify-between gap-x-8 gap-y-4">
+                    <div className="max-w-md">
+                        <h2 className="text-sm font-medium text-ink">
+                            Delete account
+                        </h2>
+                        <p className="mt-1 text-pretty text-xs leading-5 text-sub">
+                            Everything in your account is permanently removed,
+                            including every list and application. This cannot be
+                            undone.
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setConfirmingDelete(true)}
+                        disabled={deleting}
+                        className={dangerButtonClass}
+                    >
+                        {deleting ? "Deleting" : "Delete account"}
+                    </button>
+                </div>
+            </section>
+
+            {confirmingDelete && (
+                <ConfirmDialog
+                    title="Delete your account?"
+                    detail="Every list and application you have saved will be permanently removed. This cannot be undone."
+                    confirmLabel="Delete account"
+                    confirmPhrase="delete"
+                    tone="danger"
+                    onConfirm={() => {
+                        setConfirmingDelete(false);
+                        void remove();
+                    }}
+                    onCancel={() => setConfirmingDelete(false)}
+                />
+            )}
         </div>
     );
 };
