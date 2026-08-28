@@ -153,10 +153,12 @@ const Terms = () => (
             title="10. Termination and general terms"
         >
             <p>
-                You may stop using the service at any time. We may suspend or
-                terminate access where reasonably necessary to address a breach
-                of these Terms, abuse, security risk, legal requirement, or the
-                discontinuation of the project.
+                You may stop using the service at any time. You may also delete
+                your account from the settings page, which permanently removes
+                the information saved in it and cannot be undone. We may suspend
+                or terminate access where reasonably necessary to address a
+                breach of these Terms, abuse, security risk, legal requirement,
+                or the discontinuation of the project.
             </p>
             <p>
                 If any provision of these Terms is unenforceable, the remaining

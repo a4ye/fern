@@ -3,6 +3,7 @@
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
+import { deleteAccount as deleteAccountDb } from "@/db/account";
 import { saveUserSettings } from "@/db/settings";
 import { withinBudget } from "@/db/rate-limit";
 import { TOO_MANY_REQUESTS } from "@/lib/limits";
@@ -51,6 +52,26 @@ export const saveAccountSettings = async (input: {
 
     // The name is drawn by the dashboard layout and the default currency by
     // every list's create form, so the whole tree under it is stale.
+    revalidatePath("/dashboard", "layout");
+    return { ok: true };
+};
+
+export const deleteAccount = async (): Promise<ActionResult> => {
+    const requestHeaders = await headers();
+    const session = await auth.api.getSession({ headers: requestHeaders });
+    if (!session) return { ok: false, error: NOT_SIGNED_IN };
+    if (!(await withinBudget(session.user.id, "write"))) {
+        return { ok: false, error: TOO_MANY_REQUESTS };
+    }
+
+    // Signing out first is the one step that needs the session it ends, and it
+    // is what clears the browser's cookie. If the delete below then fails, the
+    // account is untouched and signing in again reaches all of it.
+    await auth.api.signOut({ headers: requestHeaders });
+    await deleteAccountDb(session.user.id);
+
+    // Nothing under /dashboard has an owner any more, so drop what was rendered
+    // for the account rather than let a cached page outlive it.
     revalidatePath("/dashboard", "layout");
     return { ok: true };
 };
