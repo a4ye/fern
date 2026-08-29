@@ -701,6 +701,7 @@ export const getListDetail = async (
             toStatus: row.toStatus ? (row.toStatus as ApplicationStatus) : null,
             note: row.note,
             when: formatRelative(row.occurredAt),
+            occurredAt: row.occurredAt.toISOString(),
         }));
 
     return {

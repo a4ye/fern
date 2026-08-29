@@ -11,6 +11,14 @@ import {
     type Arrangement,
     type PayPeriod,
 } from "@/components/dashboard/data";
+import {
+    HISTORY_APPLICATIONS_PAGE_SIZE,
+    HISTORY_CHANGES_PAGE_SIZE,
+    HISTORY_CHANGES_PREVIEW_SIZE,
+    HISTORY_INITIAL_PAGE_SIZE,
+    type HistoryApplicationDetail,
+    type HistoryApplicationsPage,
+} from "@/lib/history-pagination";
 
 type QueryClient = Pick<PoolClient, "query">;
 type Scalar = string | null;
@@ -116,6 +124,7 @@ type HistoryData = {
     a?: ApplicationPatch[];
     d?: ReturnType<typeof storedApplication>[];
     e?: ReturnType<typeof storedEvent>[];
+    g?: ReturnType<typeof storedEvent>[];
     f?: FieldChanges;
     m?: HistoryApplicationSummary[];
     n?: string;
@@ -172,6 +181,7 @@ export type HistoryValueChange = {
 };
 
 export type HistoryFieldChange = {
+    scope: "application" | "list";
     code: string;
     label: string;
     subject: string | null;
@@ -182,13 +192,30 @@ export type HistoryFieldChange = {
     currencyAfter?: string | null;
 };
 
+export type HistoryStatusEntryChange = {
+    action: "added" | "removed" | "restored";
+    subject: string | null;
+    from: string | null;
+    to: string | null;
+    note: string | null;
+};
+
+export type HistorySummaryChange = {
+    icon: "applications" | "statusHistory" | "more";
+    label: string;
+};
+
 export type ListHistoryChange = {
+    kind: "applications" | "value" | "field" | "statusEntry" | "summary";
     description: string;
     applications: string[];
     applicationCount: number;
-    applicationList?: boolean;
+    applicationListLabel?: string;
+    applicationDetails?: HistoryApplicationDetail[];
     valueChange?: HistoryValueChange;
     fieldChange?: HistoryFieldChange;
+    statusEntryChange?: HistoryStatusEntryChange;
+    summaryChange?: HistorySummaryChange;
 };
 
 export type ListHistoryItem = {
@@ -196,6 +223,7 @@ export type ListHistoryItem = {
     title: string;
     titleValue: HistoryValueToken | null;
     changes: ListHistoryChange[];
+    changeCount: number;
     category: HistoryCategory;
     occurredAt: string;
     when: string;
@@ -206,7 +234,14 @@ export type ListHistoryItem = {
     reversal: "undo" | "redo";
     undone: boolean;
     archived: boolean;
+    singleApplication: boolean;
     restoreTarget: HistoryRestoreTarget | null;
+};
+
+export type HistoryChangesPage = {
+    changes: ListHistoryChange[];
+    offset: number;
+    total: number;
 };
 
 export type ListHistoryPage = {
@@ -215,10 +250,13 @@ export type ListHistoryPage = {
     hasMore: boolean;
 };
 
+type HistoryChangeDetailsOptions = {
+    applicationOffset?: number;
+    applicationLimit?: number;
+};
+
 const MAX_ID = "9223372036854775807";
-const HISTORY_INITIAL_PAGE_SIZE = 6;
 export const HISTORY_LOAD_PAGE_SIZE = 20;
-const HISTORY_APPLICATION_NAMES_LIMIT = 50;
 const ARCHIVE_READ_LIMIT = 3;
 const AUTOMATIC_ARCHIVE_INTERVAL = BigInt(128);
 const AUTOMATIC_ARCHIVE_SLOTS = BigInt(4);
@@ -265,7 +303,7 @@ const FIELD_LABELS: Record<keyof typeof FIELD_MAP, string> = {
     c: "Company",
     r: "Role",
     s: "Status",
-    u: "URL",
+    u: "Link",
     l: "Location",
     a: "Arrangement",
     n: "Notes",
@@ -672,28 +710,29 @@ export const recordApplicationChangeWithClient = async <Result>(
     );
     const patches = changesBetween(before, after);
 
+    const eventsAfter =
+        input.trackRemovedEvents || input.kind === HISTORY_KIND.steps
+            ? await applicationEvents(
+                  client,
+                  input.userId,
+                  input.applicationIds,
+              )
+            : [];
     let removed: ReturnType<typeof storedEvent>[] = [];
     if (input.trackRemovedEvents) {
-        const eventsAfter = await applicationEvents(
-            client,
-            input.userId,
-            input.applicationIds,
-        );
         const remaining = new Set(eventsAfter.map((event) => event.id));
         removed = eventsBefore
             .filter((event) => !remaining.has(event.id))
             .map(storedEvent);
     }
+    const added =
+        input.kind === HISTORY_KIND.steps
+            ? eventsAfter
+                  .filter((event) => event.historyActionId === id)
+                  .map(storedEvent)
+            : [];
 
-    const addedEvent = await rowsOf<{ exists: boolean }>(
-        client,
-        `select exists(
-                select 1 from application_events
-                where history_action_id = $1::bigint
-            ) as exists`,
-        [id],
-    );
-    if (patches.length > 0 || removed.length > 0 || addedEvent[0]?.exists) {
+    if (patches.length > 0 || removed.length > 0 || added.length > 0) {
         const listId = before[0]?.listId ?? after[0]?.listId;
         if (listId) {
             await insertAction(client, {
@@ -709,6 +748,11 @@ export const recordApplicationChangeWithClient = async <Result>(
                 data: {
                     ...(patches.length > 0 ? { a: patches } : {}),
                     ...(removed.length > 0 ? { e: removed } : {}),
+                    ...(added.length > 0 ? { g: added } : {}),
+                    ...(input.kind === HISTORY_KIND.steps &&
+                    (before[0] ?? after[0])
+                        ? { n: (before[0] ?? after[0]).companyName }
+                        : {}),
                 },
             });
             input.onRecorded?.(id);
@@ -846,12 +890,13 @@ const applicationTitle = (
 };
 
 const restoredTitle = (original: string | undefined): string => {
-    if (!original) return "Reverted a previous change";
+    if (!original) return "Restored a previous change";
     if (
         original === "Restored an earlier version" ||
-        original === "Restored the list to an earlier point"
+        original === "Restored the list to an earlier point" ||
+        original === "Restored an earlier version of the list"
     ) {
-        return "Returned to the version before the restore";
+        return "Restored the previous version of the list";
     }
 
     const edited = /^Edited (.+)$/.exec(original)?.[1];
@@ -912,44 +957,46 @@ const restoredTitle = (original: string | undefined): string => {
     const deleted = /^Deleted (.+)$/.exec(original)?.[1];
     if (deleted) return `Restored ${deleted}`;
 
-    return "Reverted a previous change";
+    return "Restored a previous change";
 };
 
 const reappliedTitle = (original: string | undefined): string => {
-    if (!original) return "Reapplied a previous change";
+    if (!original) return "Redid a previous change";
     if (
         original === "Restored an earlier version" ||
-        original === "Restored the list to an earlier point"
+        original === "Restored the list to an earlier point" ||
+        original === "Restored an earlier version of the list"
     ) {
-        return "Restored the earlier version again";
+        return "Restored the earlier version of the list";
     }
 
     const edited = /^Edited (.+)$/.exec(original)?.[1];
-    if (edited === "list details") return "Reapplied list detail changes";
-    if (edited === "status history") return "Reapplied status history changes";
+    if (edited === "list details") return "Updated list details";
+    if (edited === "status history")
+        return "Changed application status history";
     if (edited?.endsWith("'s status history")) {
-        return `Reapplied status history changes for ${edited.slice(0, -17)}`;
+        return `Changed status history for ${edited.slice(0, -17)}`;
     }
-    if (edited) return `Reapplied changes to ${edited}`;
+    if (edited) return `Updated ${edited}`;
 
     const updatedDetails = /^Updated details for (.+)$/.exec(original)?.[1];
-    if (updatedDetails) return `Updated details for ${updatedDetails} again`;
+    if (updatedDetails) return `Updated details for ${updatedDetails}`;
 
     const updated = /^Updated (.+)$/.exec(original)?.[1];
-    if (updated) return `Updated ${updated} again`;
+    if (updated) return `Updated ${updated}`;
 
     const timeline = /^Changed the timeline for (.+)$/.exec(original)?.[1];
-    if (timeline) return `Changed status history for ${timeline} again`;
+    if (timeline) return `Changed status history for ${timeline}`;
 
     const statusHistory = /^Changed status history for (.+)$/.exec(
         original,
     )?.[1];
     if (statusHistory) {
-        return `Changed status history for ${statusHistory} again`;
+        return `Changed status history for ${statusHistory}`;
     }
 
     const changedStatus = /^Changed the status of (.+)$/.exec(original)?.[1];
-    if (changedStatus) return `Changed the status of ${changedStatus} again`;
+    if (changedStatus) return `Changed the status of ${changedStatus}`;
 
     const imported = /^Imported (.+) (applications?)$/.exec(original);
     if (imported) return `Restored ${imported[1]} imported ${imported[2]}`;
@@ -959,8 +1006,8 @@ const reappliedTitle = (original: string | undefined): string => {
             original,
         )
     )
-        return `${original} again`;
-    return "Reapplied a previous change";
+        return original;
+    return "Redid a previous change";
 };
 
 export const historyTitleFor = (row: StoredHistoryAction): string => {
@@ -1042,7 +1089,7 @@ export const historyTitleFor = (row: StoredHistoryAction): string => {
                 ? reappliedTitle(data.n)
                 : restoredTitle(data.n);
         case HISTORY_KIND.restore:
-            return "Restored the list to an earlier point";
+            return "Restored an earlier version of the list";
         default:
             return "Changed this list";
     }
@@ -1090,6 +1137,7 @@ const fieldChangeFor = (
 ): HistoryFieldChange | undefined => {
     if (code === "s" || code === "a") return undefined;
     return {
+        scope: "application",
         code,
         label,
         subject,
@@ -1104,6 +1152,87 @@ const fieldChangeFor = (
             : {}),
     };
 };
+
+const LIST_FIELD_LABELS: Record<string, string> = {
+    n: "Name",
+    d: "Description",
+    s: "Status",
+};
+
+const listValue = (code: string, value: Scalar): string => {
+    if (value === null || value === "") return "Not set";
+    if (code === "s") {
+        return value.charAt(0).toUpperCase() + value.slice(1);
+    }
+    return displayValue(code, value);
+};
+
+const listChangeDescription = (code: string, values: FieldChange): string => {
+    const [before, after] = values;
+    const label = LIST_FIELD_LABELS[code] ?? code;
+    if (before === null || before === "") {
+        return `${label} set to ${listValue(code, after)}`;
+    }
+    if (after === null || after === "") return `${label} cleared`;
+    return `${label} changed from ${listValue(code, before)} to ${listValue(code, after)}`;
+};
+
+const listFieldChanges = (
+    fields: FieldChanges,
+    direction: 0 | 1,
+): ListHistoryChange[] =>
+    Object.entries(fields)
+        .sort(
+            ([left], [right]) =>
+                ["n", "d", "s"].indexOf(left) - ["n", "d", "s"].indexOf(right),
+        )
+        .map(([code, values]) => {
+            const directed: FieldChange =
+                direction === 1 ? values : [values[1], values[0]];
+            return {
+                kind: "field",
+                description: listChangeDescription(code, directed),
+                applications: [],
+                applicationCount: 0,
+                fieldChange: {
+                    scope: "list",
+                    code,
+                    label: LIST_FIELD_LABELS[code] ?? code,
+                    subject: null,
+                    before: directed[0],
+                    after: directed[1],
+                    count: 1,
+                },
+            };
+        });
+
+const statusEntryChanges = (
+    events: ReturnType<typeof storedEvent>[],
+    action: HistoryStatusEntryChange["action"],
+    subject: string | null,
+): ListHistoryChange[] =>
+    events.map((event) => {
+        const destination = displayValue("s", event.to_status);
+        const description =
+            action === "added"
+                ? `Added ${destination} to status history`
+                : action === "removed"
+                  ? `Removed ${destination} from status history`
+                  : `Restored ${destination} in status history`;
+        return {
+            kind: "statusEntry",
+            description,
+            applications: [],
+            applicationCount: 0,
+            statusEntryChange: {
+                action,
+                subject,
+                from: event.from_status,
+                to: event.to_status,
+                note: event.note,
+            },
+        };
+    });
 
 const applicationNames = (names: string[]): string | null => {
     const unique = [...new Set(names)];
@@ -1121,6 +1250,82 @@ type ChangeGroup = {
     names: string[];
 };
 
+const HISTORY_FIELD_ORDER = new Map(
+    Object.keys(FIELD_MAP).map((code, index) => [code, index]),
+);
+const HISTORY_STATUS_ORDER = new Map(
+    Object.keys(STATUS_META).map((status, index) => [status, index]),
+);
+const HISTORY_ARRANGEMENT_ORDER = new Map(
+    ["remote", "hybrid", "onsite"].map((arrangement, index) => [
+        arrangement,
+        index,
+    ]),
+);
+
+const orderedValue = (order: Map<string, number>, value: Scalar): number =>
+    order.get(value ?? "") ?? Number.MAX_SAFE_INTEGER;
+
+const compareChangeGroups = (
+    left: ChangeGroup,
+    right: ChangeGroup,
+    direction: 0 | 1,
+    countFor: (group: ChangeGroup) => number,
+): number => {
+    const leftSubject = countFor(left) === 1 ? (left.names[0] ?? null) : null;
+    const rightSubject =
+        countFor(right) === 1 ? (right.names[0] ?? null) : null;
+
+    if (leftSubject && rightSubject) {
+        const subjectDifference = leftSubject.localeCompare(rightSubject);
+        if (subjectDifference !== 0) return subjectDifference;
+    } else if (leftSubject !== rightSubject) {
+        return leftSubject ? -1 : 1;
+    }
+
+    const fieldDifference =
+        (HISTORY_FIELD_ORDER.get(left.code) ?? Number.MAX_SAFE_INTEGER) -
+        (HISTORY_FIELD_ORDER.get(right.code) ?? Number.MAX_SAFE_INTEGER);
+    if (fieldDifference !== 0) return fieldDifference;
+
+    const leftValues =
+        direction === 1 ? left.values : [left.values[1], left.values[0]];
+    const rightValues =
+        direction === 1 ? right.values : [right.values[1], right.values[0]];
+    const valueOrder =
+        left.code === "s"
+            ? HISTORY_STATUS_ORDER
+            : left.code === "a"
+              ? HISTORY_ARRANGEMENT_ORDER
+              : null;
+    if (valueOrder) {
+        const beforeDifference =
+            orderedValue(valueOrder, leftValues[0]) -
+            orderedValue(valueOrder, rightValues[0]);
+        if (beforeDifference !== 0) return beforeDifference;
+        return (
+            orderedValue(valueOrder, leftValues[1]) -
+            orderedValue(valueOrder, rightValues[1])
+        );
+    }
+
+    return `${leftValues[0] ?? ""}\u0000${leftValues[1] ?? ""}`.localeCompare(
+        `${rightValues[0] ?? ""}\u0000${rightValues[1] ?? ""}`,
+    );
+};
+
+const applicationPage = <Application>(
+    applications: Application[],
+    options: HistoryChangeDetailsOptions,
+): Application[] => {
+    const offset = Math.max(0, Math.trunc(options.applicationOffset ?? 0));
+    const limit = Math.max(
+        1,
+        Math.trunc(options.applicationLimit ?? HISTORY_APPLICATIONS_PAGE_SIZE),
+    );
+    return applications.slice(offset, offset + limit);
+};
+
 const amountCurrencyFor = (
     patch: ApplicationPatch,
     code: string,
@@ -1131,43 +1336,54 @@ const groupedPatchChanges = (
     row: StoredHistoryAction,
     patches: ApplicationPatch[],
     direction: 0 | 1,
+    options: HistoryChangeDetailsOptions,
 ): ListHistoryChange[] => {
     const directed = (values: FieldChange): FieldChange =>
         direction === 1 ? values : [values[1], values[0]];
 
     if (row.affectedCount === 1 && patches.length === 1) {
-        return Object.entries(patches[0].f).map(([code, values]) => {
-            const directedValues = directed(values);
-            const currency = amountCurrencyFor(patches[0], code);
-            const directedCurrency = currency ? directed(currency) : undefined;
-            const label = FIELD_LABELS[code as keyof typeof FIELD_MAP] ?? code;
-            const valueChange = valueChangeFor(
-                code,
-                patches[0].n,
-                directedValues,
-                1,
-            );
-            const fieldChange = fieldChangeFor(
-                code,
-                label,
-                patches[0].n,
-                directedValues,
-                1,
-                directedCurrency,
-            );
-            return {
-                description: changeDescription(
-                    patches[0].n,
-                    label,
+        return Object.entries(patches[0].f)
+            .sort(
+                ([left], [right]) =>
+                    (HISTORY_FIELD_ORDER.get(left) ?? Number.MAX_SAFE_INTEGER) -
+                    (HISTORY_FIELD_ORDER.get(right) ?? Number.MAX_SAFE_INTEGER),
+            )
+            .map(([code, values]) => {
+                const directedValues = directed(values);
+                const currency = amountCurrencyFor(patches[0], code);
+                const directedCurrency = currency
+                    ? directed(currency)
+                    : undefined;
+                const label =
+                    FIELD_LABELS[code as keyof typeof FIELD_MAP] ?? code;
+                const valueChange = valueChangeFor(
                     code,
+                    patches[0].n,
                     directedValues,
-                ),
-                applications: [],
-                applicationCount: 0,
-                ...(valueChange ? { valueChange } : {}),
-                ...(fieldChange ? { fieldChange } : {}),
-            };
-        });
+                    1,
+                );
+                const fieldChange = fieldChangeFor(
+                    code,
+                    label,
+                    patches[0].n,
+                    directedValues,
+                    1,
+                    directedCurrency,
+                );
+                return {
+                    kind: valueChange ? "value" : "field",
+                    description: changeDescription(
+                        patches[0].n,
+                        label,
+                        code,
+                        directedValues,
+                    ),
+                    applications: [],
+                    applicationCount: 0,
+                    ...(valueChange ? { valueChange } : {}),
+                    ...(fieldChange ? { fieldChange } : {}),
+                };
+            });
     }
 
     const groups = new Map<string, ChangeGroup>();
@@ -1187,13 +1403,16 @@ const groupedPatchChanges = (
         }
     }
 
-    const entries = [...groups.values()];
-    const lines: ListHistoryChange[] = entries.slice(0, 24).map((group) => {
+    const countFor = (group: ChangeGroup): number =>
+        patches.length === 1 && row.affectedCount > 1
+            ? row.affectedCount
+            : group.names.length;
+    const entries = [...groups.values()].sort((left, right) =>
+        compareChangeGroups(left, right, direction, countFor),
+    );
+    return entries.map((group) => {
         const recorded = group.names.length;
-        const count =
-            patches.length === 1 && row.affectedCount > 1
-                ? row.affectedCount
-                : recorded;
+        const count = countFor(group);
         const directedValues = directed(group.values);
         const directedCurrency = group.currency
             ? directed(group.currency)
@@ -1214,6 +1433,7 @@ const groupedPatchChanges = (
         );
         if (count === 1) {
             return {
+                kind: valueChange ? "value" : "field",
                 description: changeDescription(
                     group.names[0] ?? null,
                     group.label,
@@ -1227,60 +1447,46 @@ const groupedPatchChanges = (
             };
         }
         return {
+            kind: valueChange ? "value" : "field",
             description: `${changeDescription(null, group.label, group.code, directedValues)} for ${count.toLocaleString()} applications`,
             applications:
-                recorded === count
-                    ? group.names.slice(0, HISTORY_APPLICATION_NAMES_LIMIT)
-                    : [],
+                recorded === count ? applicationPage(group.names, options) : [],
             applicationCount: recorded === count ? count : 0,
             ...(valueChange ? { valueChange } : {}),
             ...(fieldChange ? { fieldChange } : {}),
         };
     });
-    if (entries.length > lines.length) {
-        lines.push({
-            description: `${(entries.length - lines.length).toLocaleString()} more change variations`,
-            applications: [],
-            applicationCount: 0,
-        });
-    }
-    return lines;
 };
 
 export const historyChangeDetailsFor = (
     row: StoredHistoryAction,
     direction: 0 | 1 = 1,
+    options: HistoryChangeDetailsOptions = {},
 ): ListHistoryChange[] => {
     if (row.kind === HISTORY_KIND.undo) return [];
     const data = asData(row.data);
     const patches = asPatch(row.data);
-    const lines = groupedPatchChanges(row, patches, direction);
+    const lines = groupedPatchChanges(row, patches, direction, options);
     if (data.f) {
-        const listLabels: Record<string, string> = {
-            n: "Name",
-            d: "Description",
-            s: "Status",
-        };
-        for (const [code, values] of Object.entries(data.f)) {
-            lines.push({
-                description: changeDescription(
-                    null,
-                    listLabels[code] ?? code,
-                    code,
-                    direction === 1 ? values : [values[1], values[0]],
-                ),
-                applications: [],
-                applicationCount: 0,
-            });
-        }
+        lines.push(...listFieldChanges(data.f, direction));
     }
     if (data.e?.length && row.kind !== HISTORY_KIND.delete) {
-        const verb = direction === 1 ? "Removed" : "Restored";
-        lines.push({
-            description: `${verb} ${data.e.length.toLocaleString()} ${data.e.length === 1 ? "status entry" : "status entries"}`,
-            applications: [],
-            applicationCount: 0,
-        });
+        lines.push(
+            ...statusEntryChanges(
+                data.e,
+                direction === 1 ? "removed" : "restored",
+                data.n ?? patches[0]?.n ?? null,
+            ),
+        );
+    }
+    if (data.g?.length) {
+        lines.push(
+            ...statusEntryChanges(
+                data.g,
+                direction === 1 ? "added" : "removed",
+                data.n ?? patches[0]?.n ?? null,
+            ),
+        );
     }
     if (
         row.kind === HISTORY_KIND.create ||
@@ -1288,10 +1494,10 @@ export const historyChangeDetailsFor = (
         row.kind === HISTORY_KIND.delete
     ) {
         const applicationDetails =
-            data.m?.map((application) =>
-                application.r
-                    ? `${application.n} (${application.r})`
-                    : application.n,
+            data.m?.map(
+                (application) =>
+                    applicationTitle(application.n, application.r) ??
+                    application.n,
             ) ??
             data.d?.map((application) =>
                 application.role_title
@@ -1303,32 +1509,45 @@ export const historyChangeDetailsFor = (
         const names = applicationNames(uniqueApplications);
         if (names) {
             lines.push({
+                kind: "applications",
                 description: names,
-                applications: uniqueApplications.slice(
-                    0,
-                    HISTORY_APPLICATION_NAMES_LIMIT,
-                ),
+                applications: applicationPage(uniqueApplications, options),
                 applicationCount: Math.max(
                     row.affectedCount,
                     uniqueApplications.length,
                 ),
-                applicationList: true,
+                applicationListLabel:
+                    row.kind === HISTORY_KIND.delete
+                        ? row.affectedCount === 1
+                            ? "Deleted application"
+                            : "Deleted applications"
+                        : row.affectedCount === 1
+                          ? "Added application"
+                          : "Added applications",
             });
         } else if (row.kind === HISTORY_KIND.import) {
+            const label = `${row.affectedCount.toLocaleString()} ${row.affectedCount === 1 ? "application" : "applications"} added`;
             lines.push({
+                kind: "summary",
                 description: `${row.affectedCount.toLocaleString()} ${row.affectedCount === 1 ? "application was" : "applications were"} added`,
                 applications: [],
                 applicationCount: 0,
+                summaryChange: { icon: "applications", label },
             });
         }
     }
     if (row.kind === HISTORY_KIND.restore) {
         const delta = data.v;
-        const applicationIds = new Set([
-            ...(delta?.a ?? []).map((patch) => patch.i),
-            ...(delta?.c ?? []).map((application) => application.id),
-            ...(delta?.d ?? []).map((application) => application.id),
-        ]);
+        if (delta?.a?.length) {
+            lines.push(
+                ...groupedPatchChanges(
+                    { ...row, affectedCount: delta.a.length },
+                    delta.a,
+                    direction,
+                    options,
+                ),
+            );
+        }
         const statusHistoryIds = new Set([
             ...(delta?.e?.c ?? []).map((event) => event.application_id),
             ...(delta?.e?.d ?? []).map((event) => event.application_id),
@@ -1353,57 +1572,101 @@ export const historyChangeDetailsFor = (
                 applicationTitle(application.n, application.r) ?? application.n,
             );
         }
-        const applications = applicationIds.size;
-        if (applications > 0) {
-            const applicationNames = [...applicationIds].flatMap((id) => {
-                const name = namesById.get(id);
-                return name ? [name] : [];
-            });
+
+        const added = direction === 1 ? delta?.c : delta?.d;
+        const removed = direction === 1 ? delta?.d : delta?.c;
+        for (const [label, applications] of [
+            ["Added applications", added ?? []],
+            ["Removed applications", removed ?? []],
+        ] as const) {
+            if (applications.length === 0) continue;
+            const names = applications.map(
+                (application) =>
+                    applicationTitle(
+                        application.company_name,
+                        application.role_title,
+                    ) ?? application.company_name,
+            );
             lines.push({
-                description:
-                    direction === 1
-                        ? `Updated ${applications.toLocaleString()} ${applications === 1 ? "application" : "applications"}`
-                        : `Returned ${applications.toLocaleString()} ${applications === 1 ? "application" : "applications"} to their previous values`,
-                applications: applicationNames.slice(
-                    0,
-                    HISTORY_APPLICATION_NAMES_LIMIT,
-                ),
-                applicationCount: applications,
+                kind: "applications",
+                description: applicationNames(names) ?? label,
+                applications: applicationPage(names, options),
+                applicationCount: applications.length,
+                applicationListLabel:
+                    applications.length === 1
+                        ? label.replace("applications", "application")
+                        : label,
             });
         }
         if (statusHistoryIds.size > 0) {
-            const statusNames = [...statusHistoryIds].flatMap((id) => {
-                const name = namesById.get(id);
-                return name ? [name] : [];
-            });
+            const detailsByApplication = new Map<
+                string,
+                HistoryApplicationDetail
+            >();
+            const addStatusEntries = (
+                events: ReturnType<typeof storedEvent>[],
+                action: HistoryApplicationDetail["statusEntries"][number]["action"],
+            ) => {
+                for (const event of events) {
+                    const detail = detailsByApplication.get(
+                        event.application_id,
+                    ) ?? {
+                        application:
+                            namesById.get(event.application_id) ??
+                            "Application",
+                        statusEntries: [],
+                    };
+                    detail.statusEntries.push({
+                        action,
+                        from: event.from_status,
+                        to: event.to_status,
+                        note: event.note,
+                    });
+                    detailsByApplication.set(event.application_id, detail);
+                }
+            };
+            addStatusEntries(
+                delta?.e?.c ?? [],
+                direction === 1 ? "added" : "removed",
+            );
+            addStatusEntries(
+                delta?.e?.d ?? [],
+                direction === 1 ? "removed" : "restored",
+            );
+            const statusDetails = [...detailsByApplication.values()];
+            const visibleStatusDetails = applicationPage(
+                statusDetails,
+                options,
+            );
             const oneName =
-                statusHistoryIds.size === 1 ? statusNames[0] : undefined;
+                statusDetails.length === 1
+                    ? statusDetails[0]?.application
+                    : undefined;
             lines.push({
+                kind: "summary",
                 description:
                     direction === 1
                         ? oneName
                             ? `Updated status history for ${oneName}`
-                            : `Updated status history for ${statusHistoryIds.size.toLocaleString()} applications`
+                            : `Updated status history for ${statusDetails.length.toLocaleString()} applications`
                         : oneName
                           ? `Restored previous status history for ${oneName}`
-                          : `Restored previous status history for ${statusHistoryIds.size.toLocaleString()} applications`,
-                applications: statusNames.slice(
-                    0,
-                    HISTORY_APPLICATION_NAMES_LIMIT,
+                          : `Restored previous status history for ${statusDetails.length.toLocaleString()} applications`,
+                applications: visibleStatusDetails.map(
+                    (detail) => detail.application,
                 ),
-                applicationCount: statusHistoryIds.size,
+                applicationDetails: visibleStatusDetails,
+                applicationCount: statusDetails.length,
+                summaryChange: {
+                    icon: "statusHistory",
+                    label:
+                        direction === 1
+                            ? "Status history updated"
+                            : "Previous status history restored",
+                },
             });
         }
-        if (delta?.f && Object.keys(delta.f).length > 0) {
-            lines.push({
-                description:
-                    direction === 1
-                        ? "Updated list details"
-                        : "Returned list details to their previous values",
-                applications: [],
-                applicationCount: 0,
-            });
-        }
+        if (delta?.f) lines.push(...listFieldChanges(delta.f, direction));
     }
     return lines;
 };
@@ -1450,18 +1713,24 @@ const historyCategoryFor = (kind: number): HistoryCategory => {
     return "edited";
 };
 
-const historyTitleValueFor = (
+export const historyTitleValueFor = (
     row: StoredHistoryAction,
+    undoRoot?: StoredHistoryAction,
 ): HistoryValueToken | null => {
+    const source =
+        row.kind === HISTORY_KIND.undo && asData(row.data).q === 1
+            ? undoRoot
+            : row;
     if (
-        row.kind !== HISTORY_KIND.status &&
-        row.kind !== HISTORY_KIND.arrangement
+        !source ||
+        (source.kind !== HISTORY_KIND.status &&
+            source.kind !== HISTORY_KIND.arrangement)
     ) {
         return null;
     }
-    const code = row.kind === HISTORY_KIND.status ? "s" : "a";
+    const code = source.kind === HISTORY_KIND.status ? "s" : "a";
     const values = new Set(
-        asPatch(row.data).flatMap((patch) =>
+        asPatch(source.data).flatMap((patch) =>
             patch.f[code]?.[1] ? [patch.f[code][1]] : [],
         ),
     );
@@ -1512,16 +1781,19 @@ const toItem = (
 ): ListHistoryItem => {
     const occurredAt = new Date(row.occurredAt);
     const undoDirection: 0 | 1 = asData(row.data).q === 1 ? 1 : 0;
+    const detailSource = row.kind === HISTORY_KIND.undo ? undoRoot : row;
+    const changes =
+        row.kind === HISTORY_KIND.undo
+            ? undoRoot
+                ? historyChangeDetailsFor(undoRoot, undoDirection)
+                : []
+            : historyChangeDetailsFor(row);
     return {
         id: row.id,
         title: historyTitleFor(row),
-        titleValue: historyTitleValueFor(row),
-        changes:
-            row.kind === HISTORY_KIND.undo
-                ? undoRoot
-                    ? historyChangeDetailsFor(undoRoot, undoDirection)
-                    : []
-                : historyChangeDetailsFor(row),
+        titleValue: historyTitleValueFor(row, undoRoot),
+        changes: changes.slice(0, HISTORY_CHANGES_PREVIEW_SIZE),
+        changeCount: changes.length,
         category: historyCategoryFor(row.kind),
         occurredAt: row.occurredAt,
         when: formatRelative(occurredAt),
@@ -1535,6 +1807,7 @@ const toItem = (
         reversal: historyReversalFor(row),
         undone: row.undoneAt !== null,
         archived,
+        singleApplication: detailSource?.affectedCount === 1,
         restoreTarget: restoreTargetFor(row),
     };
 };
@@ -1953,6 +2226,54 @@ const historyActionsForList = async (
     ];
 };
 
+const historyActionForList = async (
+    client: QueryClient,
+    userId: string,
+    listId: string,
+    actionId: string,
+): Promise<StoredHistoryAction | null> => {
+    const [recent] = await rowsOf<HistoryDatabaseRow>(
+        client,
+        `
+            select
+                h.id::text as id,
+                h.kind,
+                h.affected_count as "affectedCount",
+                h.data,
+                h.reversible,
+                h.occurred_at as "occurredAt",
+                h.undone_at as "undoneAt"
+            from list_history_actions h
+            join lists l on l.id = h.list_id
+            where h.list_id = $1 and l.user_id = $2 and h.id = $3::bigint
+        `,
+        [listId, userId, actionId],
+    );
+    if (recent) return toStored(recent);
+
+    const [archive] = await rowsOf<{ payload: Buffer }>(
+        client,
+        `
+            select a.payload
+            from list_history_archives a
+            join lists l on l.id = a.list_id
+            where a.list_id = $1
+                and l.user_id = $2
+                and a.first_action_id <= $3::bigint
+                and a.last_action_id >= $3::bigint
+            order by a.last_action_id desc
+            limit 1
+        `,
+        [listId, userId, actionId],
+    );
+    if (!archive) return null;
+    return (
+        decodeHistoryActions(archive.payload).find(
+            (action) => action.id === actionId,
+        ) ?? null
+    );
+};
+
 export const getListHistory = async (
     userId: string,
     listId: string,
@@ -2061,6 +2382,102 @@ export const getListHistory = async (
         hasMore:
             combined.length > limit || archiveRowsRead === ARCHIVE_READ_LIMIT,
     };
+};
+
+export const historyApplicationsPageFor = (
+    row: StoredHistoryAction,
+    direction: 0 | 1,
+    changeIndex: number,
+    requestedPage: number,
+): HistoryApplicationsPage | null => {
+    const pageFor = (page: number) =>
+        historyChangeDetailsFor(row, direction, {
+            applicationOffset: page * HISTORY_APPLICATIONS_PAGE_SIZE,
+            applicationLimit: HISTORY_APPLICATIONS_PAGE_SIZE,
+        })[changeIndex];
+
+    const requested = Math.max(0, Math.trunc(requestedPage));
+    let change = pageFor(requested);
+    if (!change || change.applicationCount < 1) return null;
+
+    const pageCount = Math.ceil(
+        change.applicationCount / HISTORY_APPLICATIONS_PAGE_SIZE,
+    );
+    const page = Math.min(requested, pageCount - 1);
+    if (page !== requested) change = pageFor(page);
+    if (!change || change.applications.length === 0) return null;
+
+    return {
+        applications: change.applications,
+        ...(change.applicationDetails
+            ? { applicationDetails: change.applicationDetails }
+            : {}),
+        page,
+        pageCount,
+        total: change.applicationCount,
+    };
+};
+
+export const historyChangesPageFor = (
+    row: StoredHistoryAction,
+    direction: 0 | 1,
+    requestedOffset: number,
+): HistoryChangesPage => {
+    const changes = historyChangeDetailsFor(row, direction);
+    const offset = Math.min(
+        Math.max(0, Math.trunc(requestedOffset)),
+        changes.length,
+    );
+    return {
+        changes: changes.slice(offset, offset + HISTORY_CHANGES_PAGE_SIZE),
+        offset,
+        total: changes.length,
+    };
+};
+
+export const getListHistoryApplicationsPage = async (
+    userId: string,
+    listId: string,
+    actionId: string,
+    changeIndex: number,
+    page: number,
+): Promise<HistoryApplicationsPage | null> => {
+    const pool = getPool();
+    const action = await historyActionForList(pool, userId, listId, actionId);
+    if (!action) return null;
+
+    if (action.kind !== HISTORY_KIND.undo) {
+        return historyApplicationsPageFor(action, 1, changeIndex, page);
+    }
+
+    const rootId = undoRootIdFor(action);
+    if (!rootId) return null;
+    const root = await historyActionForList(pool, userId, listId, rootId);
+    if (!root) return null;
+    const direction: 0 | 1 = asData(action.data).q === 1 ? 1 : 0;
+    return historyApplicationsPageFor(root, direction, changeIndex, page);
+};
+
+export const getListHistoryChangesPage = async (
+    userId: string,
+    listId: string,
+    actionId: string,
+    offset: number,
+): Promise<HistoryChangesPage | null> => {
+    const pool = getPool();
+    const action = await historyActionForList(pool, userId, listId, actionId);
+    if (!action) return null;
+
+    if (action.kind !== HISTORY_KIND.undo) {
+        return historyChangesPageFor(action, 1, offset);
+    }
+
+    const rootId = undoRootIdFor(action);
+    if (!rootId) return null;
+    const root = await historyActionForList(pool, userId, listId, rootId);
+    if (!root) return null;
+    const direction: 0 | 1 = asData(action.data).q === 1 ? 1 : 0;
+    return historyChangesPageFor(root, direction, offset);
 };
 
 const sameCurrentValues = (
@@ -2517,7 +2934,7 @@ export const undoHistoryAction = async (
         ) {
             return {
                 ok: false,
-                error: "This change was already reverted.",
+                error: "This change was already undone.",
             };
         }
 
@@ -2661,7 +3078,7 @@ export const undoHistoryAction = async (
             if (conflict) {
                 return {
                     ok: false,
-                    error: "This information was changed again. Undo the newer change first.",
+                    error: "This information changed later. Undo the newer change first.",
                 };
             }
 
@@ -2688,7 +3105,7 @@ export const undoHistoryAction = async (
                 ) {
                     return {
                         ok: false,
-                        error: "The status history was changed again. Undo the newer change first.",
+                        error: "The status history changed later. Undo the newer change first.",
                     };
                 }
                 await deleteEvents(client, userId, rootData.e ?? []);
@@ -2763,7 +3180,7 @@ export const undoHistoryAction = async (
             ) {
                 return {
                     ok: false,
-                    error: "The list was edited again. Undo the newer change first.",
+                    error: "The list was edited later. Undo the newer change first.",
                 };
             }
             await applyListFields(client, userId, listId, fields, appliedValue);
@@ -2782,7 +3199,7 @@ export const undoHistoryAction = async (
             ) {
                 return {
                     ok: false,
-                    error: "The list changed again. Undo the newer changes first.",
+                    error: "The list changed later. Undo the newer changes first.",
                 };
             }
             await applyVersionDelta(

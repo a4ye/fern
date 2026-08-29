@@ -42,6 +42,17 @@ const restoreHistoryVersion = mock(async (..._args: unknown[]) => ({
     ok: true,
 }));
 const undoHistoryAction = mock(async (..._args: unknown[]) => ({ ok: true }));
+const getListHistoryApplicationsPage = mock(async (..._args: unknown[]) => ({
+    applications: ["Application 11"],
+    page: 1,
+    pageCount: 3,
+    total: 25,
+}));
+const getListHistoryChangesPage = mock(async (..._args: unknown[]) => ({
+    changes: [],
+    offset: 8,
+    total: 30,
+}));
 
 mock.module("next/headers", () => ({ headers: async () => new Headers() }));
 mock.module("next/cache", () => ({ revalidatePath }));
@@ -74,6 +85,8 @@ mock.module("@/db/history", () => ({
         nextCursor: null,
         hasMore: false,
     }),
+    getListHistoryApplicationsPage,
+    getListHistoryChangesPage,
     restoreHistoryVersion,
     undoHistoryAction,
 }));
@@ -85,6 +98,8 @@ const {
     updateList,
     updateApplicationsBulk,
     deleteList,
+    loadListHistoryApplications,
+    loadListHistoryChanges,
     restoreListHistoryVersion,
     setApplicationsArrangement,
     setApplicationsStatus,
@@ -111,6 +126,8 @@ beforeEach(() => {
     putCachedJobImport.mockClear();
     restoreHistoryVersion.mockClear();
     undoHistoryAction.mockClear();
+    getListHistoryApplicationsPage.mockClear();
+    getListHistoryChangesPage.mockClear();
 });
 
 describe("suggestFromUrl", () => {
@@ -264,6 +281,86 @@ describe("restoreListHistoryVersion", () => {
             error: "That version is no longer available.",
         });
         expect(restoreHistoryVersion).not.toHaveBeenCalled();
+    });
+});
+
+describe("loadListHistoryApplications", () => {
+    it("loads a validated page for the signed-in user's list", async () => {
+        expect(
+            await loadListHistoryApplications(APPLICATION_ID, "123", 2, 1),
+        ).toEqual({
+            applications: ["Application 11"],
+            page: 1,
+            pageCount: 3,
+            total: 25,
+        });
+        expect(getListHistoryApplicationsPage.mock.calls[0]).toEqual([
+            "user-1",
+            APPLICATION_ID,
+            "123",
+            2,
+            1,
+        ]);
+    });
+
+    it("rejects invalid page requests before reading history", async () => {
+        expect(
+            await loadListHistoryApplications(
+                APPLICATION_ID,
+                "not-an-id",
+                0,
+                0,
+            ),
+        ).toBeNull();
+        expect(
+            await loadListHistoryApplications(APPLICATION_ID, "123", -1, 0),
+        ).toBeNull();
+        expect(
+            await loadListHistoryApplications(APPLICATION_ID, "123", 0, -1),
+        ).toBeNull();
+        expect(getListHistoryApplicationsPage).not.toHaveBeenCalled();
+    });
+
+    it("does not read history when signed out", async () => {
+        session = null;
+        expect(
+            await loadListHistoryApplications(APPLICATION_ID, "123", 0, 0),
+        ).toBeNull();
+        expect(getListHistoryApplicationsPage).not.toHaveBeenCalled();
+    });
+});
+
+describe("loadListHistoryChanges", () => {
+    it("loads more changes for the signed-in user's list", async () => {
+        expect(await loadListHistoryChanges(APPLICATION_ID, "123", 8)).toEqual({
+            changes: [],
+            offset: 8,
+            total: 30,
+        });
+        expect(getListHistoryChangesPage.mock.calls[0]).toEqual([
+            "user-1",
+            APPLICATION_ID,
+            "123",
+            8,
+        ]);
+    });
+
+    it("rejects invalid requests before reading history", async () => {
+        expect(
+            await loadListHistoryChanges(APPLICATION_ID, "not-an-id", 8),
+        ).toBeNull();
+        expect(
+            await loadListHistoryChanges(APPLICATION_ID, "123", -1),
+        ).toBeNull();
+        expect(getListHistoryChangesPage).not.toHaveBeenCalled();
+    });
+
+    it("does not read history when signed out", async () => {
+        session = null;
+        expect(
+            await loadListHistoryChanges(APPLICATION_ID, "123", 8),
+        ).toBeNull();
+        expect(getListHistoryChangesPage).not.toHaveBeenCalled();
     });
 });
 

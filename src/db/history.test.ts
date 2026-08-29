@@ -4,11 +4,14 @@ import {
     encodeHistoryActions,
     HISTORY_KIND,
     historyActionRunsMaintenance,
+    historyApplicationsPageFor,
     historyChangeDetailsFor,
+    historyChangesPageFor,
     historyChangesFor,
     historyReversalFor,
     historyStateAt,
     historyTitleFor,
+    historyTitleValueFor,
     applyVersionDeltaToState,
     versionDeltaBetween,
     type StoredApplication,
@@ -90,7 +93,58 @@ describe("history wording", () => {
                     data: { n: "Edited NotionGraph", q: 1 },
                 }),
             ),
-        ).toBe("Reapplied changes to NotionGraph");
+        ).toBe("Updated NotionGraph");
+    });
+
+    it("does not add again to a reapplied bulk change", () => {
+        const original = historyAction({
+            kind: HISTORY_KIND.status,
+            affectedCount: 1146,
+            data: {
+                a: [
+                    {
+                        i: "00000000-0000-4000-8000-000000000001",
+                        n: "Application",
+                        f: { s: ["not_applied", "applied"] },
+                    },
+                ],
+            },
+        });
+        const redo = historyAction({
+            kind: HISTORY_KIND.undo,
+            affectedCount: 1146,
+            data: {
+                n: "Moved 1,146 applications to Applied",
+                q: 1,
+            },
+        });
+        expect(historyTitleFor(redo)).toBe(
+            "Moved 1,146 applications to Applied",
+        );
+        expect(historyTitleValueFor(redo, original)).toEqual({
+            field: "status",
+            value: "applied",
+        });
+    });
+
+    it("describes reversing and reapplying a list restore plainly", () => {
+        const original = "Restored an earlier version of the list";
+        expect(
+            historyTitleFor(
+                historyAction({
+                    kind: HISTORY_KIND.undo,
+                    data: { n: original },
+                }),
+            ),
+        ).toBe("Restored the previous version of the list");
+        expect(
+            historyTitleFor(
+                historyAction({
+                    kind: HISTORY_KIND.undo,
+                    data: { n: original, q: 1 },
+                }),
+            ),
+        ).toBe("Restored the earlier version of the list");
     });
 
     it("offers redo for a restore and undo for a reapplied change", () => {
@@ -294,6 +348,7 @@ describe("history wording", () => {
             ),
         ).toEqual([
             {
+                kind: "value",
                 description:
                     "Arrangement changed from Remote to Hybrid for 2 applications",
                 applications: ["Northstar Labs", "Juniper Systems"],
@@ -307,6 +362,154 @@ describe("history wording", () => {
                 },
             },
         ]);
+    });
+
+    it("pages every application in a large bulk change", () => {
+        const bulkEdit = historyAction({
+            kind: HISTORY_KIND.status,
+            affectedCount: 25,
+            data: {
+                a: Array.from({ length: 25 }, (_, index) => ({
+                    i: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+                    n: `Application ${index + 1}`,
+                    f: { s: ["applied", "interviewing"] },
+                })),
+            },
+        });
+
+        expect(historyApplicationsPageFor(bulkEdit, 1, 0, 1)).toEqual({
+            applications: Array.from(
+                { length: 10 },
+                (_, index) => `Application ${index + 11}`,
+            ),
+            page: 1,
+            pageCount: 3,
+            total: 25,
+        });
+        expect(historyApplicationsPageFor(bulkEdit, 1, 0, 2)).toEqual({
+            applications: [
+                "Application 21",
+                "Application 22",
+                "Application 23",
+                "Application 24",
+                "Application 25",
+            ],
+            page: 2,
+            pageCount: 3,
+            total: 25,
+        });
+    });
+
+    it("keeps named applications together before sorted bulk changes", () => {
+        const details = historyChangeDetailsFor(
+            historyAction({
+                affectedCount: 9,
+                data: {
+                    a: [
+                        {
+                            i: "00000000-0000-4000-8000-000000000001",
+                            n: "Beta Health",
+                            f: { s: ["interviewing", "applied"] },
+                        },
+                        {
+                            i: "00000000-0000-4000-8000-000000000002",
+                            n: "Alpha Labs",
+                            f: {
+                                r: ["Engineer", "Senior Engineer"],
+                                l: ["Toronto", "Remote"],
+                            },
+                        },
+                        {
+                            i: "00000000-0000-4000-8000-000000000003",
+                            n: "Gamma Systems",
+                            f: { s: ["not_applied", "applied"] },
+                        },
+                        {
+                            i: "00000000-0000-4000-8000-000000000004",
+                            n: "Delta Systems",
+                            f: { s: ["not_applied", "applied"] },
+                        },
+                        {
+                            i: "00000000-0000-4000-8000-000000000005",
+                            n: "Epsilon Systems",
+                            f: { s: ["rejected", "applied"] },
+                        },
+                        {
+                            i: "00000000-0000-4000-8000-000000000006",
+                            n: "Zeta Systems",
+                            f: { s: ["rejected", "applied"] },
+                        },
+                        {
+                            i: "00000000-0000-4000-8000-000000000007",
+                            n: "Eta Systems",
+                            f: { d: [null, "2026-08-24"] },
+                        },
+                        {
+                            i: "00000000-0000-4000-8000-000000000008",
+                            n: "Theta Systems",
+                            f: { d: [null, "2026-08-24"] },
+                        },
+                    ],
+                },
+            }),
+        );
+
+        expect(
+            details.map((change) => ({
+                subject:
+                    change.valueChange?.subject ??
+                    change.fieldChange?.subject ??
+                    null,
+                field:
+                    change.valueChange?.field ?? change.fieldChange?.code,
+                before:
+                    change.valueChange?.before ?? change.fieldChange?.before,
+            })),
+        ).toEqual([
+            {
+                subject: "Alpha Labs",
+                field: "r",
+                before: "Engineer",
+            },
+            {
+                subject: "Alpha Labs",
+                field: "l",
+                before: "Toronto",
+            },
+            {
+                subject: "Beta Health",
+                field: "status",
+                before: "interviewing",
+            },
+            { subject: null, field: "status", before: "not_applied" },
+            { subject: null, field: "status", before: "rejected" },
+            { subject: null, field: "d", before: null },
+        ]);
+    });
+
+    it("keeps every change available beyond the initial page", () => {
+        const action = historyAction({
+            affectedCount: 30,
+            data: {
+                a: Array.from({ length: 30 }, (_, index) => ({
+                    i: `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+                    n: `Application ${index + 1}`,
+                    f: {
+                        r: [
+                            `Engineer ${index + 1}`,
+                            `Senior Engineer ${index + 1}`,
+                        ],
+                    },
+                })),
+            },
+        });
+
+        expect(historyChangeDetailsFor(action)).toHaveLength(30);
+        expect(historyChangesPageFor(action, 1, 24)).toMatchObject({
+            offset: 24,
+            total: 30,
+        });
+        expect(historyChangesPageFor(action, 1, 24).changes).toHaveLength(6);
     });
 
     it("keeps status values structured for history chips", () => {
@@ -362,6 +565,7 @@ describe("history wording", () => {
 
         expect(details.map((detail) => detail.fieldChange)).toEqual([
             {
+                scope: "application",
                 code: "mi",
                 label: "Minimum pay",
                 subject: "Kite Labs",
@@ -372,6 +576,7 @@ describe("history wording", () => {
                 currencyAfter: "CAD",
             },
             {
+                scope: "application",
                 code: "ma",
                 label: "Maximum pay",
                 subject: "Kite Labs",
@@ -382,6 +587,7 @@ describe("history wording", () => {
                 currencyAfter: "CAD",
             },
             {
+                scope: "application",
                 code: "pe",
                 label: "Pay period",
                 subject: "Kite Labs",
@@ -393,6 +599,29 @@ describe("history wording", () => {
         expect(details[2]?.description).toBe(
             "Kite Labs: Pay period set to Yearly",
         );
+    });
+
+    it("uses the app's Link label for URL changes", () => {
+        expect(
+            historyChangeDetailsFor(
+                historyAction({
+                    data: {
+                        a: [
+                            {
+                                i: "00000000-0000-4000-8000-000000000001",
+                                n: "Halcyon Health",
+                                f: {
+                                    u: [
+                                        null,
+                                        "https://example.com/application",
+                                    ],
+                                },
+                            },
+                        ],
+                    },
+                }),
+            )[0]?.fieldChange?.label,
+        ).toBe("Link");
     });
 
     it("describes the values applied by an undo", () => {
@@ -457,7 +686,7 @@ describe("history wording", () => {
         ).toEqual(["31 applications were added"]);
     });
 
-    it("shows compact company and role details for imports", () => {
+    it("uses the same role and company format for imports", () => {
         const imported = historyAction({
             kind: HISTORY_KIND.import,
             affectedCount: 2,
@@ -470,14 +699,15 @@ describe("history wording", () => {
         });
 
         expect(historyChangesFor(imported)).toEqual([
-            "Applications: Acme (Engineer), Northwind",
+            "Applications: Engineer at Acme, Northwind",
         ]);
         expect(historyChangeDetailsFor(imported)).toEqual([
             {
-                description: "Applications: Acme (Engineer), Northwind",
-                applications: ["Acme (Engineer)", "Northwind"],
+                kind: "applications",
+                description: "Applications: Engineer at Acme, Northwind",
+                applications: ["Engineer at Acme", "Northwind"],
                 applicationCount: 2,
-                applicationList: true,
+                applicationListLabel: "Added applications",
             },
         ]);
     });
@@ -500,14 +730,297 @@ describe("history wording", () => {
             },
         });
 
-        expect(historyChangesFor(restore)).toEqual(["Updated 1 application"]);
+        expect(historyChangesFor(restore)).toEqual([
+            "Acme: Status changed from Interviewing to Applied",
+        ]);
+        expect(historyTitleFor(restore)).toBe(
+            "Restored an earlier version of the list",
+        );
         expect(historyChangeDetailsFor(restore)).toEqual([
             {
-                description: "Updated 1 application",
-                applications: ["Acme"],
-                applicationCount: 1,
+                kind: "value",
+                description:
+                    "Acme: Status changed from Interviewing to Applied",
+                applications: [],
+                applicationCount: 0,
+                valueChange: {
+                    field: "status",
+                    subject: "Acme",
+                    before: "interviewing",
+                    after: "applied",
+                    count: 1,
+                },
             },
         ]);
+    });
+
+    it("keeps every application field on a structured rendering path", () => {
+        const details = historyChangeDetailsFor(
+            historyAction({
+                data: {
+                    a: [
+                        {
+                            i: "00000000-0000-4000-8000-000000000001",
+                            n: "Acme",
+                            f: {
+                                c: ["Acme", "Acme Labs"],
+                                r: ["Engineer", "Senior Engineer"],
+                                s: ["applied", "interviewing"],
+                                u: [null, "https://example.com/job"],
+                                l: [null, "Toronto, ON"],
+                                a: ["remote", "hybrid"],
+                                n: [null, "Interview notes"],
+                                mi: [null, "120000.00"],
+                                ma: [null, "160000.00"],
+                                cu: ["USD", "CAD"],
+                                pe: [null, "yearly"],
+                                b: [null, "10000.00"],
+                                pn: [null, "Bonus and equity"],
+                                d: [null, "2026-08-24"],
+                            },
+                        },
+                    ],
+                },
+            }),
+        );
+
+        expect(details).toHaveLength(14);
+        expect(details.map((detail) => detail.kind)).toEqual([
+            "field",
+            "field",
+            "value",
+            "field",
+            "field",
+            "value",
+            "field",
+            "field",
+            "field",
+            "field",
+            "field",
+            "field",
+            "field",
+            "field",
+        ]);
+        expect(
+            details
+                .filter((detail) => detail.fieldChange)
+                .map((detail) => [
+                    detail.fieldChange?.scope,
+                    detail.fieldChange?.code,
+                ]),
+        ).toEqual([
+            ["application", "c"],
+            ["application", "r"],
+            ["application", "u"],
+            ["application", "l"],
+            ["application", "n"],
+            ["application", "mi"],
+            ["application", "ma"],
+            ["application", "cu"],
+            ["application", "pe"],
+            ["application", "b"],
+            ["application", "pn"],
+            ["application", "d"],
+        ]);
+        expect(
+            details
+                .filter((detail) => detail.valueChange)
+                .map((detail) => detail.valueChange?.field),
+        ).toEqual(["status", "arrangement"]);
+    });
+
+    it("renders list fields with the same structured field data", () => {
+        const details = historyChangeDetailsFor(
+            historyAction({
+                kind: HISTORY_KIND.list,
+                data: {
+                    f: {
+                        n: ["Old list", "New list"],
+                        d: ["Old description", "New description"],
+                        s: ["active", "closed"],
+                    },
+                },
+            }),
+        );
+
+        expect(
+            details.map((detail) => ({
+                scope: detail.fieldChange?.scope,
+                code: detail.fieldChange?.code,
+                label: detail.fieldChange?.label,
+            })),
+        ).toEqual([
+            { scope: "list", code: "n", label: "Name" },
+            { scope: "list", code: "d", label: "Description" },
+            { scope: "list", code: "s", label: "Status" },
+        ]);
+    });
+
+    it("shows what was added to and removed from status history", () => {
+        const event = {
+            id: "00000000-0000-4000-8000-000000000010",
+            application_id: "00000000-0000-4000-8000-000000000001",
+            from_status: "applied",
+            to_status: "interviewing",
+            note: "Technical interview",
+            occurred_at: "2026-08-24T12:00:00.000Z",
+            history_action_id: "20",
+        };
+        const details = historyChangeDetailsFor(
+            historyAction({
+                kind: HISTORY_KIND.steps,
+                data: { n: "Acme", g: [event], e: [event] },
+            }),
+        );
+
+        expect(details.map((detail) => detail.statusEntryChange)).toEqual([
+            {
+                action: "removed",
+                subject: "Acme",
+                from: "applied",
+                to: "interviewing",
+                note: "Technical interview",
+            },
+            {
+                action: "added",
+                subject: "Acme",
+                from: "applied",
+                to: "interviewing",
+                note: "Technical interview",
+            },
+        ]);
+        expect(details.map((detail) => detail.kind)).toEqual([
+            "statusEntry",
+            "statusEntry",
+        ]);
+    });
+
+    it("keeps restore list fields and added or removed applications separate", () => {
+        const created = storedApplication({
+            id: "00000000-0000-4000-8000-000000000002",
+            company_name: "Juniper",
+        });
+        const removed = storedApplication({
+            id: "00000000-0000-4000-8000-000000000003",
+            company_name: "Cedar",
+        });
+        const details = historyChangeDetailsFor(
+            historyAction({
+                kind: HISTORY_KIND.restore,
+                data: {
+                    v: {
+                        c: [created],
+                        d: [removed],
+                        f: {
+                            d: ["Current description", null],
+                            s: ["active", "closed"],
+                        },
+                    },
+                },
+            }),
+        );
+
+        expect(details.map((detail) => detail.applicationListLabel)).toEqual([
+            "Added application",
+            "Removed application",
+            undefined,
+            undefined,
+        ]);
+        expect(
+            details.slice(2).map((detail) => detail.fieldChange?.scope),
+        ).toEqual(["list", "list"]);
+    });
+
+    it("keeps the status changes for each application in a restore", () => {
+        const cedarId = "00000000-0000-4000-8000-000000000011";
+        const driftwoodId = "00000000-0000-4000-8000-000000000012";
+        const event = (
+            id: string,
+            applicationId: string,
+            from: string,
+            to: string,
+            note: string | null,
+        ) => ({
+            id,
+            application_id: applicationId,
+            from_status: from,
+            to_status: to,
+            note,
+            occurred_at: "2026-08-24T12:00:00.000Z",
+            history_action_id: "20",
+        });
+        const restore = historyAction({
+            kind: HISTORY_KIND.restore,
+            data: {
+                m: [
+                    { i: cedarId, n: "Cedar Systems", r: "Product Engineer" },
+                    {
+                        i: driftwoodId,
+                        n: "Driftwood Systems",
+                        r: "Platform Engineer",
+                    },
+                ],
+                v: {
+                    e: {
+                        c: [
+                            event(
+                                "00000000-0000-4000-8000-000000000021",
+                                cedarId,
+                                "applied",
+                                "interviewing",
+                                "Technical interview",
+                            ),
+                        ],
+                        d: [
+                            event(
+                                "00000000-0000-4000-8000-000000000022",
+                                driftwoodId,
+                                "interviewing",
+                                "onsite",
+                                null,
+                            ),
+                        ],
+                    },
+                },
+            },
+        });
+
+        expect(historyChangeDetailsFor(restore)[0]?.applicationDetails).toEqual(
+            [
+                {
+                    application: "Product Engineer at Cedar Systems",
+                    statusEntries: [
+                        {
+                            action: "added",
+                            from: "applied",
+                            to: "interviewing",
+                            note: "Technical interview",
+                        },
+                    ],
+                },
+                {
+                    application: "Platform Engineer at Driftwood Systems",
+                    statusEntries: [
+                        {
+                            action: "removed",
+                            from: "interviewing",
+                            to: "onsite",
+                            note: null,
+                        },
+                    ],
+                },
+            ],
+        );
+        expect(historyChangeDetailsFor(restore)[0]?.kind).toBe("summary");
+        expect(
+            historyChangeDetailsFor(restore, 0)[0]?.applicationDetails?.map(
+                (detail) => detail.statusEntries[0]?.action,
+            ),
+        ).toEqual(["removed", "restored"]);
+        expect(
+            historyApplicationsPageFor(restore, 1, 0, 0)
+                ?.applicationDetails?.[0]?.statusEntries[0]?.note,
+        ).toBe("Technical interview");
     });
 });
 

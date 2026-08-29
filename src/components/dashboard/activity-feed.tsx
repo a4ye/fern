@@ -1,4 +1,5 @@
 import { STATUS_META, type ActivityItem } from "@/components/dashboard/data";
+import { LocalDateTime } from "@/components/dashboard/local-date-time";
 
 export const ActivityFeed = ({ activity }: { activity: ActivityItem[] }) => (
     <section className="border border-hairline bg-background">
@@ -46,9 +47,12 @@ export const ActivityFeed = ({ activity }: { activity: ActivityItem[] }) => (
                                     </p>
                                 )}
                             </div>
-                            <span className="shrink-0 text-xs text-muted">
+                            <LocalDateTime
+                                dateTime={event.occurredAt}
+                                className="shrink-0 text-xs text-muted tabular-nums"
+                            >
                                 {event.when}
-                            </span>
+                            </LocalDateTime>
                         </li>
                     );
                 })}

@@ -21,11 +21,15 @@ import {
 import { getUserSettings } from "@/db/settings";
 import {
     getListHistory,
+    getListHistoryApplicationsPage,
+    getListHistoryChangesPage,
     HISTORY_LOAD_PAGE_SIZE,
     restoreHistoryVersion,
     undoHistoryAction,
+    type HistoryChangesPage,
     type ListHistoryPage,
 } from "@/db/history";
+import type { HistoryApplicationsPage } from "@/lib/history-pagination";
 import type {
     ApplicationExtras,
     ApplicationStatus,
@@ -128,6 +132,48 @@ export const loadListHistory = async (
         beforeId,
         HISTORY_LOAD_PAGE_SIZE,
     );
+};
+
+export const loadListHistoryApplications = async (
+    listId: string,
+    actionId: string,
+    changeIndex: number,
+    page: number,
+): Promise<HistoryApplicationsPage | null> => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session || !applicationIdSchema.safeParse(listId).success) return null;
+    if (!validHistoryActionId(actionId)) return null;
+    if (
+        !Number.isSafeInteger(changeIndex) ||
+        changeIndex < 0 ||
+        changeIndex > 50 ||
+        !Number.isSafeInteger(page) ||
+        page < 0 ||
+        page > 10_000
+    ) {
+        return null;
+    }
+    return getListHistoryApplicationsPage(
+        session.user.id,
+        listId,
+        actionId,
+        changeIndex,
+        page,
+    );
+};
+
+export const loadListHistoryChanges = async (
+    listId: string,
+    actionId: string,
+    offset: number,
+): Promise<HistoryChangesPage | null> => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session || !applicationIdSchema.safeParse(listId).success) return null;
+    if (!validHistoryActionId(actionId)) return null;
+    if (!Number.isSafeInteger(offset) || offset < 0 || offset > 100_000) {
+        return null;
+    }
+    return getListHistoryChangesPage(session.user.id, listId, actionId, offset);
 };
 
 export const undoListHistoryAction = async (

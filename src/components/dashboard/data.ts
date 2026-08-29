@@ -4,6 +4,24 @@
 
 export type ListStatus = "active" | "closed" | "archived";
 
+export const LIST_STATUS_META: Record<
+    ListStatus,
+    { label: string; plate: string }
+> = {
+    active: {
+        label: "Active",
+        plate: "bg-accent-tint text-accent-deep",
+    },
+    closed: {
+        label: "Closed",
+        plate: "bg-hairline text-sub",
+    },
+    archived: {
+        label: "Archived",
+        plate: "bg-hairline text-sub",
+    },
+};
+
 export type ApplicationStatus =
     | "not_applied"
     | "applied"
@@ -503,6 +521,7 @@ export type ActivityItem = {
     toStatus: ApplicationStatus | null;
     note: string | null;
     when: string;
+    occurredAt: string;
 };
 
 export type ListDetail = {

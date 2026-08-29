@@ -21,6 +21,7 @@ import {
 } from "@/app/dashboard/actions";
 import { AddApplicationForm } from "@/components/dashboard/add-application-form";
 import { ApplicationPanel } from "@/components/dashboard/application-panel";
+import { LocalDateTime } from "@/components/dashboard/local-date-time";
 import {
     APPLICATION_COLUMNS as COLUMNS,
     ApplicationsHeaderRow,
@@ -248,7 +249,12 @@ const ReadRow = ({
                 value={app.appliedAt ? formatDay(app.appliedAt) : null}
                 className="text-sub tabular-nums"
             />
-            <Cell value={app.updated} className="text-muted" />
+            <LocalDateTime
+                dateTime={app.updatedAt}
+                className="truncate text-muted tabular-nums"
+            >
+                {app.updated}
+            </LocalDateTime>
             <span className="flex items-center justify-end gap-0.5 text-muted">
                 {app.url && (
                     <a
@@ -309,10 +315,12 @@ const ReadRow = ({
 const BulkRow = ({
     draft,
     updated,
+    updatedAt,
     onChange,
 }: {
     draft: Draft;
     updated: string;
+    updatedAt: string;
     onChange: <K extends keyof Draft>(key: K, value: Draft[K]) => void;
 }) => (
     <li
@@ -322,7 +330,12 @@ const BulkRow = ({
         <RowFields draft={draft} onChange={onChange} />
         {/* Nothing here is editable, but the column keeps its reading so the
                 row does not trail off into empty space. */}
-        <Cell value={updated} className="text-muted" />
+        <LocalDateTime
+            dateTime={updatedAt}
+            className="truncate text-muted tabular-nums"
+        >
+            {updated}
+        </LocalDateTime>
     </li>
 );
 
@@ -1094,6 +1107,7 @@ export const ApplicationsTable = ({
                                             key={app.id}
                                             draft={draft}
                                             updated={app.updated}
+                                            updatedAt={app.updatedAt}
                                             onChange={(key, value) =>
                                                 setDraftField(
                                                     app.id,

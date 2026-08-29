@@ -17,6 +17,7 @@ import {
 } from "@/app/dashboard/actions";
 import {
     formatEdited,
+    LIST_STATUS_META,
     listsQueryString,
     LIST_SORTS,
     type EmailSyncPanel,
@@ -25,6 +26,7 @@ import {
     type ListSummary,
 } from "@/components/dashboard/data";
 import { EmailSyncMenu } from "@/components/dashboard/email-sync";
+import { LocalDateTime } from "@/components/dashboard/local-date-time";
 import { ListRowsSkeleton } from "@/components/dashboard/lists-skeleton";
 import {
     ghostButtonClass,
@@ -38,21 +40,6 @@ import {
     listUpdateSchema,
     type ActionResult,
 } from "@/lib/validation";
-
-const STATUS_PLATE: Record<ListStatus, { label: string; className: string }> = {
-    active: {
-        label: "Active",
-        className: "bg-accent-tint text-accent-deep",
-    },
-    closed: {
-        label: "Closed",
-        className: "bg-hairline text-sub",
-    },
-    archived: {
-        label: "Archived",
-        className: "bg-hairline text-sub",
-    },
-};
 
 const STATUS_KEYS: ListStatus[] = ["active", "closed", "archived"];
 
@@ -69,10 +56,10 @@ const RowError = ({ message }: { message: string | null }) =>
     ) : null;
 
 const StatusPlate = ({ status }: { status: ListStatus }) => {
-    const plate = STATUS_PLATE[status];
+    const plate = LIST_STATUS_META[status];
     return (
         <span
-            className={`inline-flex items-center px-2 py-0.5 text-xs font-medium ${plate.className}`}
+            className={`inline-flex items-center px-2 py-0.5 text-xs font-medium ${plate.plate}`}
         >
             {plate.label}
         </span>
@@ -113,7 +100,14 @@ const ListRow = ({
                     {list.totalApplications} applications
                 </span>
                 <span className="text-muted">
-                    Edited {formatEdited(list.updatedAt)}
+                    Edited{" "}
+                    <LocalDateTime
+                        dateTime={list.updatedAt}
+                        display="date"
+                        interactive={false}
+                    >
+                        {formatEdited(list.updatedAt)}
+                    </LocalDateTime>
                 </span>
             </div>
         </Link>
@@ -346,14 +340,14 @@ const ListEditorRow = ({
                 hidden below sm, where the picker wraps onto its own line. */}
             <div className="order-last flex basis-full gap-1.5 sm:order-none sm:basis-auto">
                 {STATUS_KEYS.map((s) => {
-                    const plate = STATUS_PLATE[s];
+                    const plate = LIST_STATUS_META[s];
                     return (
                         <button
                             key={s}
                             type="button"
                             onClick={() => setStatus(s)}
                             aria-pressed={status === s}
-                            className={`inline-flex cursor-pointer items-center px-2 py-0.5 text-xs font-medium transition-opacity ${plate.className} ${status !== s ? "opacity-40" : ""}`}
+                            className={`inline-flex cursor-pointer items-center px-2 py-0.5 text-xs font-medium transition-opacity ${plate.plate} ${status !== s ? "opacity-40" : ""}`}
                         >
                             {plate.label}
                         </button>
