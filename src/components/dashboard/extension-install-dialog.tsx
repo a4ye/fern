@@ -1,7 +1,6 @@
 "use client";
 
 import { useModalDialog } from "@/components/dashboard/use-modal-dialog";
-import { GITHUB_URL } from "@/lib/site";
 
 type BrowserKind = "chrome" | "firefox";
 
@@ -26,7 +25,7 @@ export const ExtensionInstallDialog = ({
         typeof navigator === "undefined" ? "chrome" : detectBrowser();
 
     const storeUrl = STORE_URLS[browser];
-    const installUrl = storeUrl || `${GITHUB_URL}/tree/main/extension`;
+    const installUrl = storeUrl || "/extension";
     const browserLabel = browser === "firefox" ? "Firefox" : "Chrome";
 
     return (

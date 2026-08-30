@@ -1,10 +1,25 @@
 import { mkdir, rm } from "node:fs/promises";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
+import { zipSync } from "fflate";
+import {
+    EXTENSION_BROWSERS,
+    EXTENSION_DOWNLOAD_PATHS,
+    EXTENSION_NAME,
+    EXTENSION_VERSION,
+} from "@/lib/site";
 
 const extensionRoot = resolve(import.meta.dir);
 const outputRoot = resolve(extensionRoot, "dist");
 const sourceRoot = resolve(extensionRoot, "src");
+const publicRoot = resolve(extensionRoot, "../public");
 const defaultOrigins = ["http://localhost/*", "http://127.0.0.1/*"];
+
+// A deployment that never sets the origins would ship a build that only talks
+// to localhost, so the Vercel production host stands in as the last resort.
+const productionOrigin = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+const fallbackOrigins = productionOrigin
+    ? [`https://${productionOrigin}/*`]
+    : defaultOrigins;
 
 const configuredOrigins = process.env.JOB_TRACKER_EXTENSION_APP_ORIGINS?.split(
     ",",
@@ -14,14 +29,14 @@ const configuredOrigins = process.env.JOB_TRACKER_EXTENSION_APP_ORIGINS?.split(
 const appOrigins =
     configuredOrigins && configuredOrigins.length > 0
         ? configuredOrigins
-        : defaultOrigins;
+        : fallbackOrigins;
 
 const baseManifest = {
     manifest_version: 3,
-    name: "Job Tracker Importer",
+    name: EXTENSION_NAME,
     description:
         "Save job postings faster and fill details from more job sites.",
-    version: "0.1.0",
+    version: EXTENSION_VERSION,
     permissions: ["scripting", "tabs"],
     // Seamless arbitrary-URL imports require up-front access. The extension
     // never sends raw page HTML to Job Tracker; only parsed application fields.
@@ -37,7 +52,7 @@ const baseManifest = {
         "48": "icon.png",
         "128": "icon.png",
     },
-    action: { default_title: "Job Tracker Importer" },
+    action: { default_title: EXTENSION_NAME },
 };
 
 const manifests = {
@@ -97,11 +112,42 @@ for (const [browser, manifest] of Object.entries(manifests)) {
     );
     await Bun.write(
         resolve(browserRoot, "icon.png"),
-        Bun.file(resolve(extensionRoot, "../public/logo-square.png")),
+        Bun.file(resolve(publicRoot, "logo-square.png")),
     );
 }
 
 await rm(resolve(outputRoot, "bundles"), { recursive: true, force: true });
+
+// The download page serves these, so a build always leaves a current pair
+// behind rather than expecting a separate packaging step.
+for (const browser of EXTENSION_BROWSERS) {
+    const browserRoot = resolve(outputRoot, browser);
+    const names = [
+        "manifest.json",
+        "icon.png",
+        "background.js",
+        "app-bridge.js",
+        "posting-reader.js",
+    ];
+    const entries = await Promise.all(
+        names.map(
+            async (name) =>
+                [
+                    name,
+                    new Uint8Array(
+                        await Bun.file(
+                            resolve(browserRoot, name),
+                        ).arrayBuffer(),
+                    ),
+                ] as const,
+        ),
+    );
+    await Bun.write(
+        join(publicRoot, EXTENSION_DOWNLOAD_PATHS[browser]),
+        zipSync(Object.fromEntries(entries), { level: 9 }),
+    );
+}
+
 process.stdout.write(
     `Built Chrome and Firefox extensions for ${appOrigins.join(", ")}\n`,
 );
