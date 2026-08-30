@@ -67,8 +67,9 @@ const SeasonPage = async ({ params, searchParams }: Props) => {
                 <ListInsights
                     name={detail.name}
                     stats={detail.stats}
-                    pipeline={detail.pipeline}
+                    funnel={detail.funnel}
                     flow={detail.flow}
+                    volume={detail.volume}
                 />
             </div>
 

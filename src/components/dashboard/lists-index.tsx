@@ -465,38 +465,37 @@ const SortSelect = ({
                     className={`icon-[lucide--chevron-down] size-4 shrink-0 text-muted transition-transform ${open ? "rotate-180" : ""}`}
                 />
             </button>
-            {open && (
-                <ul
-                    role="listbox"
-                    className="absolute right-0 z-20 mt-1 min-w-44 border border-hairline bg-background shadow-sm"
-                >
-                    {LIST_SORTS.map((option) => {
-                        const selected = option.key === value;
-                        return (
-                            <li
-                                key={option.key}
-                                role="option"
-                                aria-selected={selected}
+            <ul
+                role="listbox"
+                data-open={open || undefined}
+                className="popup absolute right-0 z-20 mt-1 min-w-44 flex-col border border-hairline bg-background shadow-sm"
+            >
+                {LIST_SORTS.map((option) => {
+                    const selected = option.key === value;
+                    return (
+                        <li
+                            key={option.key}
+                            role="option"
+                            aria-selected={selected}
+                        >
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    onChange(option.key);
+                                    setOpen(false);
+                                }}
+                                className={`flex w-full cursor-pointer items-center px-3 py-1.5 text-left text-sm transition-colors ${
+                                    selected
+                                        ? "bg-accent-tint text-accent-deep"
+                                        : "text-ink hover:bg-surface"
+                                }`}
                             >
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        onChange(option.key);
-                                        setOpen(false);
-                                    }}
-                                    className={`flex w-full cursor-pointer items-center px-3 py-1.5 text-left text-sm transition-colors ${
-                                        selected
-                                            ? "bg-accent-tint text-accent-deep"
-                                            : "text-ink hover:bg-surface"
-                                    }`}
-                                >
-                                    {option.label}
-                                </button>
-                            </li>
-                        );
-                    })}
-                </ul>
-            )}
+                                {option.label}
+                            </button>
+                        </li>
+                    );
+                })}
+            </ul>
         </div>
     );
 };

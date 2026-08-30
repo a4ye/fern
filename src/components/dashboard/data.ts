@@ -505,7 +505,19 @@ export const APPLICATION_STATUSES = Object.keys(
 
 export type Stat = { label: string; value: string };
 
-export type PipelineEntry = { status: ApplicationStatus; count: number };
+export type FunnelStageKey = "replied" | "interviewed" | "offer";
+
+// How far applications got. A stage counts every application that ever reached
+// it, so the stages nest inside each other rather than splitting the total, and
+// `percent` is a share of `applied` rather than of the stage above.
+export type FunnelStage = {
+    key: FunnelStageKey;
+    label: string;
+    count: number;
+    percent: number;
+};
+
+export type Funnel = { applied: number; stages: FunnelStage[] };
 
 // One application's status history, so the flow chart can show where things
 // travelled rather than only where they ended up. `history` is chronological,
@@ -515,13 +527,25 @@ export type FlowEntry = {
     history: ApplicationStatus[];
 };
 
-export type ActivityItem = {
-    id: string;
-    company: string;
-    toStatus: ApplicationStatus | null;
-    note: string | null;
-    when: string;
-    occurredAt: string;
+// A day inside a bucketed period that had applications on it.
+export type VolumeDay = { label: string; count: number };
+
+// One period of the applications-sent chart. Periods with nothing in them are
+// kept, so a month off reads as a dip rather than closing up. `start` is the
+// first day of the period as yyyy-mm-dd, which is what the time axis plots on;
+// `label` is only ever printed in the hover plate. `days` breaks a week back
+// down for that plate, and is empty when the chart already counts by day.
+export type VolumeBar = {
+    label: string;
+    start: string;
+    count: number;
+    days: VolumeDay[];
+};
+
+export type Volume = {
+    total: number;
+    unit: "day" | "week" | "month";
+    bars: VolumeBar[];
 };
 
 export type ListDetail = {
@@ -531,9 +555,9 @@ export type ListDetail = {
     status: ListStatus;
     stats: Stat[];
     applications: ApplicationRow[];
-    pipeline: PipelineEntry[];
+    funnel: Funnel;
     flow: FlowEntry[];
-    activity: ActivityItem[];
+    volume: Volume;
 };
 
 // A proposed status change detected from a connected inbox, shown for review.

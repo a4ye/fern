@@ -18,13 +18,16 @@
         "db:generate": "sqlc generate",
         "db:seed": "bun run db/seed.ts",
         "db:seed-history": "bun run db/seed-history.ts",
+        "db:test-account": "bun run db/test-account.ts",
         "flags:sync": "bun run scripts/sync-flags.ts",
         "metrics": "bun run scripts/metrics.ts"
     },
     "dependencies": {
         "@ai-sdk/google": "^4.0.23",
         "@neondatabase/serverless": "^1.1.0",
+        "@nivo/bar": "^0.99.0",
         "@nivo/core": "^0.99.0",
+        "@nivo/line": "^0.99.0",
         "@nivo/sankey": "^0.99.0",
         "@nivo/tooltip": "^0.99.0",
         "@yudiel/react-qr-scanner": "^2.6.0",

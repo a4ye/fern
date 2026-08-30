@@ -1,27 +1,31 @@
 "use client";
 
 import { useState } from "react";
+import { FunnelSummary } from "@/components/dashboard/funnel-summary";
 import { PipelineFlow } from "@/components/dashboard/pipeline-flow";
-import { PipelineSummary } from "@/components/dashboard/pipeline-summary";
 import { StatStrip } from "@/components/dashboard/stat-strip";
+import { VolumeChart } from "@/components/dashboard/volume-chart";
 import type {
     FlowEntry,
-    PipelineEntry,
+    Funnel,
     Stat,
+    Volume,
 } from "@/components/dashboard/data";
 
-// Sits above the applications table, so the charts stay one click away without
-// pushing the table below a visualization that can be several rows tall.
+// Sits above the applications table, so the charts and panels stay one click
+// away without pushing the table below a list that can run to hundreds of rows.
 export const ListInsights = ({
     name,
     stats,
-    pipeline,
+    funnel,
     flow,
+    volume,
 }: {
     name: string;
     stats: Stat[];
-    pipeline: PipelineEntry[];
+    funnel: Funnel;
     flow: FlowEntry[];
+    volume: Volume;
 }) => {
     const [open, setOpen] = useState(false);
 
@@ -52,7 +56,10 @@ export const ListInsights = ({
                     {/* The flow takes the full width: it can run to six columns
                         of labelled nodes, which crowd badly in half a row. */}
                     <PipelineFlow flow={flow} name={name} />
-                    <PipelineSummary pipeline={pipeline} />
+                    <div className="grid items-start gap-4 lg:grid-cols-2">
+                        <FunnelSummary funnel={funnel} />
+                        <VolumeChart volume={volume} />
+                    </div>
                 </div>
             )}
         </div>
