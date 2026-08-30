@@ -11,6 +11,7 @@
 # production
 /build
 /extension/dist
+/public/downloads
 
 # misc
 .DS_Store

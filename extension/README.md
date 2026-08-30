@@ -35,7 +35,9 @@ posting can work across job sites. Without that permission, importing from a
 new domain would require another browser permission prompt for that domain.
 
 The unpacked builds are written to `extension/dist/chrome` and
-`extension/dist/firefox`.
+`extension/dist/firefox`. The same build zips each one into
+`public/downloads`, which is what the `/extension` page serves. `bun run build`
+runs this first so a deployment always ships a current pair.
 
 ## Local installation
 
@@ -43,6 +45,10 @@ The unpacked builds are written to `extension/dist/chrome` and
   unpacked**, and select `extension/dist/chrome`.
 - Firefox: open `about:debugging#/runtime/this-firefox`, choose **Load Temporary
   Add-on**, and select `extension/dist/firefox/manifest.json`.
+
+Without `JOB_TRACKER_EXTENSION_APP_ORIGINS`, a build on Vercel falls back to
+`VERCEL_PROJECT_PRODUCTION_URL` so the downloadable build is never limited to
+localhost. Set the variable explicitly when more than one deployment needs it.
 
 Store releases should be built with the production Job Tracker URL and
 configured in the web app with `NEXT_PUBLIC_CHROME_EXTENSION_URL` and

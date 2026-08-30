@@ -2,10 +2,18 @@ import Link from "next/link";
 import { Logo } from "@/components/brand/logo";
 import { APP_NAME, GITHUB_URL } from "@/lib/site";
 
-export const SiteHeader = ({ signedIn }: { signedIn: boolean }) => (
+export const SiteHeader = ({
+    signedIn,
+    framed = true,
+}: {
+    signedIn: boolean;
+    framed?: boolean;
+}) => (
     <header className="sticky top-0 z-50 border-b border-hairline bg-background/90 backdrop-blur-sm">
         <div className="h-0.75 bg-accent" />
-        <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between border-x border-hairline px-6 sm:px-10">
+        <div
+            className={`mx-auto flex h-14 w-full max-w-6xl items-center justify-between px-6 sm:px-10 ${framed ? "border-x border-hairline" : ""}`}
+        >
             <Link
                 href="/"
                 className="flex items-center gap-2.5 transition-opacity hover:opacity-70"
