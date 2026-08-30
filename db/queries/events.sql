@@ -66,8 +66,16 @@ where e.application_id = a.id
     and l.user_id = @user_id;
 
 -- name: InsertApplicationEvent :exec
-insert into application_events (application_id, from_status, to_status, note)
-values (@application_id, @from_status, @to_status, sqlc.narg('note'));
+insert into application_events (
+    application_id, from_status, to_status, note, history_action_id
+)
+values (
+    @application_id,
+    @from_status,
+    @to_status,
+    sqlc.narg('note'),
+    sqlc.narg('history_action_id')::bigint
+);
 
 -- Apply all staged history edits after taking one application lock. Removed
 -- events are deleted together, additions are chained in their submitted order,
@@ -116,7 +124,8 @@ inserted as (
         application_id,
         from_status,
         to_status,
-        occurred_at
+        occurred_at,
+        history_action_id
     )
     select
         base.id,
@@ -126,7 +135,8 @@ inserted as (
         end,
         addition.status,
         statement_timestamp()
-            + ((addition.ordinality - 1) * interval '1 microsecond')
+            + ((addition.ordinality - 1) * interval '1 microsecond'),
+        @history_action_id::bigint
     from base
     cross join additions addition
     returning to_status, occurred_at

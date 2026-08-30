@@ -6,10 +6,12 @@ import { useRouter } from "next/navigation";
 import { deleteList, updateList } from "@/app/dashboard/actions";
 import { ConfirmDialog } from "@/components/dashboard/confirm-dialog";
 import type { ListStatus } from "@/components/dashboard/data";
+import { HistoryDialog } from "@/components/dashboard/history-dialog";
 import {
     ghostButtonClass,
     primaryButtonClass,
 } from "@/components/dashboard/table-controls";
+import type { ListHistoryPage } from "@/db/history";
 import {
     firstIssue,
     LIST_DESCRIPTION_MAX,
@@ -44,14 +46,19 @@ export const ListHeader = ({
     name: initialName,
     description: initialDescription,
     status: initialStatus,
+    history,
+    defaultCurrency,
 }: {
     listId: string;
     name: string;
     description: string | null;
     status: ListStatus;
+    history: ListHistoryPage;
+    defaultCurrency: string;
 }) => {
     const router = useRouter();
     const [isEditing, setIsEditing] = useState(false);
+    const [showingHistory, setShowingHistory] = useState(false);
     const [confirmingDelete, setConfirmingDelete] = useState(false);
     const [name, setName] = useState(initialName);
     const [description, setDescription] = useState(initialDescription ?? "");
@@ -159,15 +166,32 @@ export const ListHeader = ({
                         </p>
                     )}
                 </div>
-                <div className="flex h-8 w-12 shrink-0 items-center justify-end">
+                <div className="flex min-h-10 shrink-0 items-center justify-end">
                     {!isEditing && (
                         <>
+                            <button
+                                type="button"
+                                onClick={() => setShowingHistory(true)}
+                                aria-haspopup="dialog"
+                                aria-expanded={showingHistory}
+                                aria-label="Open list history"
+                                title="History"
+                                className="inline-flex h-10 min-w-10 cursor-pointer items-center justify-center gap-2 pr-2.5 pl-2 text-sm text-muted transition-[color,scale] duration-150 ease-out hover:text-ink active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                            >
+                                <span
+                                    aria-hidden="true"
+                                    className="icon-[lucide--history] block size-4"
+                                />
+                                <span className="hidden sm:inline">
+                                    History
+                                </span>
+                            </button>
                             <button
                                 type="button"
                                 onClick={startEdit}
                                 aria-label="Edit list details"
                                 title="Edit list details"
-                                className="cursor-pointer p-1 text-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                                className="flex size-10 cursor-pointer items-center justify-center text-muted transition-[color,scale] duration-150 ease-out hover:text-ink active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                             >
                                 <span
                                     aria-hidden="true"
@@ -179,7 +203,7 @@ export const ListHeader = ({
                                 onClick={() => setConfirmingDelete(true)}
                                 aria-label="Delete list"
                                 title="Delete list"
-                                className="cursor-pointer p-1 text-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                                className="flex size-10 cursor-pointer items-center justify-center text-muted transition-[color,scale] duration-150 ease-out hover:text-ink active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                             >
                                 <span
                                     aria-hidden="true"
@@ -240,6 +264,15 @@ export const ListHeader = ({
                     </span>
                 )}
             </div>
+
+            {showingHistory && (
+                <HistoryDialog
+                    listId={listId}
+                    initialPage={history}
+                    defaultCurrency={defaultCurrency}
+                    onClose={() => setShowingHistory(false)}
+                />
+            )}
 
             {confirmingDelete && (
                 <ConfirmDialog

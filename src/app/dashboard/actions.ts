@@ -19,6 +19,20 @@ import {
     updateList as updateListDb,
 } from "@/db/dashboard";
 import { getUserSettings } from "@/db/settings";
+import {
+    clearListHistory as clearListHistoryDb,
+    getListHistory,
+    getListHistoryApplicationsPage,
+    getListHistoryChangesPage,
+    HISTORY_LOAD_PAGE_SIZE,
+    permanentlyDeleteApplication as permanentlyDeleteApplicationDb,
+    permanentlyDeleteDeletedApplication as permanentlyDeleteDeletedApplicationDb,
+    restoreHistoryVersion,
+    undoHistoryAction,
+    type HistoryChangesPage,
+    type ListHistoryPage,
+} from "@/db/history";
+import type { HistoryApplicationsPage } from "@/lib/history-pagination";
 import type {
     ApplicationExtras,
     ApplicationStatus,
@@ -95,6 +109,8 @@ const validApplicationIds = (ids: string[]): boolean =>
     ids.length <= MAX_APPLICATION_BATCH &&
     ids.every((id) => applicationIdSchema.safeParse(id).success);
 
+const validHistoryActionId = (id: string): boolean => /^\d{1,19}$/.test(id);
+
 // Read when a row is opened rather than sent with the table. Returning null for
 // an application that is gone or was never this user's lets the panel open on
 // what the row already holds instead of refusing to open at all.
@@ -104,6 +120,172 @@ export const loadApplicationExtras = async (
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session) return null;
     return getApplicationExtras(session.user.id, applicationId);
+};
+
+export const loadListHistory = async (
+    listId: string,
+    beforeId: string,
+): Promise<ListHistoryPage | null> => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session || !applicationIdSchema.safeParse(listId).success) return null;
+    if (!validHistoryActionId(beforeId)) return null;
+    return getListHistory(
+        session.user.id,
+        listId,
+        beforeId,
+        HISTORY_LOAD_PAGE_SIZE,
+    );
+};
+
+export const loadListHistoryApplications = async (
+    listId: string,
+    actionId: string,
+    changeIndex: number,
+    page: number,
+): Promise<HistoryApplicationsPage | null> => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session || !applicationIdSchema.safeParse(listId).success) return null;
+    if (!validHistoryActionId(actionId)) return null;
+    if (
+        !Number.isSafeInteger(changeIndex) ||
+        changeIndex < 0 ||
+        changeIndex > 50 ||
+        !Number.isSafeInteger(page) ||
+        page < 0 ||
+        page > 10_000
+    ) {
+        return null;
+    }
+    return getListHistoryApplicationsPage(
+        session.user.id,
+        listId,
+        actionId,
+        changeIndex,
+        page,
+    );
+};
+
+export const loadListHistoryChanges = async (
+    listId: string,
+    actionId: string,
+    offset: number,
+): Promise<HistoryChangesPage | null> => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session || !applicationIdSchema.safeParse(listId).success) return null;
+    if (!validHistoryActionId(actionId)) return null;
+    if (!Number.isSafeInteger(offset) || offset < 0 || offset > 100_000) {
+        return null;
+    }
+    return getListHistoryChangesPage(session.user.id, listId, actionId, offset);
+};
+
+export const undoListHistoryAction = async (
+    listId: string,
+    actionId: string,
+): Promise<ActionResult> => {
+    const writer = await writingUser();
+    if (!writer.ok) return writer;
+    if (
+        !applicationIdSchema.safeParse(listId).success ||
+        !validHistoryActionId(actionId)
+    ) {
+        return { ok: false, error: "That change is no longer available." };
+    }
+
+    const result = await undoHistoryAction(writer.userId, listId, actionId);
+    if (!result.ok) return result;
+    revalidatePath(`/dashboard/${listId}`);
+    revalidatePath("/dashboard");
+    return { ok: true };
+};
+
+export const restoreListHistoryVersion = async (
+    listId: string,
+    actionId: string,
+): Promise<ActionResult> => {
+    const writer = await writingUser();
+    if (!writer.ok) return writer;
+    if (
+        !applicationIdSchema.safeParse(listId).success ||
+        !validHistoryActionId(actionId)
+    ) {
+        return { ok: false, error: "That version is no longer available." };
+    }
+
+    const result = await restoreHistoryVersion(writer.userId, listId, actionId);
+    if (!result.ok) return result;
+    revalidatePath(`/dashboard/${listId}`);
+    revalidatePath("/dashboard");
+    return { ok: true };
+};
+
+export const permanentlyRemoveApplication = async (
+    listId: string,
+    applicationId: string,
+): Promise<ActionResult> => {
+    const writer = await writingUser();
+    if (!writer.ok) return writer;
+    if (
+        !applicationIdSchema.safeParse(listId).success ||
+        !applicationIdSchema.safeParse(applicationId).success
+    ) {
+        return { ok: false, error: "That application is no longer available." };
+    }
+
+    const result = await permanentlyDeleteApplicationDb(
+        writer.userId,
+        listId,
+        applicationId,
+    );
+    if (!result.ok) return result;
+    revalidatePath(`/dashboard/${listId}`);
+    revalidatePath("/dashboard");
+    return { ok: true };
+};
+
+export const permanentlyRemoveDeletedApplication = async (
+    listId: string,
+    actionId: string,
+): Promise<ActionResult> => {
+    const writer = await writingUser();
+    if (
+        !writer.ok ||
+        !applicationIdSchema.safeParse(listId).success ||
+        !validHistoryActionId(actionId)
+    ) {
+        return writer.ok
+            ? {
+                  ok: false,
+                  error: "That deleted application is no longer available.",
+              }
+            : writer;
+    }
+
+    const result = await permanentlyDeleteDeletedApplicationDb(
+        writer.userId,
+        listId,
+        actionId,
+    );
+    if (!result.ok) return result;
+    revalidatePath(`/dashboard/${listId}`);
+    revalidatePath("/dashboard");
+    return { ok: true };
+};
+
+export const clearListHistory = async (
+    listId: string,
+): Promise<ActionResult> => {
+    const writer = await writingUser();
+    if (!writer.ok) return writer;
+    if (!applicationIdSchema.safeParse(listId).success) {
+        return { ok: false, error: "That list is no longer available." };
+    }
+
+    const result = await clearListHistoryDb(writer.userId, listId);
+    if (!result.ok) return result;
+    revalidatePath(`/dashboard/${listId}`);
+    revalidatePath("/dashboard");
+    return { ok: true };
 };
 
 export const createList = async (

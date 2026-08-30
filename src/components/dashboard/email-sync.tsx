@@ -18,6 +18,7 @@ import {
     type EmailSuggestion,
     type EmailSyncPanel,
 } from "@/components/dashboard/data";
+import { LocalDateTime } from "@/components/dashboard/local-date-time";
 
 // Gmail read-only scope, requested when the user links their Google account.
 // Kept as a literal here so this client bundle never imports server auth code.
@@ -209,7 +210,11 @@ export const EmailSyncMenu = ({ panel }: { panel: EmailSyncPanel }) => {
                         {panel.connected && panel.lastSyncedAt && (
                             <span className="truncate text-xs text-muted">
                                 Synced{" "}
-                                {formatRelative(new Date(panel.lastSyncedAt))}
+                                <LocalDateTime dateTime={panel.lastSyncedAt}>
+                                    {formatRelative(
+                                        new Date(panel.lastSyncedAt),
+                                    )}
+                                </LocalDateTime>
                             </span>
                         )}
                     </div>

@@ -38,9 +38,32 @@ const acquireJobImportBudget = mock(
     async (..._args: unknown[]) => importBudget,
 );
 const putCachedJobImport = mock(async () => {});
+const restoreHistoryVersion = mock(async (..._args: unknown[]) => ({
+    ok: true,
+}));
+const undoHistoryAction = mock(async (..._args: unknown[]) => ({ ok: true }));
+const permanentlyDeleteApplication = mock(async (..._args: unknown[]) => ({
+    ok: true,
+}));
+const permanentlyDeleteDeletedApplication = mock(
+    async (..._args: unknown[]) => ({ ok: true }),
+);
+const clearListHistoryDb = mock(async (..._args: unknown[]) => ({ ok: true }));
+const getListHistoryApplicationsPage = mock(async (..._args: unknown[]) => ({
+    applications: ["Application 11"],
+    page: 1,
+    pageCount: 3,
+    total: 25,
+}));
+const getListHistoryChangesPage = mock(async (..._args: unknown[]) => ({
+    changes: [],
+    offset: 8,
+    total: 30,
+}));
 
 mock.module("next/headers", () => ({ headers: async () => new Headers() }));
 mock.module("next/cache", () => ({ revalidatePath }));
+mock.module("next/server", () => ({ after: () => {} }));
 mock.module("@/lib/auth", () => ({
     auth: { api: { getSession: async () => session } },
 }));
@@ -63,6 +86,20 @@ mock.module("@/db/quotas", () => ({
     statusEventQuota: async () => quota,
     applicationsAtEventCap: async () => atEventCap,
 }));
+mock.module("@/db/history", () => ({
+    getListHistory: async () => ({
+        items: [],
+        nextCursor: null,
+        hasMore: false,
+    }),
+    getListHistoryApplicationsPage,
+    getListHistoryChangesPage,
+    restoreHistoryVersion,
+    undoHistoryAction,
+    permanentlyDeleteApplication,
+    permanentlyDeleteDeletedApplication,
+    clearListHistory: clearListHistoryDb,
+}));
 
 const {
     addApplication,
@@ -71,6 +108,12 @@ const {
     updateList,
     updateApplicationsBulk,
     deleteList,
+    loadListHistoryApplications,
+    loadListHistoryChanges,
+    permanentlyRemoveApplication,
+    permanentlyRemoveDeletedApplication,
+    clearListHistory,
+    restoreListHistoryVersion,
     setApplicationsArrangement,
     setApplicationsStatus,
     suggestFromUrl,
@@ -94,6 +137,13 @@ beforeEach(() => {
     getCachedJobImport.mockClear();
     acquireJobImportBudget.mockClear();
     putCachedJobImport.mockClear();
+    restoreHistoryVersion.mockClear();
+    undoHistoryAction.mockClear();
+    permanentlyDeleteApplication.mockClear();
+    permanentlyDeleteDeletedApplication.mockClear();
+    clearListHistoryDb.mockClear();
+    getListHistoryApplicationsPage.mockClear();
+    getListHistoryChangesPage.mockClear();
 });
 
 describe("suggestFromUrl", () => {
@@ -212,6 +262,168 @@ describe("updateList", () => {
         });
         expect(result).toEqual({ ok: false, error: "Choose a valid status." });
         expect(db.updateList).not.toHaveBeenCalled();
+    });
+});
+
+describe("restoreListHistoryVersion", () => {
+    it("refuses to restore when signed out", async () => {
+        session = null;
+        expect(await restoreListHistoryVersion(APPLICATION_ID, "123")).toEqual(
+            SIGNED_OUT,
+        );
+        expect(restoreHistoryVersion).not.toHaveBeenCalled();
+    });
+
+    it("restores only the signed-in user's validated list and version", async () => {
+        expect(await restoreListHistoryVersion(APPLICATION_ID, "123")).toEqual({
+            ok: true,
+        });
+        expect(restoreHistoryVersion.mock.calls[0]).toEqual([
+            "user-1",
+            APPLICATION_ID,
+            "123",
+        ]);
+        expect(revalidated()).toEqual([
+            `/dashboard/${APPLICATION_ID}`,
+            "/dashboard",
+        ]);
+    });
+
+    it("rejects an invalid version before reading history", async () => {
+        expect(
+            await restoreListHistoryVersion(APPLICATION_ID, "not-an-id"),
+        ).toEqual({
+            ok: false,
+            error: "That version is no longer available.",
+        });
+        expect(restoreHistoryVersion).not.toHaveBeenCalled();
+    });
+});
+
+describe("permanent history deletion", () => {
+    const DELETED_APPLICATION_ID = "00000000-0000-4000-8000-000000000002";
+
+    it("permanently deletes a current application for the signed-in user", async () => {
+        expect(
+            await permanentlyRemoveApplication(
+                APPLICATION_ID,
+                DELETED_APPLICATION_ID,
+            ),
+        ).toEqual({ ok: true });
+        expect(permanentlyDeleteApplication.mock.calls[0]).toEqual([
+            "user-1",
+            APPLICATION_ID,
+            DELETED_APPLICATION_ID,
+        ]);
+        expect(revalidated()).toEqual([
+            `/dashboard/${APPLICATION_ID}`,
+            "/dashboard",
+        ]);
+    });
+
+    it("permanently deletes an application represented by a History entry", async () => {
+        expect(
+            await permanentlyRemoveDeletedApplication(APPLICATION_ID, "123"),
+        ).toEqual({ ok: true });
+        expect(permanentlyDeleteDeletedApplication.mock.calls[0]).toEqual([
+            "user-1",
+            APPLICATION_ID,
+            "123",
+        ]);
+    });
+
+    it("clears History without accepting an invalid list", async () => {
+        expect(await clearListHistory(APPLICATION_ID)).toEqual({ ok: true });
+        expect(clearListHistoryDb.mock.calls[0]).toEqual([
+            "user-1",
+            APPLICATION_ID,
+        ]);
+
+        expect(await clearListHistory("not-a-list")).toEqual({
+            ok: false,
+            error: "That list is no longer available.",
+        });
+        expect(clearListHistoryDb).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe("loadListHistoryApplications", () => {
+    it("loads a validated page for the signed-in user's list", async () => {
+        expect(
+            await loadListHistoryApplications(APPLICATION_ID, "123", 2, 1),
+        ).toEqual({
+            applications: ["Application 11"],
+            page: 1,
+            pageCount: 3,
+            total: 25,
+        });
+        expect(getListHistoryApplicationsPage.mock.calls[0]).toEqual([
+            "user-1",
+            APPLICATION_ID,
+            "123",
+            2,
+            1,
+        ]);
+    });
+
+    it("rejects invalid page requests before reading history", async () => {
+        expect(
+            await loadListHistoryApplications(
+                APPLICATION_ID,
+                "not-an-id",
+                0,
+                0,
+            ),
+        ).toBeNull();
+        expect(
+            await loadListHistoryApplications(APPLICATION_ID, "123", -1, 0),
+        ).toBeNull();
+        expect(
+            await loadListHistoryApplications(APPLICATION_ID, "123", 0, -1),
+        ).toBeNull();
+        expect(getListHistoryApplicationsPage).not.toHaveBeenCalled();
+    });
+
+    it("does not read history when signed out", async () => {
+        session = null;
+        expect(
+            await loadListHistoryApplications(APPLICATION_ID, "123", 0, 0),
+        ).toBeNull();
+        expect(getListHistoryApplicationsPage).not.toHaveBeenCalled();
+    });
+});
+
+describe("loadListHistoryChanges", () => {
+    it("loads more changes for the signed-in user's list", async () => {
+        expect(await loadListHistoryChanges(APPLICATION_ID, "123", 8)).toEqual({
+            changes: [],
+            offset: 8,
+            total: 30,
+        });
+        expect(getListHistoryChangesPage.mock.calls[0]).toEqual([
+            "user-1",
+            APPLICATION_ID,
+            "123",
+            8,
+        ]);
+    });
+
+    it("rejects invalid requests before reading history", async () => {
+        expect(
+            await loadListHistoryChanges(APPLICATION_ID, "not-an-id", 8),
+        ).toBeNull();
+        expect(
+            await loadListHistoryChanges(APPLICATION_ID, "123", -1),
+        ).toBeNull();
+        expect(getListHistoryChangesPage).not.toHaveBeenCalled();
+    });
+
+    it("does not read history when signed out", async () => {
+        session = null;
+        expect(
+            await loadListHistoryChanges(APPLICATION_ID, "123", 8),
+        ).toBeNull();
+        expect(getListHistoryChangesPage).not.toHaveBeenCalled();
     });
 });
 

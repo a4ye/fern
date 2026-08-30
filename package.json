@@ -17,6 +17,7 @@
         "db:rollback": "dbmate --env POSTGRES_URL --no-dump-schema rollback",
         "db:generate": "sqlc generate",
         "db:seed": "bun run db/seed.ts",
+        "db:seed-history": "bun run db/seed-history.ts",
         "db:test-account": "bun run db/test-account.ts",
         "flags:sync": "bun run scripts/sync-flags.ts",
         "metrics": "bun run scripts/metrics.ts"

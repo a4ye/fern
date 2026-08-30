@@ -17,6 +17,7 @@ import {
     STATUS_OPTIONS,
     secondaryButtonClass,
 } from "@/components/dashboard/table-controls";
+import { LocalDateTime } from "@/components/dashboard/local-date-time";
 import { useModalDialog } from "@/components/dashboard/use-modal-dialog";
 import {
     STATUS_META,
@@ -124,12 +125,14 @@ export const ApplicationPanel = ({
                 key: step.id,
                 label: STATUS_META[step.status].label,
                 when: step.at ? formatEdited(step.at) : "",
+                dateTime: step.at,
                 drop: () => setRemoved((dropped) => [...dropped, step.id]),
             })),
         ...added.map((status, index) => ({
             key: `staged-${index}`,
             label: STATUS_META[status].label,
             when: "Not saved",
+            dateTime: null,
             drop: () =>
                 setAdded((queued) => queued.filter((_, at) => at !== index)),
         })),
@@ -166,7 +169,16 @@ export const ApplicationPanel = ({
                                         {row.label}
                                     </span>
                                     <span className="ml-auto shrink-0 text-muted tabular-nums">
-                                        {row.when}
+                                        {row.dateTime ? (
+                                            <LocalDateTime
+                                                dateTime={row.dateTime}
+                                                display="date"
+                                            >
+                                                {row.when}
+                                            </LocalDateTime>
+                                        ) : (
+                                            row.when
+                                        )}
                                     </span>
                                     <button
                                         type="button"

@@ -103,10 +103,69 @@ const withTransaction = mock(
     async (operation: (client: object) => Promise<unknown>) =>
         operation(transactionClient),
 );
+const recordApplicationChange = mock(
+    async (input: {
+        mutation: (client: object, actionId: string) => Promise<unknown>;
+    }) => withTransaction((client) => input.mutation(client, "101")),
+);
+const recordCreatedApplications = mock(
+    async (input: {
+        mutation: (
+            client: object,
+            actionId: string,
+        ) => Promise<{ result: unknown }>;
+    }) =>
+        withTransaction(
+            async (client) => (await input.mutation(client, "101")).result,
+        ),
+);
+const recordDeletedApplications = mock(
+    async (input: { mutation: (client: object) => Promise<unknown> }) =>
+        withTransaction((client) => input.mutation(client)),
+);
+const recordListChange = mock(
+    async (input: { mutation: (client: object) => Promise<unknown> }) =>
+        withTransaction((client) => input.mutation(client)),
+);
 
 mock.module("@/db/client", () => ({
     getPool: () => ({}),
     withTransaction,
+}));
+mock.module("@/db/history", () => ({
+    HISTORY_KIND: {
+        create: 1,
+        import: 2,
+        edit: 3,
+        status: 4,
+        arrangement: 5,
+        delete: 6,
+        list: 7,
+        steps: 8,
+        undo: 9,
+    },
+    recordApplicationChange,
+    recordApplicationChangeWithClient: mock(
+        async (
+            client: object,
+            input: {
+                mutation: (
+                    client: object,
+                    actionId: string,
+                ) => Promise<unknown>;
+            },
+        ) => input.mutation(client, "101"),
+    ),
+    maintainHistoryAfterAction: mock(async () => undefined),
+    recordCreatedApplications,
+    recordDeletedApplications,
+    recordListChange,
+    getListHistory: mock(async () => ({
+        items: [],
+        nextCursor: null,
+        hasMore: false,
+    })),
+    undoHistoryAction: mock(async () => ({ ok: true })),
 }));
 mock.module("@/db/queries", () => ({
     countListsForUser,
@@ -393,8 +452,9 @@ describe("removeStatusStep", () => {
             removedEventIds: ["only"],
             addedStatuses: [],
             timeZone: TIME_ZONE,
+            historyActionId: "101",
         });
-        expect(withTransaction).not.toHaveBeenCalled();
+        expect(withTransaction).toHaveBeenCalledTimes(1);
     });
 });
 
@@ -475,7 +535,7 @@ describe("compound application writes", () => {
         expect(
             (JSON.parse(args.rows) as { id: string }[]).map((row) => row.id),
         ).toEqual(["app-b", "app-a"]);
-        expect(withTransaction).not.toHaveBeenCalled();
+        expect(withTransaction).toHaveBeenCalledTimes(1);
     });
 
     it("saves detail fields and staged history in one transaction", async () => {

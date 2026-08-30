@@ -1,6 +1,11 @@
 import { getPool, withTransaction } from "@/db/client";
 import * as gen from "@/db/queries";
 import {
+    HISTORY_KIND,
+    maintainHistoryAfterAction,
+    recordApplicationChangeWithClient,
+} from "@/db/history";
+import {
     STATUS_META,
     type ApplicationStatus,
     type EmailSuggestion,
@@ -114,8 +119,9 @@ export const applySuggestion = async (
     userId: string,
     suggestionId: string,
     timeZone: string,
-): Promise<boolean> =>
-    withTransaction(async (client) => {
+): Promise<boolean> => {
+    let recordedActionId: string | null = null;
+    const result = await withTransaction(async (client) => {
         // Locking the pending suggestion makes concurrent Apply/Dismiss clicks
         // resolve it exactly once.
         const suggestion = await gen.getSuggestionForUser(client, {
@@ -145,17 +151,28 @@ export const applySuggestion = async (
             isStatus(application.status) &&
             application.status !== toStatus
         ) {
-            await gen.setApplicationStatus(client, {
-                applicationId: suggestion.applicationId,
+            await recordApplicationChangeWithClient(client, {
                 userId,
-                status: toStatus,
-                timeZone,
-            });
-            await gen.insertApplicationEvent(client, {
-                applicationId: suggestion.applicationId,
-                fromStatus: application.status,
-                toStatus,
-                note: "Detected from email",
+                applicationIds: [suggestion.applicationId],
+                kind: HISTORY_KIND.status,
+                onRecorded: (actionId) => {
+                    recordedActionId = actionId;
+                },
+                mutation: async (historyClient, historyActionId) => {
+                    await gen.setApplicationStatus(historyClient, {
+                        applicationId: suggestion.applicationId,
+                        userId,
+                        status: toStatus,
+                        timeZone,
+                    });
+                    await gen.insertApplicationEvent(historyClient, {
+                        applicationId: suggestion.applicationId,
+                        fromStatus: application.status,
+                        toStatus,
+                        note: "Detected from email",
+                        historyActionId,
+                    });
+                },
             });
         }
 
@@ -166,6 +183,9 @@ export const applySuggestion = async (
         });
         return true;
     });
+    await maintainHistoryAfterAction(recordedActionId);
+    return result;
+};
 
 export const dismissSuggestion = async (
     userId: string,

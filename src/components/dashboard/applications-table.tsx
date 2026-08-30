@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import type { ActionResult } from "@/lib/validation";
 import {
     loadApplicationExtras,
+    permanentlyRemoveApplication,
     removeApplication,
     removeApplications,
     setApplicationsArrangement,
@@ -21,6 +22,7 @@ import {
 } from "@/app/dashboard/actions";
 import { AddApplicationForm } from "@/components/dashboard/add-application-form";
 import { ApplicationPanel } from "@/components/dashboard/application-panel";
+import { LocalDateTime } from "@/components/dashboard/local-date-time";
 import {
     APPLICATION_COLUMNS as COLUMNS,
     ApplicationsHeaderRow,
@@ -248,7 +250,12 @@ const ReadRow = ({
                 value={app.appliedAt ? formatDay(app.appliedAt) : null}
                 className="text-sub tabular-nums"
             />
-            <Cell value={app.updated} className="text-muted" />
+            <LocalDateTime
+                dateTime={app.updatedAt}
+                className="truncate text-muted tabular-nums"
+            >
+                {app.updated}
+            </LocalDateTime>
             <span className="flex items-center justify-end gap-0.5 text-muted">
                 {app.url && (
                     <a
@@ -309,10 +316,12 @@ const ReadRow = ({
 const BulkRow = ({
     draft,
     updated,
+    updatedAt,
     onChange,
 }: {
     draft: Draft;
     updated: string;
+    updatedAt: string;
     onChange: <K extends keyof Draft>(key: K, value: Draft[K]) => void;
 }) => (
     <li
@@ -322,26 +331,40 @@ const BulkRow = ({
         <RowFields draft={draft} onChange={onChange} />
         {/* Nothing here is editable, but the column keeps its reading so the
                 row does not trail off into empty space. */}
-        <Cell value={updated} className="text-muted" />
+        <LocalDateTime
+            dateTime={updatedAt}
+            className="truncate text-muted tabular-nums"
+        >
+            {updated}
+        </LocalDateTime>
     </li>
 );
 
 const DeleteRow = ({
     label,
     onConfirm,
+    onPermanent,
     onCancel,
 }: {
     label: string;
     onConfirm: () => void;
+    onPermanent: () => void;
     onCancel: () => void;
 }) => (
     <li
         className={`${ROW_HEIGHT} ${ROW_MIN_WIDTH} flex items-center gap-4 border-b border-faint bg-surface px-5 last:border-b-0`}
     >
         <p className="min-w-0 flex-1 truncate text-xs text-ink">
-            Delete {label}? This cannot be undone.
+            Delete {label}? You can undo this from History.
         </p>
         <div className="flex shrink-0 items-center gap-1">
+            <button
+                type="button"
+                onClick={onPermanent}
+                className="inline-flex h-8 cursor-pointer items-center px-2.5 text-xs font-medium text-rose transition-[background-color,scale] duration-150 ease-out hover:bg-rose-tint active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose"
+            >
+                Delete permanently
+            </button>
             <button
                 type="button"
                 onClick={onCancel}
@@ -455,6 +478,10 @@ export const ApplicationsTable = ({
     } | null>(null);
     const [openingId, setOpeningId] = useState<string | null>(null);
     const [deletingId, setDeletingId] = useState<string | null>(null);
+    const [permanentDelete, setPermanentDelete] = useState<{
+        id: string;
+        label: string;
+    } | null>(null);
     const [selected, setSelected] = useState<Set<string>>(new Set());
     const [drafts, setDrafts] = useState<Map<string, Draft> | null>(null);
     const [bulkError, setBulkError] = useState<string | null>(null);
@@ -667,6 +694,15 @@ export const ApplicationsTable = ({
         startMutation(async () => {
             applyOptimistic({ type: "delete", ids: new Set([id]) });
             reportRefusal(await removeApplication(listId, id));
+        });
+    };
+
+    const onPermanentDelete = (id: string) => {
+        startMutation(async () => {
+            applyOptimistic({ type: "delete", ids: new Set([id]) });
+            const result = await permanentlyRemoveApplication(listId, id);
+            reportRefusal(result);
+            if (result.ok) toast.success("Application permanently deleted");
         });
     };
 
@@ -1094,6 +1130,7 @@ export const ApplicationsTable = ({
                                             key={app.id}
                                             draft={draft}
                                             updated={app.updated}
+                                            updatedAt={app.updatedAt}
                                             onChange={(key, value) =>
                                                 setDraftField(
                                                     app.id,
@@ -1110,6 +1147,13 @@ export const ApplicationsTable = ({
                                             key={app.id}
                                             label={app.company}
                                             onConfirm={() => onDelete(app.id)}
+                                            onPermanent={() => {
+                                                setDeletingId(null);
+                                                setPermanentDelete({
+                                                    id: app.id,
+                                                    label: app.company,
+                                                });
+                                            }}
                                             onCancel={() => setDeletingId(null)}
                                         />
                                     );
@@ -1155,7 +1199,7 @@ export const ApplicationsTable = ({
             {confirmingDelete && (
                 <ConfirmDialog
                     title={`Delete ${countLabel(selection.length)}?`}
-                    detail="This cannot be undone."
+                    detail="You can undo this from History."
                     confirmLabel="Delete"
                     tone="danger"
                     onConfirm={() => {
@@ -1163,6 +1207,20 @@ export const ApplicationsTable = ({
                         setConfirmingDelete(false);
                     }}
                     onCancel={() => setConfirmingDelete(false)}
+                />
+            )}
+
+            {permanentDelete && (
+                <ConfirmDialog
+                    title={`Permanently delete ${permanentDelete.label}?`}
+                    detail="This removes the application from this list and from History. It cannot be restored or undone."
+                    confirmLabel="Delete permanently"
+                    tone="danger"
+                    onConfirm={() => {
+                        onPermanentDelete(permanentDelete.id);
+                        setPermanentDelete(null);
+                    }}
+                    onCancel={() => setPermanentDelete(null)}
                 />
             )}
         </section>

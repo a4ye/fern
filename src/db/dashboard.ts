@@ -1,6 +1,13 @@
 import type { PoolClient } from "@neondatabase/serverless";
-import { getPool, withTransaction } from "@/db/client";
+import { getPool } from "@/db/client";
 import * as gen from "@/db/queries";
+import {
+    HISTORY_KIND,
+    recordApplicationChange,
+    recordCreatedApplications,
+    recordDeletedApplications,
+    recordListChange,
+} from "@/db/history";
 import {
     ACTIVE_STATUSES,
     INTERVIEWING_STATUSES,
@@ -130,28 +137,36 @@ export const createApplication = async (
     listId: string,
     input: ApplicationDetail & { status: ApplicationStatus },
     timeZone: string,
-): Promise<boolean> => {
-    const row = await gen.createApplication(getPool(), {
+): Promise<boolean> =>
+    recordCreatedApplications({
         userId,
         listId,
-        companyName: input.company,
-        roleTitle: input.role,
-        status: input.status,
-        url: input.url,
-        location: input.location,
-        arrangement: input.arrangement,
-        appliedAt: parseDateInput(input.appliedAt),
-        timeZone,
-        payMin: input.payMin,
-        payMax: input.payMax,
-        payCurrency: input.payCurrency,
-        payPeriod: input.payPeriod,
-        bonusAmount: input.bonus,
-        payNote: input.payNote,
-        notes: input.notes,
+        kind: HISTORY_KIND.create,
+        name: input.company,
+        mutation: async (client, historyActionId) => {
+            const row = await gen.createApplication(client, {
+                userId,
+                listId,
+                companyName: input.company,
+                roleTitle: input.role,
+                status: input.status,
+                url: input.url,
+                location: input.location,
+                arrangement: input.arrangement,
+                appliedAt: parseDateInput(input.appliedAt),
+                timeZone,
+                payMin: input.payMin,
+                payMax: input.payMax,
+                payCurrency: input.payCurrency,
+                payPeriod: input.payPeriod,
+                bonusAmount: input.bonus,
+                payNote: input.payNote,
+                notes: input.notes,
+                historyActionId,
+            });
+            return { result: row !== null, affectedCount: row ? 1 : 0 };
+        },
     });
-    return row !== null;
-};
 
 // Rows read out of a spreadsheet, written by one statement. A query per row
 // would be a network round trip per row with a transaction held open across all
@@ -190,13 +205,24 @@ export const importApplications = async (
         };
     });
 
-    const inserted = await gen.createApplications(getPool(), {
+    return recordCreatedApplications({
         userId,
         listId,
-        timeZone,
-        rows: JSON.stringify(payload),
+        kind: HISTORY_KIND.import,
+        mutation: async (client, historyActionId) => {
+            const inserted = await gen.createApplications(client, {
+                userId,
+                listId,
+                timeZone,
+                historyActionId,
+                rows: JSON.stringify(payload),
+            });
+            return {
+                result: inserted.length,
+                affectedCount: inserted.length,
+            };
+        },
     });
-    return inserted.length;
 };
 
 export const updateApplications = async (
@@ -229,10 +255,17 @@ export const updateApplications = async (
         };
     });
 
-    await gen.updateApplicationsBulk(getPool(), {
-        rows: JSON.stringify(payload),
+    await recordApplicationChange({
         userId,
-        timeZone,
+        applicationIds: rows.map((row) => row.id),
+        kind: HISTORY_KIND.edit,
+        mutation: (client, historyActionId) =>
+            gen.updateApplicationsBulk(client, {
+                rows: JSON.stringify(payload),
+                userId,
+                timeZone,
+                historyActionId,
+            }),
     });
 };
 
@@ -285,9 +318,18 @@ export const saveApplicationDetail = async (
     applicationId: string,
     detail: ApplicationDetail,
 ): Promise<void> =>
-    withTransaction((client) =>
-        saveApplicationDetailWithClient(client, userId, applicationId, detail),
-    );
+    recordApplicationChange({
+        userId,
+        applicationIds: [applicationId],
+        kind: HISTORY_KIND.edit,
+        mutation: (client) =>
+            saveApplicationDetailWithClient(
+                client,
+                userId,
+                applicationId,
+                detail,
+            ),
+    });
 
 // Records a step in the history and leaves the application sitting at it. The
 // status it already holds is a valid step: that is how a second interview is
@@ -298,12 +340,19 @@ export const logStatusStep = async (
     status: ApplicationStatus,
     timeZone: string,
 ): Promise<void> => {
-    await gen.applyStatusStepEdits(getPool(), {
-        applicationId,
+    await recordApplicationChange({
         userId,
-        removedEventIds: [],
-        addedStatuses: [status],
-        timeZone,
+        applicationIds: [applicationId],
+        kind: HISTORY_KIND.steps,
+        mutation: (client, historyActionId) =>
+            gen.applyStatusStepEdits(client, {
+                applicationId,
+                userId,
+                removedEventIds: [],
+                addedStatuses: [status],
+                timeZone,
+                historyActionId,
+            }),
     });
 };
 
@@ -316,6 +365,7 @@ const applyStatusStepEditsWithClient = async (
     applicationId: string,
     edits: { removed: string[]; added: ApplicationStatus[] },
     timeZone: string,
+    historyActionId: string,
 ): Promise<void> => {
     if (edits.removed.length === 0 && edits.added.length === 0) return;
     await gen.applyStatusStepEdits(client, {
@@ -324,6 +374,7 @@ const applyStatusStepEditsWithClient = async (
         removedEventIds: edits.removed,
         addedStatuses: edits.added,
         timeZone,
+        historyActionId,
     });
 };
 
@@ -333,13 +384,22 @@ export const applyStatusStepEdits = async (
     edits: { removed: string[]; added: ApplicationStatus[] },
     timeZone: string,
 ): Promise<void> => {
-    await applyStatusStepEditsWithClient(
-        getPool(),
+    if (edits.removed.length === 0 && edits.added.length === 0) return;
+    await recordApplicationChange({
         userId,
-        applicationId,
-        edits,
-        timeZone,
-    );
+        applicationIds: [applicationId],
+        kind: HISTORY_KIND.steps,
+        trackRemovedEvents: edits.removed.length > 0,
+        mutation: (client, historyActionId) =>
+            applyStatusStepEditsWithClient(
+                client,
+                userId,
+                applicationId,
+                edits,
+                timeZone,
+                historyActionId,
+            ),
+    });
 };
 
 export const saveApplicationDetailAndSteps = async (
@@ -349,30 +409,30 @@ export const saveApplicationDetailAndSteps = async (
     edits: { removed: string[]; added: ApplicationStatus[] },
     timeZone: string,
 ): Promise<void> => {
-    if (edits.removed.length === 0 && edits.added.length === 0) {
-        await saveApplicationDetailWithClient(
-            getPool(),
-            userId,
-            applicationId,
-            detail,
-        );
-        return;
-    }
-
-    await withTransaction(async (client) => {
-        await saveApplicationDetailWithClient(
-            client,
-            userId,
-            applicationId,
-            detail,
-        );
-        await applyStatusStepEditsWithClient(
-            client,
-            userId,
-            applicationId,
-            edits,
-            timeZone,
-        );
+    const hasStepEdits = edits.removed.length > 0 || edits.added.length > 0;
+    await recordApplicationChange({
+        userId,
+        applicationIds: [applicationId],
+        kind: hasStepEdits ? HISTORY_KIND.steps : HISTORY_KIND.edit,
+        trackRemovedEvents: edits.removed.length > 0,
+        mutation: async (client, historyActionId) => {
+            await saveApplicationDetailWithClient(
+                client,
+                userId,
+                applicationId,
+                detail,
+            );
+            if (hasStepEdits) {
+                await applyStatusStepEditsWithClient(
+                    client,
+                    userId,
+                    applicationId,
+                    edits,
+                    timeZone,
+                    historyActionId,
+                );
+            }
+        },
     });
 };
 
@@ -385,12 +445,20 @@ export const removeStatusStep = async (
     eventId: string,
     timeZone: string,
 ): Promise<void> => {
-    await gen.applyStatusStepEdits(getPool(), {
-        applicationId,
+    await recordApplicationChange({
         userId,
-        removedEventIds: [eventId],
-        addedStatuses: [],
-        timeZone,
+        applicationIds: [applicationId],
+        kind: HISTORY_KIND.steps,
+        trackRemovedEvents: true,
+        mutation: (client, historyActionId) =>
+            gen.applyStatusStepEdits(client, {
+                applicationId,
+                userId,
+                removedEventIds: [eventId],
+                addedStatuses: [],
+                timeZone,
+                historyActionId,
+            }),
     });
 };
 
@@ -400,14 +468,25 @@ export const setApplicationsStatus = async (
     status: ApplicationStatus,
     timeZone: string,
 ): Promise<void> =>
-    withTransaction(async (client) => {
-        const args = { applicationIds, userId, status, timeZone };
-        await gen.lockApplicationsForUser(client, {
-            applicationIds,
-            userId,
-        });
-        await gen.insertStatusEvents(client, args);
-        await gen.setApplicationsStatus(client, args);
+    recordApplicationChange({
+        userId,
+        applicationIds,
+        kind: HISTORY_KIND.status,
+        mutation: async (client, historyActionId) => {
+            const args = {
+                applicationIds,
+                userId,
+                status,
+                timeZone,
+                historyActionId,
+            };
+            await gen.lockApplicationsForUser(client, {
+                applicationIds,
+                userId,
+            });
+            await gen.insertStatusEvents(client, args);
+            await gen.setApplicationsStatus(client, args);
+        },
     });
 
 export const setApplicationsArrangement = async (
@@ -415,10 +494,16 @@ export const setApplicationsArrangement = async (
     applicationIds: string[],
     arrangement: Arrangement | null,
 ): Promise<void> => {
-    await gen.setApplicationsArrangement(getPool(), {
-        applicationIds,
+    await recordApplicationChange({
         userId,
-        arrangement,
+        applicationIds,
+        kind: HISTORY_KIND.arrangement,
+        mutation: (client) =>
+            gen.setApplicationsArrangement(client, {
+                applicationIds,
+                userId,
+                arrangement,
+            }),
     });
 };
 
@@ -426,14 +511,24 @@ export const deleteApplication = async (
     userId: string,
     applicationId: string,
 ): Promise<void> => {
-    await gen.deleteApplication(getPool(), { applicationId, userId });
+    await recordDeletedApplications({
+        userId,
+        applicationIds: [applicationId],
+        mutation: (client) =>
+            gen.deleteApplication(client, { applicationId, userId }),
+    });
 };
 
 export const deleteApplications = async (
     userId: string,
     applicationIds: string[],
 ): Promise<void> => {
-    await gen.deleteApplications(getPool(), { applicationIds, userId });
+    await recordDeletedApplications({
+        userId,
+        applicationIds,
+        mutation: (client) =>
+            gen.deleteApplications(client, { applicationIds, userId }),
+    });
 };
 
 export const updateList = async (
@@ -441,14 +536,20 @@ export const updateList = async (
     listId: string,
     input: { name: string; description: string | null; status: ListStatus },
 ): Promise<boolean> => {
-    const row = await gen.updateList(getPool(), {
-        id: listId,
+    return recordListChange({
         userId,
-        name: input.name,
-        description: input.description,
-        status: input.status,
+        listId,
+        mutation: async (client) => {
+            const row = await gen.updateList(client, {
+                id: listId,
+                userId,
+                name: input.name,
+                description: input.description,
+                status: input.status,
+            });
+            return row !== null;
+        },
     });
-    return row !== null;
 };
 
 export const setListPinned = async (

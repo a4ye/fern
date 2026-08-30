@@ -2,7 +2,7 @@
 insert into applications (
     list_id, position, company_name, role_title, status, url, location,
     arrangement, applied_at, pay_min, pay_max, pay_currency, pay_period,
-    bonus_amount, pay_note, notes
+    bonus_amount, pay_note, notes, created_by_history_action_id
 )
 select
     l.id,
@@ -29,7 +29,8 @@ select
     sqlc.narg('pay_period')::pay_period,
     sqlc.narg('bonus_amount')::numeric,
     sqlc.narg('pay_note'),
-    sqlc.narg('notes')
+    sqlc.narg('notes'),
+    @history_action_id::bigint
 from lists l
 where l.id = @list_id and l.user_id = @user_id
 returning id;
@@ -53,7 +54,7 @@ returning id;
 insert into applications (
     list_id, position, company_name, role_title, status, url, location,
     arrangement, applied_at, pay_min, pay_max, pay_currency, pay_period,
-    pay_note, notes
+    pay_note, notes, created_by_history_action_id
 )
 select
     l.id,
@@ -79,7 +80,8 @@ select
     row.pay_currency,
     row.pay_period::pay_period,
     row.pay_note,
-    row.notes
+    row.notes,
+    @history_action_id::bigint
 from lists l
 cross join jsonb_to_recordset(@rows::jsonb) as row(
     "offset" int,
@@ -237,8 +239,10 @@ updated as (
     where a.id = row.id
     returning a.id, row.old_status, a.status as new_status
 )
-insert into application_events (application_id, from_status, to_status)
-select id, old_status, new_status
+insert into application_events (
+    application_id, from_status, to_status, history_action_id
+)
+select id, old_status, new_status, @history_action_id::bigint
 from updated
 where old_status <> new_status;
 
@@ -336,8 +340,14 @@ where a.list_id = l.id
 -- Records the move for every row that is actually changing. Must run before
 -- SetApplicationsStatus, which overwrites the status it reads as from_status.
 -- name: InsertStatusEvents :exec
-insert into application_events (application_id, from_status, to_status)
-select a.id, a.status, @status::application_status
+insert into application_events (
+    application_id, from_status, to_status, history_action_id
+)
+select
+    a.id,
+    a.status,
+    @status::application_status,
+    @history_action_id::bigint
 from applications a
 join lists l on l.id = a.list_id
 where a.id = any(@application_ids::uuid[])
