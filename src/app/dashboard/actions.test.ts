@@ -42,6 +42,13 @@ const restoreHistoryVersion = mock(async (..._args: unknown[]) => ({
     ok: true,
 }));
 const undoHistoryAction = mock(async (..._args: unknown[]) => ({ ok: true }));
+const permanentlyDeleteApplication = mock(async (..._args: unknown[]) => ({
+    ok: true,
+}));
+const permanentlyDeleteDeletedApplication = mock(
+    async (..._args: unknown[]) => ({ ok: true }),
+);
+const clearListHistoryDb = mock(async (..._args: unknown[]) => ({ ok: true }));
 const getListHistoryApplicationsPage = mock(async (..._args: unknown[]) => ({
     applications: ["Application 11"],
     page: 1,
@@ -89,6 +96,9 @@ mock.module("@/db/history", () => ({
     getListHistoryChangesPage,
     restoreHistoryVersion,
     undoHistoryAction,
+    permanentlyDeleteApplication,
+    permanentlyDeleteDeletedApplication,
+    clearListHistory: clearListHistoryDb,
 }));
 
 const {
@@ -100,6 +110,9 @@ const {
     deleteList,
     loadListHistoryApplications,
     loadListHistoryChanges,
+    permanentlyRemoveApplication,
+    permanentlyRemoveDeletedApplication,
+    clearListHistory,
     restoreListHistoryVersion,
     setApplicationsArrangement,
     setApplicationsStatus,
@@ -126,6 +139,9 @@ beforeEach(() => {
     putCachedJobImport.mockClear();
     restoreHistoryVersion.mockClear();
     undoHistoryAction.mockClear();
+    permanentlyDeleteApplication.mockClear();
+    permanentlyDeleteDeletedApplication.mockClear();
+    clearListHistoryDb.mockClear();
     getListHistoryApplicationsPage.mockClear();
     getListHistoryChangesPage.mockClear();
 });
@@ -281,6 +297,53 @@ describe("restoreListHistoryVersion", () => {
             error: "That version is no longer available.",
         });
         expect(restoreHistoryVersion).not.toHaveBeenCalled();
+    });
+});
+
+describe("permanent history deletion", () => {
+    const DELETED_APPLICATION_ID = "00000000-0000-4000-8000-000000000002";
+
+    it("permanently deletes a current application for the signed-in user", async () => {
+        expect(
+            await permanentlyRemoveApplication(
+                APPLICATION_ID,
+                DELETED_APPLICATION_ID,
+            ),
+        ).toEqual({ ok: true });
+        expect(permanentlyDeleteApplication.mock.calls[0]).toEqual([
+            "user-1",
+            APPLICATION_ID,
+            DELETED_APPLICATION_ID,
+        ]);
+        expect(revalidated()).toEqual([
+            `/dashboard/${APPLICATION_ID}`,
+            "/dashboard",
+        ]);
+    });
+
+    it("permanently deletes an application represented by a History entry", async () => {
+        expect(
+            await permanentlyRemoveDeletedApplication(APPLICATION_ID, "123"),
+        ).toEqual({ ok: true });
+        expect(permanentlyDeleteDeletedApplication.mock.calls[0]).toEqual([
+            "user-1",
+            APPLICATION_ID,
+            "123",
+        ]);
+    });
+
+    it("clears History without accepting an invalid list", async () => {
+        expect(await clearListHistory(APPLICATION_ID)).toEqual({ ok: true });
+        expect(clearListHistoryDb.mock.calls[0]).toEqual([
+            "user-1",
+            APPLICATION_ID,
+        ]);
+
+        expect(await clearListHistory("not-a-list")).toEqual({
+            ok: false,
+            error: "That list is no longer available.",
+        });
+        expect(clearListHistoryDb).toHaveBeenCalledTimes(1);
     });
 });
 

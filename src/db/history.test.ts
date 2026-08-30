@@ -12,6 +12,7 @@ import {
     historyStateAt,
     historyTitleFor,
     historyTitleValueFor,
+    redactApplicationHistoryActions,
     applyVersionDeltaToState,
     versionDeltaBetween,
     type StoredApplication,
@@ -56,6 +57,262 @@ describe("PostgreSQL history archives", () => {
         expect(historyActionRunsMaintenance("128")).toBe(true);
         expect(historyActionRunsMaintenance("131")).toBe(true);
         expect(historyActionRunsMaintenance("132")).toBe(false);
+    });
+});
+
+describe("permanent application deletion", () => {
+    const action = (
+        overrides: Partial<StoredHistoryAction>,
+    ): StoredHistoryAction => ({
+        id: "1",
+        kind: HISTORY_KIND.edit,
+        affectedCount: 1,
+        data: {},
+        reversible: true,
+        occurredAt: "2026-01-01T00:00:00.000Z",
+        undoneAt: null,
+        ...overrides,
+    });
+    const application = (
+        overrides: Partial<StoredApplication>,
+    ): StoredApplication => ({
+        id: "00000000-0000-4000-8000-000000000001",
+        position: 0,
+        company_name: "NotionGraph",
+        role_title: "Senior Engineer",
+        status: "applied",
+        url: null,
+        location: null,
+        arrangement: "remote",
+        notes: null,
+        pay_min: null,
+        pay_max: null,
+        pay_currency: "CAD",
+        pay_period: null,
+        bonus_amount: null,
+        pay_note: null,
+        applied_at: "2026-01-01",
+        created_at: "2026-01-01T00:00:00.000Z",
+        updated_at: "2026-01-01T00:00:00.000Z",
+        created_by_history_action_id: null,
+        ...overrides,
+    });
+    const state = (stored: StoredApplication): VersionState => ({
+        list: {
+            name: "Applications",
+            description: "Current",
+            status: "active",
+        },
+        applications: new Map([[stored.id, stored]]),
+        events: new Map(),
+    });
+    const removedId = "00000000-0000-4000-8000-000000000001";
+    const retainedId = "00000000-0000-4000-8000-000000000002";
+    const removedApplication = application({
+        id: removedId,
+        company_name: "Private Company",
+        role_title: "Private Role",
+        created_by_history_action_id: "5",
+    });
+    const retainedApplication = application({
+        id: retainedId,
+        company_name: "Public Company",
+        role_title: "Public Role",
+        created_by_history_action_id: "5",
+    });
+    const event = (id: string, applicationId: string) => ({
+        id,
+        application_id: applicationId,
+        from_status: "applied",
+        to_status: "interviewing",
+        note: null,
+        occurred_at: "2026-01-02T00:00:00.000Z",
+        history_action_id: "10",
+    });
+
+    it("scrubs the application from actions, restore data, and undo data", () => {
+        const source = [
+            action({
+                id: "5",
+                kind: HISTORY_KIND.import,
+                affectedCount: 2,
+                data: {
+                    m: [
+                        {
+                            i: removedId,
+                            n: "Private Company",
+                            r: "Private Role",
+                        },
+                        {
+                            i: retainedId,
+                            n: "Public Company",
+                            r: "Public Role",
+                        },
+                    ],
+                },
+            }),
+            action({
+                id: "10",
+                kind: HISTORY_KIND.status,
+                affectedCount: 2,
+                data: {
+                    a: [
+                        {
+                            i: removedId,
+                            n: "Private Company",
+                            f: { s: ["applied", "interviewing"] },
+                        },
+                        {
+                            i: retainedId,
+                            n: "Public Company",
+                            f: { s: ["applied", "interviewing"] },
+                        },
+                    ],
+                },
+            }),
+            action({
+                id: "11",
+                kind: HISTORY_KIND.undo,
+                affectedCount: 2,
+                data: {
+                    o: "10",
+                    r: "10",
+                    n: "Moved 2 applications to Interviewing",
+                    x: {
+                        e: [
+                            event(
+                                "00000000-0000-4000-8000-000000000011",
+                                removedId,
+                            ),
+                            event(
+                                "00000000-0000-4000-8000-000000000012",
+                                retainedId,
+                            ),
+                        ],
+                    },
+                },
+            }),
+            action({
+                id: "12",
+                kind: HISTORY_KIND.delete,
+                data: {
+                    d: [removedApplication],
+                    e: [
+                        event(
+                            "00000000-0000-4000-8000-000000000013",
+                            removedId,
+                        ),
+                    ],
+                },
+            }),
+            action({
+                id: "13",
+                kind: HISTORY_KIND.undo,
+                data: {
+                    o: "12",
+                    r: "12",
+                    n: "Deleted Private Role at Private Company",
+                },
+            }),
+            action({
+                id: "14",
+                kind: HISTORY_KIND.restore,
+                affectedCount: 2,
+                data: {
+                    n: "Updated Private Company",
+                    m: [
+                        {
+                            i: removedId,
+                            n: "Private Company",
+                            r: "Private Role",
+                        },
+                        {
+                            i: retainedId,
+                            n: "Public Company",
+                            r: "Public Role",
+                        },
+                    ],
+                    v: {
+                        a: [
+                            {
+                                i: removedId,
+                                n: "Private Company",
+                                f: { l: [null, "Toronto"] },
+                            },
+                            {
+                                i: retainedId,
+                                n: "Public Company",
+                                f: { l: [null, "Montreal"] },
+                            },
+                        ],
+                        c: [removedApplication, retainedApplication],
+                        e: {
+                            c: [
+                                event(
+                                    "00000000-0000-4000-8000-000000000014",
+                                    removedId,
+                                ),
+                                event(
+                                    "00000000-0000-4000-8000-000000000015",
+                                    retainedId,
+                                ),
+                            ],
+                        },
+                    },
+                },
+            }),
+        ];
+
+        const redacted = redactApplicationHistoryActions(source, {
+            id: removedId,
+            companyName: "Private Company",
+            roleTitle: "Private Role",
+            createdByHistoryActionId: "5",
+        });
+        const serialized = JSON.stringify(redacted);
+
+        expect(serialized).not.toContain(removedId);
+        expect(serialized).not.toContain("Private Company");
+        expect(redacted.map((action) => action.id)).toEqual([
+            "5",
+            "10",
+            "11",
+            "14",
+        ]);
+        expect(redacted.every((action) => action.affectedCount === 1)).toBe(
+            true,
+        );
+        expect(serialized).toContain(retainedId);
+        expect(serialized).toContain("Public Company");
+    });
+
+    it("does not bring the removed application back in an older version", () => {
+        const selected = action({
+            id: "20",
+            kind: HISTORY_KIND.list,
+            data: { f: { d: ["Older", "Current"] } },
+        });
+        const laterDelete = action({
+            id: "21",
+            kind: HISTORY_KIND.delete,
+            data: { d: [removedApplication] },
+        });
+        const redacted = redactApplicationHistoryActions(
+            [selected, laterDelete],
+            {
+                id: removedId,
+                companyName: "Private Company",
+                roleTitle: "Private Role",
+                createdByHistoryActionId: "5",
+            },
+        );
+        const current = state(retainedApplication);
+        const restored = historyStateAt(current, redacted, selected.id);
+
+        expect(restored?.applications.has(removedId)).toBe(false);
+        expect(restored?.applications.get(retainedId)).toEqual(
+            retainedApplication,
+        );
     });
 });
 
@@ -460,8 +717,7 @@ describe("history wording", () => {
                     change.valueChange?.subject ??
                     change.fieldChange?.subject ??
                     null,
-                field:
-                    change.valueChange?.field ?? change.fieldChange?.code,
+                field: change.valueChange?.field ?? change.fieldChange?.code,
                 before:
                     change.valueChange?.before ?? change.fieldChange?.before,
             })),

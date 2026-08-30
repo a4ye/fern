@@ -98,6 +98,13 @@ type HistoryApplicationSummary = {
     r: string | null;
 };
 
+export type HistoryApplicationIdentity = {
+    id: string;
+    companyName: string;
+    roleTitle: string | null;
+    createdByHistoryActionId: string | null;
+};
+
 type VersionEventChanges = {
     c?: ReturnType<typeof storedEvent>[];
     d?: ReturnType<typeof storedEvent>[];
@@ -145,6 +152,16 @@ type HistoryDatabaseRow = {
     reversible: boolean;
     occurredAt: Date;
     undoneAt: Date | null;
+};
+
+type HistoryArchiveDatabaseRow = {
+    firstActionId: string;
+    listId: string;
+    lastActionId: string;
+    firstOccurredAt: Date;
+    lastOccurredAt: Date;
+    actionCount: number;
+    payload: Buffer;
 };
 
 export type StoredHistoryAction = {
@@ -231,6 +248,7 @@ export type ListHistoryItem = {
     time: string;
     canUndo: boolean;
     canRestore: boolean;
+    canPermanentlyDelete: boolean;
     reversal: "undo" | "redo";
     undone: boolean;
     archived: boolean;
@@ -249,6 +267,8 @@ export type ListHistoryPage = {
     nextCursor: string | null;
     hasMore: boolean;
 };
+
+export type DeleteHistoryResult = { ok: true } | { ok: false; error: string };
 
 type HistoryChangeDetailsOptions = {
     applicationOffset?: number;
@@ -661,6 +681,7 @@ export const recordCreatedApplications = async <Result>(input: {
                     ...(created.length > 0
                         ? {
                               m: created.map((application) => ({
+                                  i: application.id,
                                   n: application.companyName,
                                   r: application.roleTitle,
                               })),
@@ -1804,6 +1825,9 @@ const toItem = (
             !row.undoneAt &&
             !archived,
         canRestore,
+        canPermanentlyDelete:
+            row.kind === HISTORY_KIND.delete &&
+            asData(row.data).d?.length === 1,
         reversal: historyReversalFor(row),
         undone: row.undoneAt !== null,
         archived,
@@ -1821,6 +1845,282 @@ export const decodeHistoryActions = (
     const parsed: unknown = JSON.parse(gunzipSync(payload).toString("utf8"));
     if (!Array.isArray(parsed)) throw new Error("History archive is invalid.");
     return parsed as StoredHistoryAction[];
+};
+
+const withoutApplication = <Value>(
+    values: Value[] | undefined,
+    applicationId: (value: Value) => string,
+    removedId: string,
+): Value[] | undefined => {
+    if (!values) return undefined;
+    const kept = values.filter((value) => applicationId(value) !== removedId);
+    return kept.length > 0 ? kept : undefined;
+};
+
+const redactedVersionDelta = (
+    delta: VersionDelta | undefined,
+    applicationId: string,
+): VersionDelta | undefined => {
+    if (!delta) return undefined;
+    const patches = withoutApplication(
+        delta.a,
+        (patch) => patch.i,
+        applicationId,
+    );
+    const created = withoutApplication(
+        delta.c,
+        (application) => application.id,
+        applicationId,
+    );
+    const deleted = withoutApplication(
+        delta.d,
+        (application) => application.id,
+        applicationId,
+    );
+    const createdEvents = withoutApplication(
+        delta.e?.c,
+        (event) => event.application_id,
+        applicationId,
+    );
+    const deletedEvents = withoutApplication(
+        delta.e?.d,
+        (event) => event.application_id,
+        applicationId,
+    );
+    const events =
+        createdEvents || deletedEvents
+            ? {
+                  ...(createdEvents ? { c: createdEvents } : {}),
+                  ...(deletedEvents ? { d: deletedEvents } : {}),
+              }
+            : undefined;
+    const next: VersionDelta = {
+        ...(patches ? { a: patches } : {}),
+        ...(created ? { c: created } : {}),
+        ...(deleted ? { d: deleted } : {}),
+        ...(events ? { e: events } : {}),
+        ...(delta.f && Object.keys(delta.f).length > 0 ? { f: delta.f } : {}),
+    };
+    return Object.keys(next).length > 0 ? next : undefined;
+};
+
+const redactedReplay = (
+    replay: HistoryReplayData | undefined,
+    applicationId: string,
+): HistoryReplayData | undefined => {
+    if (!replay) return undefined;
+    const applications = withoutApplication(
+        replay.d,
+        (application) => application.id,
+        applicationId,
+    );
+    const events = withoutApplication(
+        replay.e,
+        (event) => event.application_id,
+        applicationId,
+    );
+    return applications || events
+        ? {
+              ...(applications ? { d: applications } : {}),
+              ...(events ? { e: events } : {}),
+          }
+        : undefined;
+};
+
+const versionDeltaReferencesApplication = (
+    delta: VersionDelta | undefined,
+    applicationId: string,
+): boolean =>
+    Boolean(
+        delta?.a?.some((patch) => patch.i === applicationId) ||
+        delta?.c?.some((application) => application.id === applicationId) ||
+        delta?.d?.some((application) => application.id === applicationId) ||
+        delta?.e?.c?.some((event) => event.application_id === applicationId) ||
+        delta?.e?.d?.some((event) => event.application_id === applicationId),
+    );
+
+const historyActionStillHasEffect = (
+    action: StoredHistoryAction,
+    data: HistoryData,
+    affectedCount: number,
+): boolean => {
+    if (
+        action.kind === HISTORY_KIND.create ||
+        action.kind === HISTORY_KIND.import
+    ) {
+        return affectedCount > 0;
+    }
+    if (
+        action.kind === HISTORY_KIND.edit ||
+        action.kind === HISTORY_KIND.status ||
+        action.kind === HISTORY_KIND.arrangement ||
+        action.kind === HISTORY_KIND.steps
+    ) {
+        return Boolean(data.a?.length || data.e?.length || data.g?.length);
+    }
+    if (action.kind === HISTORY_KIND.delete) return Boolean(data.d?.length);
+    if (action.kind === HISTORY_KIND.restore) return Boolean(data.v);
+    return true;
+};
+
+const redactHistoryRoot = (
+    action: StoredHistoryAction,
+    identity: HistoryApplicationIdentity,
+): { action: StoredHistoryAction | null; affected: boolean } => {
+    const data = asData(action.data);
+    const patchesAffected =
+        data.a?.some((patch) => patch.i === identity.id) ?? false;
+    const deletedAffected =
+        data.d?.some((application) => application.id === identity.id) ?? false;
+    const removedEventsAffected =
+        data.e?.some((event) => event.application_id === identity.id) ?? false;
+    const addedEventsAffected =
+        data.g?.some((event) => event.application_id === identity.id) ?? false;
+    const deltaAffected = versionDeltaReferencesApplication(
+        data.v,
+        identity.id,
+    );
+    const replayAffected = Boolean(
+        data.x?.d?.some((application) => application.id === identity.id) ||
+        data.x?.e?.some((event) => event.application_id === identity.id),
+    );
+
+    let summaries = data.m;
+    let summaryAffected = false;
+    if (summaries?.some((summary) => summary.i === identity.id)) {
+        summaries = summaries.filter((summary) => summary.i !== identity.id);
+        summaryAffected = true;
+    } else if (
+        identity.createdByHistoryActionId === action.id &&
+        (action.kind === HISTORY_KIND.create ||
+            action.kind === HISTORY_KIND.import)
+    ) {
+        const matching = summaries?.findIndex(
+            (summary) =>
+                summary.n === identity.companyName &&
+                summary.r === identity.roleTitle,
+        );
+        if (summaries && matching !== undefined && matching >= 0) {
+            summaries = summaries.filter((_, index) => index !== matching);
+        } else {
+            // Older creation summaries did not carry application IDs. If the
+            // application was renamed later, there is no honest way to tell its
+            // original label from its neighbours, so remove the labels from
+            // that one creation action rather than retain personal data.
+            summaries = undefined;
+        }
+        summaryAffected = true;
+    }
+
+    const titleMentionsApplication = Boolean(
+        data.n &&
+        [identity.companyName, identity.roleTitle]
+            .filter((value): value is string => Boolean(value))
+            .some((value) => data.n?.includes(value)),
+    );
+    const affected =
+        patchesAffected ||
+        deletedAffected ||
+        removedEventsAffected ||
+        addedEventsAffected ||
+        deltaAffected ||
+        replayAffected ||
+        summaryAffected;
+    const next: HistoryData = {
+        ...data,
+        ...(summaries && summaries.length > 0 ? { m: summaries } : {}),
+    };
+    if (!summaries || summaries.length === 0) delete next.m;
+
+    const patches = withoutApplication(data.a, (patch) => patch.i, identity.id);
+    const deleted = withoutApplication(
+        data.d,
+        (application) => application.id,
+        identity.id,
+    );
+    const removedEvents = withoutApplication(
+        data.e,
+        (event) => event.application_id,
+        identity.id,
+    );
+    const addedEvents = withoutApplication(
+        data.g,
+        (event) => event.application_id,
+        identity.id,
+    );
+    const delta = redactedVersionDelta(data.v, identity.id);
+    const replay = redactedReplay(data.x, identity.id);
+    if (patches) next.a = patches;
+    else delete next.a;
+    if (deleted) next.d = deleted;
+    else delete next.d;
+    if (removedEvents) next.e = removedEvents;
+    else delete next.e;
+    if (addedEvents) next.g = addedEvents;
+    else delete next.g;
+    if (delta) next.v = delta;
+    else delete next.v;
+    if (replay) next.x = replay;
+    else delete next.x;
+    if (affected || titleMentionsApplication) delete next.n;
+
+    const affectedCount = Math.max(
+        0,
+        action.affectedCount - (affected ? 1 : 0),
+    );
+    if (!historyActionStillHasEffect(action, next, affectedCount)) {
+        return { action: null, affected: true };
+    }
+    return {
+        action: { ...action, affectedCount, data: next },
+        affected,
+    };
+};
+
+// A history row is a delta, not an independent copy. Redact the application
+// from every delta and its undo replay together so the remaining restore points
+// still reconstruct the same states for every other application.
+export const redactApplicationHistoryActions = (
+    actions: StoredHistoryAction[],
+    identity: HistoryApplicationIdentity,
+): StoredHistoryAction[] => {
+    const roots = new Map<
+        string,
+        { action: StoredHistoryAction | null; affected: boolean }
+    >();
+    for (const action of actions) {
+        if (action.kind !== HISTORY_KIND.undo) {
+            roots.set(action.id, redactHistoryRoot(action, identity));
+        }
+    }
+
+    return actions.flatMap((action) => {
+        if (action.kind !== HISTORY_KIND.undo) {
+            const root = roots.get(action.id);
+            return root?.action ? [root.action] : [];
+        }
+
+        const data = asData(action.data);
+        const rootId = data.r ?? data.o;
+        const root = rootId ? roots.get(rootId) : undefined;
+        if (root?.action === null) return [];
+        if (!root?.affected || !root.action) return [action];
+
+        const replay = redactedReplay(data.x, identity.id);
+        const nextData: HistoryData = {
+            ...data,
+            n: historyTitleFor(root.action),
+        };
+        if (replay) nextData.x = replay;
+        else delete nextData.x;
+        return [
+            {
+                ...action,
+                affectedCount: Math.max(0, action.affectedCount - 1),
+                data: nextData,
+            },
+        ];
+    });
 };
 
 const cloneVersionState = (state: VersionState): VersionState => ({
@@ -2273,6 +2573,266 @@ const historyActionForList = async (
         ) ?? null
     );
 };
+
+type LockedHistoryStorage = {
+    recent: HistoryDatabaseRow[];
+    archives: HistoryArchiveDatabaseRow[];
+};
+
+const lockHistoryStorage = async (
+    client: QueryClient,
+    userId: string,
+    listId: string,
+): Promise<LockedHistoryStorage | null> => {
+    if (!(await listSnapshot(client, userId, listId))) return null;
+
+    const recent = await rowsOf<HistoryDatabaseRow>(
+        client,
+        `
+            select
+                h.id::text as id,
+                h.kind,
+                h.affected_count as "affectedCount",
+                h.data,
+                h.reversible,
+                h.occurred_at as "occurredAt",
+                h.undone_at as "undoneAt"
+            from list_history_actions h
+            where h.list_id = $1
+            order by h.id
+            for update
+        `,
+        [listId],
+    );
+    const archives = await rowsOf<HistoryArchiveDatabaseRow>(
+        client,
+        `
+            select
+                a.first_action_id::text as "firstActionId",
+                a.list_id as "listId",
+                a.last_action_id::text as "lastActionId",
+                a.first_occurred_at as "firstOccurredAt",
+                a.last_occurred_at as "lastOccurredAt",
+                a.action_count as "actionCount",
+                a.payload
+            from list_history_archives a
+            where a.list_id = $1
+            order by a.first_action_id
+            for update
+        `,
+        [listId],
+    );
+    return { recent, archives };
+};
+
+const storedActionsIn = (storage: LockedHistoryStorage) => [
+    ...storage.recent.map(toStored),
+    ...storage.archives.flatMap((archive) =>
+        decodeHistoryActions(archive.payload),
+    ),
+];
+
+const storedHistoryActionChanged = (
+    before: StoredHistoryAction,
+    after: StoredHistoryAction,
+): boolean =>
+    before.affectedCount !== after.affectedCount ||
+    JSON.stringify(before.data) !== JSON.stringify(after.data);
+
+const rewriteHistoryWithoutApplication = async (
+    client: QueryClient,
+    listId: string,
+    storage: LockedHistoryStorage,
+    identity: HistoryApplicationIdentity,
+): Promise<void> => {
+    const retained = redactApplicationHistoryActions(
+        storedActionsIn(storage),
+        identity,
+    );
+    const retainedById = new Map(retained.map((action) => [action.id, action]));
+
+    const removedRecentIds = storage.recent
+        .map((row) => row.id)
+        .filter((id) => !retainedById.has(id));
+    if (removedRecentIds.length > 0) {
+        await client.query({
+            text: `
+                delete from list_history_actions
+                where list_id = $1 and id = any($2::bigint[])
+            `,
+            values: [listId, removedRecentIds],
+        });
+    }
+
+    const recentUpdates = storage.recent.flatMap((row) => {
+        const action = retainedById.get(row.id);
+        return action && storedHistoryActionChanged(toStored(row), action)
+            ? [
+                  {
+                      id: action.id,
+                      affected_count: action.affectedCount,
+                      data: action.data,
+                  },
+              ]
+            : [];
+    });
+    if (recentUpdates.length > 0) {
+        await client.query({
+            text: `
+                update list_history_actions h
+                set
+                    affected_count = changed.affected_count,
+                    data = changed.data
+                from jsonb_to_recordset($1::jsonb) as changed(
+                    id text,
+                    affected_count integer,
+                    data jsonb
+                )
+                where h.list_id = $2 and h.id = changed.id::bigint
+            `,
+            values: [JSON.stringify(recentUpdates), listId],
+        });
+    }
+
+    for (const archive of storage.archives) {
+        const original = decodeHistoryActions(archive.payload);
+        const next = original.flatMap((action) => {
+            const retainedAction = retainedById.get(action.id);
+            return retainedAction ? [retainedAction] : [];
+        });
+        if (next.length === 0) {
+            await client.query({
+                text: `
+                    delete from list_history_archives
+                    where list_id = $1 and first_action_id = $2::bigint
+                `,
+                values: [listId, archive.firstActionId],
+            });
+            continue;
+        }
+        if (
+            next.length === original.length &&
+            next.every(
+                (action, index) =>
+                    !storedHistoryActionChanged(original[index], action),
+            )
+        ) {
+            continue;
+        }
+
+        const first = next[0];
+        const last = next.at(-1) as StoredHistoryAction;
+        await client.query({
+            text: `
+                update list_history_archives
+                set
+                    first_action_id = $1::bigint,
+                    last_action_id = $2::bigint,
+                    first_occurred_at = $3,
+                    last_occurred_at = $4,
+                    action_count = $5,
+                    payload = $6
+                where list_id = $7 and first_action_id = $8::bigint
+            `,
+            values: [
+                first.id,
+                last.id,
+                new Date(first.occurredAt),
+                new Date(last.occurredAt),
+                next.length,
+                encodeHistoryActions(next),
+                listId,
+                archive.firstActionId,
+            ],
+        });
+    }
+};
+
+export const permanentlyDeleteApplication = async (
+    userId: string,
+    listId: string,
+    applicationId: string,
+): Promise<DeleteHistoryResult> =>
+    withTransaction(async (client) => {
+        const storage = await lockHistoryStorage(client, userId, listId);
+        if (!storage) {
+            return { ok: false, error: "That list is no longer available." };
+        }
+        const [application] = await applicationSnapshots(client, userId, [
+            applicationId,
+        ]);
+        if (!application || application.listId !== listId) {
+            return {
+                ok: false,
+                error: "That application is no longer available.",
+            };
+        }
+
+        await deleteApplications(client, userId, listId, [applicationId]);
+        await rewriteHistoryWithoutApplication(client, listId, storage, {
+            id: application.id,
+            companyName: application.companyName,
+            roleTitle: application.roleTitle,
+            createdByHistoryActionId: application.createdByHistoryActionId,
+        });
+        return { ok: true };
+    });
+
+export const permanentlyDeleteDeletedApplication = async (
+    userId: string,
+    listId: string,
+    actionId: string,
+): Promise<DeleteHistoryResult> =>
+    withTransaction(async (client) => {
+        const storage = await lockHistoryStorage(client, userId, listId);
+        if (!storage) {
+            return { ok: false, error: "That list is no longer available." };
+        }
+        const action = storedActionsIn(storage).find(
+            (candidate) => candidate.id === actionId,
+        );
+        const [deleted] = action ? (asData(action.data).d ?? []) : [];
+        if (
+            !action ||
+            action.kind !== HISTORY_KIND.delete ||
+            action.affectedCount !== 1 ||
+            !deleted ||
+            asData(action.data).d?.length !== 1
+        ) {
+            return {
+                ok: false,
+                error: "That deleted application is no longer available.",
+            };
+        }
+
+        await deleteApplications(client, userId, listId, [deleted.id]);
+        await rewriteHistoryWithoutApplication(client, listId, storage, {
+            id: deleted.id,
+            companyName: deleted.company_name,
+            roleTitle: deleted.role_title,
+            createdByHistoryActionId: deleted.created_by_history_action_id,
+        });
+        return { ok: true };
+    });
+
+export const clearListHistory = async (
+    userId: string,
+    listId: string,
+): Promise<DeleteHistoryResult> =>
+    withTransaction(async (client) => {
+        if (!(await listSnapshot(client, userId, listId))) {
+            return { ok: false, error: "That list is no longer available." };
+        }
+        await client.query({
+            text: "delete from list_history_archives where list_id = $1",
+            values: [listId],
+        });
+        await client.query({
+            text: "delete from list_history_actions where list_id = $1",
+            values: [listId],
+        });
+        return { ok: true };
+    });
 
 export const getListHistory = async (
     userId: string,

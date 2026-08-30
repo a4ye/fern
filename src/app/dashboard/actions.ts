@@ -20,10 +20,13 @@ import {
 } from "@/db/dashboard";
 import { getUserSettings } from "@/db/settings";
 import {
+    clearListHistory as clearListHistoryDb,
     getListHistory,
     getListHistoryApplicationsPage,
     getListHistoryChangesPage,
     HISTORY_LOAD_PAGE_SIZE,
+    permanentlyDeleteApplication as permanentlyDeleteApplicationDb,
+    permanentlyDeleteDeletedApplication as permanentlyDeleteDeletedApplicationDb,
     restoreHistoryVersion,
     undoHistoryAction,
     type HistoryChangesPage,
@@ -210,6 +213,75 @@ export const restoreListHistoryVersion = async (
     }
 
     const result = await restoreHistoryVersion(writer.userId, listId, actionId);
+    if (!result.ok) return result;
+    revalidatePath(`/dashboard/${listId}`);
+    revalidatePath("/dashboard");
+    return { ok: true };
+};
+
+export const permanentlyRemoveApplication = async (
+    listId: string,
+    applicationId: string,
+): Promise<ActionResult> => {
+    const writer = await writingUser();
+    if (!writer.ok) return writer;
+    if (
+        !applicationIdSchema.safeParse(listId).success ||
+        !applicationIdSchema.safeParse(applicationId).success
+    ) {
+        return { ok: false, error: "That application is no longer available." };
+    }
+
+    const result = await permanentlyDeleteApplicationDb(
+        writer.userId,
+        listId,
+        applicationId,
+    );
+    if (!result.ok) return result;
+    revalidatePath(`/dashboard/${listId}`);
+    revalidatePath("/dashboard");
+    return { ok: true };
+};
+
+export const permanentlyRemoveDeletedApplication = async (
+    listId: string,
+    actionId: string,
+): Promise<ActionResult> => {
+    const writer = await writingUser();
+    if (
+        !writer.ok ||
+        !applicationIdSchema.safeParse(listId).success ||
+        !validHistoryActionId(actionId)
+    ) {
+        return writer.ok
+            ? {
+                  ok: false,
+                  error: "That deleted application is no longer available.",
+              }
+            : writer;
+    }
+
+    const result = await permanentlyDeleteDeletedApplicationDb(
+        writer.userId,
+        listId,
+        actionId,
+    );
+    if (!result.ok) return result;
+    revalidatePath(`/dashboard/${listId}`);
+    revalidatePath("/dashboard");
+    return { ok: true };
+};
+
+export const clearListHistory = async (
+    listId: string,
+): Promise<ActionResult> => {
+    const writer = await writingUser();
+    if (!writer.ok) return writer;
+    if (!applicationIdSchema.safeParse(listId).success) {
+        return { ok: false, error: "That list is no longer available." };
+    }
+
+    const result = await clearListHistoryDb(writer.userId, listId);
     if (!result.ok) return result;
     revalidatePath(`/dashboard/${listId}`);
     revalidatePath("/dashboard");

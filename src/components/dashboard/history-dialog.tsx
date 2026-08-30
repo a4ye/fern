@@ -10,9 +10,11 @@ import {
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
+    clearListHistory,
     loadListHistory,
     loadListHistoryApplications,
     loadListHistoryChanges,
+    permanentlyRemoveDeletedApplication,
     restoreListHistoryVersion,
     undoListHistoryAction,
 } from "@/app/dashboard/actions";
@@ -30,6 +32,7 @@ import {
     type PayPeriod,
 } from "@/components/dashboard/data";
 import { useModalDialog } from "@/components/dashboard/use-modal-dialog";
+import { ConfirmDialog } from "@/components/dashboard/confirm-dialog";
 import { useLocalDateTimeFormatter } from "@/components/dashboard/local-date-time";
 import { currencyCountry } from "@/lib/pay";
 import {
@@ -709,7 +712,7 @@ const ApplicationList = ({
             <ul
                 ref={listRef}
                 aria-busy={isPaging}
-                className={`grid content-start gap-x-6 transition-opacity duration-150 ${count > 1 && !visibleApplicationDetails ? "sm:grid-cols-2" : ""} ${isPaging ? "opacity-50" : ""}`}
+                className={`grid content-start gap-x-6 transition-opacity duration-150 [&>li:last-child]:border-b-0 ${count > 1 && !visibleApplicationDetails ? "sm:grid-cols-2 sm:[&>li:nth-last-child(-n+2)]:border-b-0" : ""} ${isPaging ? "opacity-50" : ""}`}
             >
                 {visibleApplications.map((application, index) => {
                     const detail = visibleApplicationDetails?.[index];
@@ -1084,6 +1087,12 @@ export const HistoryDialog = ({
     const [confirmingRestore, setConfirmingRestore] = useState<string | null>(
         null,
     );
+    const [permanentDelete, setPermanentDelete] =
+        useState<ListHistoryItem | null>(null);
+    const [confirmingClear, setConfirmingClear] = useState(false);
+    const [permanentlyDeleting, setPermanentlyDeleting] = useState<
+        string | null
+    >(null);
     const [isLoading, startLoading] = useTransition();
     const loadedOlder = useRef(false);
     const historyScrollRef = useRef<HTMLDivElement>(null);
@@ -1219,6 +1228,41 @@ export const HistoryDialog = ({
         });
     };
 
+    const permanentlyDelete = (item: ListHistoryItem) => {
+        setPermanentlyDeleting(item.id);
+        startLoading(async () => {
+            const result = await permanentlyRemoveDeletedApplication(
+                listId,
+                item.id,
+            );
+            setPermanentlyDeleting(null);
+            if (!result.ok) {
+                toast.error(result.error);
+                return;
+            }
+            toast.success("Application permanently deleted");
+            router.refresh();
+            dismiss();
+        });
+    };
+
+    const clearHistory = () => {
+        startLoading(async () => {
+            const result = await clearListHistory(listId);
+            if (!result.ok) {
+                toast.error(result.error);
+                return;
+            }
+            setItems([]);
+            setCursor(null);
+            setHasMore(false);
+            setExpanded(new Set());
+            setExpandedChanges(new Set());
+            toast.success("History cleared");
+            router.refresh();
+        });
+    };
+
     const loadOlder = () => {
         if (!cursor) return;
         startLoading(async () => {
@@ -1241,6 +1285,9 @@ export const HistoryDialog = ({
     };
 
     const groups = groupByDay(items, formatLocalTime);
+    const permanentDeleteLabel =
+        permanentDelete?.changes.flatMap((change) => change.applications)[0] ??
+        null;
 
     return (
         <dialog
@@ -1265,18 +1312,36 @@ export const HistoryDialog = ({
                     >
                         History
                     </h2>
-                    <button
-                        type="button"
-                        onClick={dismiss}
-                        aria-label="Close history"
-                        title="Close"
-                        className="flex size-10 shrink-0 cursor-pointer items-center justify-center text-muted transition-[color,scale] duration-150 ease-out hover:text-ink active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                    >
-                        <span
-                            aria-hidden="true"
-                            className="icon-[lucide--x] block size-4"
-                        />
-                    </button>
+                    <div className="flex items-center gap-0.5">
+                        {items.length > 0 && (
+                            <button
+                                type="button"
+                                onClick={() => setConfirmingClear(true)}
+                                disabled={isLoading}
+                                aria-label="Clear history"
+                                title="Clear history"
+                                className="flex h-10 shrink-0 cursor-pointer items-center gap-2 px-3 text-xs font-medium text-muted transition-[background-color,color,scale] duration-150 ease-out hover:bg-rose-tint hover:text-rose active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose disabled:cursor-wait disabled:opacity-50"
+                            >
+                                <span
+                                    aria-hidden="true"
+                                    className="icon-[lucide--trash-2] block size-4"
+                                />
+                                Clear history
+                            </button>
+                        )}
+                        <button
+                            type="button"
+                            onClick={dismiss}
+                            aria-label="Close history"
+                            title="Close"
+                            className="flex size-10 shrink-0 cursor-pointer items-center justify-center text-muted transition-[color,scale] duration-150 ease-out hover:text-ink active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                        >
+                            <span
+                                aria-hidden="true"
+                                className="icon-[lucide--x] block size-4"
+                            />
+                        </button>
+                    </div>
                 </header>
 
                 {items.length === 0 ? (
@@ -1353,6 +1418,7 @@ export const HistoryDialog = ({
                                                     item.undone ||
                                                     item.canUndo ||
                                                     item.canRestore ||
+                                                    item.canPermanentlyDelete ||
                                                     item.restoreTarget !== null;
                                                 const isConfirming =
                                                     confirmingRestore ===
@@ -1642,9 +1708,10 @@ export const HistoryDialog = ({
                                                                     )}
 
                                                                 {(item.canUndo ||
-                                                                    item.canRestore) && (
+                                                                    item.canRestore ||
+                                                                    item.canPermanentlyDelete) && (
                                                                     <div
-                                                                        className={`mt-4 flex min-h-13 items-center justify-end gap-1 pt-3 ${item.changes.length === 0 && !item.restoreTarget ? "border-t border-hairline" : ""}`}
+                                                                        className={`mt-4 flex min-h-13 flex-wrap items-center justify-end gap-1 pt-3 ${item.changes.length === 0 && !item.restoreTarget ? "border-t border-hairline" : ""}`}
                                                                     >
                                                                         {isConfirming ? (
                                                                             <>
@@ -1686,6 +1753,25 @@ export const HistoryDialog = ({
                                                                             </>
                                                                         ) : (
                                                                             <>
+                                                                                {item.canPermanentlyDelete && (
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={() =>
+                                                                                            setPermanentDelete(
+                                                                                                item,
+                                                                                            )
+                                                                                        }
+                                                                                        disabled={
+                                                                                            isLoading
+                                                                                        }
+                                                                                        className="mr-auto inline-flex h-10 cursor-pointer items-center px-3 text-xs font-medium text-rose transition-[background-color,scale] duration-150 ease-out hover:bg-rose-tint active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose disabled:cursor-wait disabled:opacity-50"
+                                                                                    >
+                                                                                        {permanentlyDeleting ===
+                                                                                        item.id
+                                                                                            ? "Deleting..."
+                                                                                            : "Delete permanently"}
+                                                                                    </button>
+                                                                                )}
                                                                                 {item.canUndo && (
                                                                                     <button
                                                                                         type="button"
@@ -1766,6 +1852,38 @@ export const HistoryDialog = ({
                             </div>
                         )}
                     </div>
+                )}
+
+                {permanentDelete && (
+                    <ConfirmDialog
+                        title={
+                            permanentDeleteLabel
+                                ? `Permanently delete ${permanentDeleteLabel}?`
+                                : "Permanently delete this application?"
+                        }
+                        detail="This removes the application from this list and from every History entry. It cannot be restored or undone."
+                        confirmLabel="Delete permanently"
+                        tone="danger"
+                        onConfirm={() => {
+                            permanentlyDelete(permanentDelete);
+                            setPermanentDelete(null);
+                        }}
+                        onCancel={() => setPermanentDelete(null)}
+                    />
+                )}
+
+                {confirmingClear && (
+                    <ConfirmDialog
+                        title="Clear all history?"
+                        detail="This deletes every History entry for this list. Your list and applications will not change. This cannot be undone."
+                        confirmLabel="Clear history"
+                        tone="danger"
+                        onConfirm={() => {
+                            setConfirmingClear(false);
+                            clearHistory();
+                        }}
+                        onCancel={() => setConfirmingClear(false)}
+                    />
                 )}
             </div>
         </dialog>

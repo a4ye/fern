@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import type { ActionResult } from "@/lib/validation";
 import {
     loadApplicationExtras,
+    permanentlyRemoveApplication,
     removeApplication,
     removeApplications,
     setApplicationsArrangement,
@@ -342,10 +343,12 @@ const BulkRow = ({
 const DeleteRow = ({
     label,
     onConfirm,
+    onPermanent,
     onCancel,
 }: {
     label: string;
     onConfirm: () => void;
+    onPermanent: () => void;
     onCancel: () => void;
 }) => (
     <li
@@ -355,6 +358,13 @@ const DeleteRow = ({
             Delete {label}? You can undo this from History.
         </p>
         <div className="flex shrink-0 items-center gap-1">
+            <button
+                type="button"
+                onClick={onPermanent}
+                className="inline-flex h-8 cursor-pointer items-center px-2.5 text-xs font-medium text-rose transition-[background-color,scale] duration-150 ease-out hover:bg-rose-tint active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose"
+            >
+                Delete permanently
+            </button>
             <button
                 type="button"
                 onClick={onCancel}
@@ -468,6 +478,10 @@ export const ApplicationsTable = ({
     } | null>(null);
     const [openingId, setOpeningId] = useState<string | null>(null);
     const [deletingId, setDeletingId] = useState<string | null>(null);
+    const [permanentDelete, setPermanentDelete] = useState<{
+        id: string;
+        label: string;
+    } | null>(null);
     const [selected, setSelected] = useState<Set<string>>(new Set());
     const [drafts, setDrafts] = useState<Map<string, Draft> | null>(null);
     const [bulkError, setBulkError] = useState<string | null>(null);
@@ -680,6 +694,15 @@ export const ApplicationsTable = ({
         startMutation(async () => {
             applyOptimistic({ type: "delete", ids: new Set([id]) });
             reportRefusal(await removeApplication(listId, id));
+        });
+    };
+
+    const onPermanentDelete = (id: string) => {
+        startMutation(async () => {
+            applyOptimistic({ type: "delete", ids: new Set([id]) });
+            const result = await permanentlyRemoveApplication(listId, id);
+            reportRefusal(result);
+            if (result.ok) toast.success("Application permanently deleted");
         });
     };
 
@@ -1124,6 +1147,13 @@ export const ApplicationsTable = ({
                                             key={app.id}
                                             label={app.company}
                                             onConfirm={() => onDelete(app.id)}
+                                            onPermanent={() => {
+                                                setDeletingId(null);
+                                                setPermanentDelete({
+                                                    id: app.id,
+                                                    label: app.company,
+                                                });
+                                            }}
                                             onCancel={() => setDeletingId(null)}
                                         />
                                     );
@@ -1177,6 +1207,20 @@ export const ApplicationsTable = ({
                         setConfirmingDelete(false);
                     }}
                     onCancel={() => setConfirmingDelete(false)}
+                />
+            )}
+
+            {permanentDelete && (
+                <ConfirmDialog
+                    title={`Permanently delete ${permanentDelete.label}?`}
+                    detail="This removes the application from this list and from History. It cannot be restored or undone."
+                    confirmLabel="Delete permanently"
+                    tone="danger"
+                    onConfirm={() => {
+                        onPermanentDelete(permanentDelete.id);
+                        setPermanentDelete(null);
+                    }}
+                    onCancel={() => setPermanentDelete(null)}
                 />
             )}
         </section>
