@@ -16,14 +16,18 @@ export const ROW_REM = 2.5;
 export const ROW_HEIGHT = "h-10";
 
 // Every full-width row shares this floor so the ones that leave the grid, like
-// the delete confirmation, still span the whole scrolled width.
-export const ROW_MIN_WIDTH = "min-w-[76rem]";
+// the delete confirmation, still span the whole scrolled width. It has to equal
+// what the grid below cannot shrink past, or those rows stop short of the others
+// once the table is scrolling: the ten column minimums (70.25rem) plus the nine
+// 0.75rem gaps plus the row's own px-5, which comes to 79.5rem.
+export const ROW_MIN_WIDTH = "min-w-[79.5rem]";
 
 // Applied is wider than its "Jul 28" needs: in bulk edit it holds a native date
 // field, and the browser's own picker glyph is what sets that floor. Pay holds
 // the longest label the table can print, "USD 120,000–140,000/yr", and is sized
-// to fit one rather than clip every range.
-export const APPLICATION_COLUMNS = `grid ${ROW_MIN_WIDTH} grid-cols-[1.75rem_minmax(9rem,1.6fr)_minmax(9rem,1.7fr)_8.5rem_minmax(7rem,1.2fr)_6.5rem_9.5rem_8rem_5rem_4.5rem] items-center gap-x-3`;
+// to fit one rather than clip every range. The last column is three 2rem action
+// squares, which is what keeps the glyphs off each other and off the row's edge.
+export const APPLICATION_COLUMNS = `grid ${ROW_MIN_WIDTH} grid-cols-[1.75rem_minmax(9rem,1.6fr)_minmax(9rem,1.7fr)_8.5rem_minmax(7rem,1.2fr)_6.5rem_9.5rem_8rem_5rem_6rem] items-center gap-x-3`;
 
 // The value columns in the order they are drawn, each with what it sorts by.
 // The checkbox and the row actions are not values and so are not here.

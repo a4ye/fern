@@ -197,6 +197,17 @@ const RowFields = ({
     </>
 );
 
+// Three 2rem squares fill the actions column exactly, and each spans the row's
+// full height, so the glyphs sit apart rather than in a huddle and there is a
+// real target to press on a phone rather than the icon's own 14px.
+const ACTION_CLASS =
+    "flex h-full w-8 items-center justify-center transition-[color,opacity] hover:text-ink";
+
+// A touch screen has no pointer to rest on a row, and Tailwind's hover variant
+// stands down there, so a glyph that waits for hover is one that never appears.
+const REVEAL_CLASS =
+    "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100";
+
 const ReadRow = ({
     app,
     selected,
@@ -256,7 +267,7 @@ const ReadRow = ({
             >
                 {app.updated}
             </LocalDateTime>
-            <span className="flex items-center justify-end gap-0.5 text-muted">
+            <span className="flex items-center justify-end self-stretch text-muted">
                 {app.url && (
                     <a
                         href={app.url}
@@ -264,7 +275,7 @@ const ReadRow = ({
                         rel="noreferrer"
                         title="Open posting"
                         aria-label="Open posting"
-                        className="p-1 transition-colors hover:text-ink"
+                        className={ACTION_CLASS}
                     >
                         <span
                             aria-hidden="true"
@@ -285,10 +296,10 @@ const ReadRow = ({
                     disabled={opening}
                     title="Edit application"
                     aria-label="Edit application"
-                    className={`p-1 transition-[color,opacity] focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
+                    className={`${ACTION_CLASS} focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
                         opening
                             ? "cursor-wait opacity-100"
-                            : "cursor-pointer opacity-0 group-hover:opacity-100 hover:text-ink"
+                            : `${REVEAL_CLASS} cursor-pointer`
                     }`}
                 >
                     <span
@@ -301,7 +312,7 @@ const ReadRow = ({
                     onClick={onDelete}
                     title="Delete application"
                     aria-label="Delete application"
-                    className="cursor-pointer p-1 opacity-0 transition-[color,opacity] group-hover:opacity-100 hover:text-ink focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                    className={`${ACTION_CLASS} ${REVEAL_CLASS} cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`}
                 >
                     <span
                         aria-hidden="true"
