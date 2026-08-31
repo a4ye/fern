@@ -40,13 +40,16 @@ const RootLayout = ({
                 toastOptions={{
                     unstyled: true,
                     classNames: {
-                        toast: "relative w-full border-x border-b border-hairline bg-background px-4 pt-3.5 pb-3 font-sans shadow-sm before:absolute before:inset-x-0 before:top-0 before:h-0.75",
-                        title: "text-xs font-medium text-ink",
+                        toast: "relative flex w-full items-center gap-3 border-x border-b border-hairline bg-background px-4 py-3 font-sans shadow-sm",
+                        content: "min-w-0 flex-1",
+                        title: "text-pretty text-xs font-medium text-ink",
                         description: "mt-1 text-xs text-sub",
-                        success: "before:bg-accent",
-                        info: "before:bg-accent",
-                        warning: "before:bg-gold",
-                        error: "before:bg-rose",
+                        actionButton:
+                            "focus-frame inline-flex h-10 shrink-0 cursor-pointer items-center border border-hairline bg-background px-3 text-xs font-medium text-ink transition-colors hover:border-tile-border",
+                        success: "border-t-[3px] border-t-accent",
+                        info: "border-t-[3px] border-t-accent",
+                        warning: "border-t-[3px] border-t-gold",
+                        error: "border-t-[3px] border-t-rose",
                     },
                 }}
             />

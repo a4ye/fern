@@ -44,6 +44,22 @@ export type EmailSuggestionInput = {
     reasoning: string | null;
 };
 
+const suggestionRows = (inputs: EmailSuggestionInput[]): string =>
+    JSON.stringify(
+        inputs.map((input) => ({
+            application_id: input.applicationId,
+            message_id: input.messageId,
+            email_from: input.from,
+            email_subject: input.subject,
+            email_snippet: input.snippet,
+            email_received_at: input.receivedAt.toISOString(),
+            current_status: input.currentStatus,
+            suggested_status: input.suggestedStatus,
+            confidence: input.confidence,
+            reasoning: input.reasoning,
+        })),
+    );
+
 export const insertEmailSuggestions = async (
     userId: string,
     inputs: EmailSuggestionInput[],
@@ -51,20 +67,7 @@ export const insertEmailSuggestions = async (
     if (inputs.length === 0) return 0;
     const rows = await gen.insertEmailSuggestions(getPool(), {
         userId,
-        rows: JSON.stringify(
-            inputs.map((input) => ({
-                application_id: input.applicationId,
-                message_id: input.messageId,
-                email_from: input.from,
-                email_subject: input.subject,
-                email_snippet: input.snippet,
-                email_received_at: input.receivedAt.toISOString(),
-                current_status: input.currentStatus,
-                suggested_status: input.suggestedStatus,
-                confidence: input.confidence,
-                reasoning: input.reasoning,
-            })),
-        ),
+        rows: suggestionRows(inputs),
     });
     return rows.length;
 };
@@ -83,14 +86,10 @@ export const listPendingSuggestions = async (
         role: row.roleTitle,
         listId: row.listId,
         listName: row.listName,
-        from: row.emailFrom,
+        messageId: row.messageId,
         subject: row.emailSubject,
-        snippet: row.emailSnippet,
-        receivedAt: row.emailReceivedAt.toISOString(),
         currentStatus: row.currentStatus as ApplicationStatus,
         suggestedStatus: row.suggestedStatus as ApplicationStatus,
-        confidence: row.confidence,
-        reasoning: row.reasoning,
     }));
 };
 
@@ -101,12 +100,85 @@ export const countPendingSuggestions = async (
     return row?.total ?? 0;
 };
 
-export const getLastSyncedAt = async (
-    userId: string,
-): Promise<string | null> => {
-    const row = await gen.getEmailSyncState(getPool(), { userId });
-    return row?.lastSyncedAt ? row.lastSyncedAt.toISOString() : null;
+export type EmailSyncState = {
+    lastSyncedAt: string | null;
+    historyId: string | null;
 };
+
+export const getEmailSyncState = async (
+    userId: string,
+): Promise<EmailSyncState> => {
+    const row = await gen.getEmailSyncState(getPool(), { userId });
+    return {
+        lastSyncedAt: row?.lastSyncedAt ? row.lastSyncedAt.toISOString() : null,
+        historyId: row?.historyId ?? null,
+    };
+};
+
+export const getLastSyncedAt = async (userId: string): Promise<string | null> =>
+    (await getEmailSyncState(userId)).lastSyncedAt;
+
+// Discovery and cursor advancement are one transaction: once Gmail's bookmark
+// moves forward, every message before it is already represented in the local
+// backlog, including messages that did not fit in this processing batch.
+export const stageEmailSyncMessages = async (
+    userId: string,
+    messageIds: string[],
+    historyId: string,
+): Promise<void> => {
+    await withTransaction(async (client) => {
+        if (messageIds.length > 0) {
+            await gen.insertEmailSyncMessages(client, {
+                userId,
+                messageIds: JSON.stringify(messageIds),
+            });
+        }
+        await gen.setEmailSyncCursor(client, { userId, historyId });
+    });
+};
+
+export const listPendingEmailSyncMessageIds = async (
+    userId: string,
+    limit: number,
+): Promise<string[]> => {
+    const rows = await gen.listPendingEmailSyncMessages(getPool(), {
+        userId,
+        rowLimit: limit,
+    });
+    return rows.map((row) => row.messageId);
+};
+
+export const countPendingEmailSyncMessages = async (
+    userId: string,
+): Promise<number> => {
+    const row = await gen.countPendingEmailSyncMessages(getPool(), { userId });
+    return row?.total ?? 0;
+};
+
+// Suggestions, processed markers, and the displayed sync time commit together.
+// A failure leaves the message IDs pending so a later sync can retry them.
+export const completeEmailSyncMessages = async (
+    userId: string,
+    messageIds: string[],
+    suggestions: EmailSuggestionInput[],
+): Promise<number> =>
+    withTransaction(async (client) => {
+        const inserted =
+            suggestions.length === 0
+                ? []
+                : await gen.insertEmailSuggestions(client, {
+                      userId,
+                      rows: suggestionRows(suggestions),
+                  });
+        if (messageIds.length > 0) {
+            await gen.markEmailSyncMessagesProcessed(client, {
+                userId,
+                messageIds: JSON.stringify(messageIds),
+            });
+        }
+        await gen.recordEmailSync(client, { userId });
+        return inserted.length;
+    });
 
 export const recordEmailSync = async (userId: string): Promise<void> => {
     await gen.recordEmailSync(getPool(), { userId });
