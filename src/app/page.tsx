@@ -14,7 +14,29 @@ import { SystemDiagram } from "@/components/landing/system-diagram";
 import { Timeline } from "@/components/landing/timeline";
 import { WordFill } from "@/components/landing/word-fill";
 
-const STEPS = [
+// Email sync access is temporarily limited, so its promotional content stays
+// off the public landing page until the wider rollout resumes.
+const EMAIL_SYNC_PROMOTION_ENABLED: boolean = false;
+
+const LINK_IMPORT_STEPS = [
+    {
+        numeral: "01",
+        title: "Paste a link",
+        body: "Company, role, salary, and dates fill themselves from the posting URL.",
+    },
+    {
+        numeral: "02",
+        title: "Review the details",
+        body: "Check what was found, then add any notes or details that matter to you.",
+    },
+    {
+        numeral: "03",
+        title: "Track your search",
+        body: "Keep every stage, date, salary, and note together as your search moves forward.",
+    },
+];
+
+const EMAIL_SYNC_STEPS = [
     {
         numeral: "01",
         title: "Paste a link",
@@ -32,7 +54,26 @@ const STEPS = [
     },
 ];
 
-const FINE_PRINT = [
+const STEPS = EMAIL_SYNC_PROMOTION_ENABLED
+    ? EMAIL_SYNC_STEPS
+    : LINK_IMPORT_STEPS;
+
+const STANDARD_FINE_PRINT = [
+    {
+        title: "Built for the search",
+        body: "Keep roles, stages, salary, dates, and notes together in one focused record.",
+    },
+    {
+        title: "Open source",
+        body: "The full source is public. Review it, contribute, or run your own instance.",
+    },
+    {
+        title: "Yours to keep",
+        body: "Export the whole record anytime. Your job-search data never gets trapped.",
+    },
+];
+
+const EMAIL_SYNC_FINE_PRINT = [
     {
         title: "Read only",
         body: `${APP_NAME} reads your recruiting mail. It never sends, moves, or deletes anything.`,
@@ -46,6 +87,10 @@ const FINE_PRINT = [
         body: "Export the whole record anytime, and disconnect your inbox in one click.",
     },
 ];
+
+const FINE_PRINT = EMAIL_SYNC_PROMOTION_ENABLED
+    ? EMAIL_SYNC_FINE_PRINT
+    : STANDARD_FINE_PRINT;
 
 const SectionRule = ({ number, id }: { number: string; id?: string }) => (
     <div
@@ -74,8 +119,17 @@ const Home = async () => {
                                 A job tracker that fills itself in.
                             </h1>
                             <p className="mt-5 max-w-md text-base leading-7 text-sub">
-                                Paste a link. Connect your inbox. The tracking
-                                happens on its own.
+                                {EMAIL_SYNC_PROMOTION_ENABLED ? (
+                                    <>
+                                        Paste a link. Connect your inbox. The
+                                        tracking happens on its own.
+                                    </>
+                                ) : (
+                                    <>
+                                        Paste a posting link. Keep every
+                                        application organized in one place.
+                                    </>
+                                )}
                             </p>
                             <div className="mt-8 flex items-center gap-6">
                                 <Link
@@ -116,7 +170,11 @@ const Home = async () => {
                                 aria-hidden="true"
                                 className="absolute inset-0 translate-x-3 translate-y-3 border border-hairline bg-accent-tint/40"
                             />
-                            <HeroMock />
+                            <HeroMock
+                                emailSyncPromotionEnabled={
+                                    EMAIL_SYNC_PROMOTION_ENABLED
+                                }
+                            />
                         </div>
                     </div>
                 </section>
@@ -129,9 +187,9 @@ const Home = async () => {
                     <div className="mt-10 grid items-start gap-10 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16">
                         <div className="max-w-md text-sm leading-6 text-sub">
                             <p>
-                                You type every field by hand. A recruiter
-                                replies and the status is already stale. A
-                                formula breaks, a sort scrambles, a reply you
+                                You type every field by hand. Updates pile up
+                                and the status is already stale. A formula
+                                breaks, a sort scrambles, an application you
                                 forget to log.
                             </p>
                             <p className="mt-4">
@@ -146,17 +204,33 @@ const Home = async () => {
                 <SectionRule number="02" id="how" />
                 <section className="bg-accent-tint-soft px-6 py-16 sm:px-10 lg:py-20">
                     <h2 className="max-w-xl text-3xl font-semibold tracking-tight text-balance">
-                        It reads the posting and your inbox,{" "}
-                        <span className="text-accent-deep">
-                            so you don&apos;t.
-                        </span>
+                        {EMAIL_SYNC_PROMOTION_ENABLED ? (
+                            <>
+                                It reads the posting and your inbox,{" "}
+                                <span className="text-accent-deep">
+                                    so you don&apos;t.
+                                </span>
+                            </>
+                        ) : (
+                            <>
+                                It reads the posting,{" "}
+                                <span className="text-accent-deep">
+                                    so you don&apos;t have to.
+                                </span>
+                            </>
+                        )}
                     </h2>
                     <p className="mt-4 max-w-md text-sm leading-6 text-sub">
-                        The link fills in the details. Your inbox keeps the
-                        stage current.
+                        {EMAIL_SYNC_PROMOTION_ENABLED
+                            ? "The link fills in the details. Your inbox keeps the stage current."
+                            : "Paste the link and the tracker fills in the company, role, salary, and dates."}
                     </p>
                     <div className="mt-12">
-                        <SystemDiagram />
+                        <SystemDiagram
+                            emailSyncPromotionEnabled={
+                                EMAIL_SYNC_PROMOTION_ENABLED
+                            }
+                        />
                     </div>
                     <div className="mt-14 grid gap-10 border-t border-hairline pt-10 sm:grid-cols-3">
                         {STEPS.map((step) => (
@@ -205,32 +279,39 @@ const Home = async () => {
                     </div>
                 </section>
 
-                <SectionRule number="04" />
-                <section className="relative overflow-hidden bg-surface px-6 py-16 sm:px-10 lg:py-20">
-                    <svg
-                        aria-hidden="true"
-                        viewBox="56 10 24 30"
-                        className="absolute top-10 -right-10 h-72 w-auto sm:right-4"
-                    >
-                        <path
-                            d={SLASH_PATH}
-                            className="fill-accent-tint-soft"
-                        />
-                    </svg>
-                    <div className="relative">
-                        <h2 className="max-w-xl text-3xl font-semibold tracking-tight text-balance">
-                            One application, start to finish.
-                        </h2>
-                        <div className="mt-12 max-w-2xl">
-                            <Timeline />
-                        </div>
-                        <p className="mt-12 max-w-md text-base font-medium text-ink">
-                            You did the interviews. The tracker kept the record.
-                        </p>
-                    </div>
-                </section>
+                {EMAIL_SYNC_PROMOTION_ENABLED && (
+                    <>
+                        <SectionRule number="04" />
+                        <section className="relative overflow-hidden bg-surface px-6 py-16 sm:px-10 lg:py-20">
+                            <svg
+                                aria-hidden="true"
+                                viewBox="56 10 24 30"
+                                className="absolute top-10 -right-10 h-72 w-auto sm:right-4"
+                            >
+                                <path
+                                    d={SLASH_PATH}
+                                    className="fill-accent-tint-soft"
+                                />
+                            </svg>
+                            <div className="relative">
+                                <h2 className="max-w-xl text-3xl font-semibold tracking-tight text-balance">
+                                    One application, start to finish.
+                                </h2>
+                                <div className="mt-12 max-w-2xl">
+                                    <Timeline />
+                                </div>
+                                <p className="mt-12 max-w-md text-base font-medium text-ink">
+                                    You did the interviews. The tracker kept the
+                                    record.
+                                </p>
+                            </div>
+                        </section>
+                    </>
+                )}
 
-                <SectionRule number="05" />
+                <SectionRule
+                    number={EMAIL_SYNC_PROMOTION_ENABLED ? "05" : "04"}
+                />
                 <section className="px-6 py-16 sm:px-10 lg:py-20">
                     <h2 className="max-w-xl text-3xl font-semibold tracking-tight text-balance">
                         The chart you never had to make.
@@ -244,7 +325,9 @@ const Home = async () => {
                     </div>
                 </section>
 
-                <SectionRule number="06" />
+                <SectionRule
+                    number={EMAIL_SYNC_PROMOTION_ENABLED ? "06" : "05"}
+                />
                 <section className="bg-surface px-6 py-16 sm:px-10">
                     <div className="grid gap-10 sm:grid-cols-3">
                         {FINE_PRINT.map((item) => (
@@ -299,7 +382,9 @@ const Home = async () => {
                 </section>
             </div>
 
-            <SiteFooter />
+            <SiteFooter
+                emailSyncPromotionEnabled={EMAIL_SYNC_PROMOTION_ENABLED}
+            />
         </main>
     );
 };

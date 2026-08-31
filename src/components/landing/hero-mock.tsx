@@ -50,7 +50,11 @@ const MonogramTile = ({
     </span>
 );
 
-export const HeroMock = () => (
+export const HeroMock = ({
+    emailSyncPromotionEnabled,
+}: {
+    emailSyncPromotionEnabled: boolean;
+}) => (
     <div
         aria-hidden="true"
         className="relative border border-hairline bg-background shadow-2xl shadow-ink/10"
@@ -86,7 +90,9 @@ export const HeroMock = () => (
         </div>
 
         <div className="divide-y divide-faint">
-            <div className={`lp lp-row-flash ${GRID} py-2.5`}>
+            <div
+                className={`${emailSyncPromotionEnabled ? "lp lp-row-flash " : ""}${GRID} py-2.5`}
+            >
                 <span className="flex min-w-0 items-center gap-2.5">
                     <MonogramTile letter="R" className="lp lp-tile" />
                     <span className="lp lp-cell-1 truncate text-sm font-medium">
@@ -96,13 +102,21 @@ export const HeroMock = () => (
                 <span className="lp lp-cell-2 hidden truncate text-sm text-sub sm:block">
                     Frontend Engineer
                 </span>
-                <span className="relative">
-                    <span className="lp lp-chip-applied text-sm font-medium text-sub opacity-0">
-                        Applied
-                    </span>
-                    <span className="lp lp-chip-interview absolute top-0 left-0 text-sm font-medium text-accent-deep">
-                        Interview
-                    </span>
+                <span className={emailSyncPromotionEnabled ? "relative" : ""}>
+                    {emailSyncPromotionEnabled ? (
+                        <>
+                            <span className="lp lp-chip-applied text-sm font-medium text-sub opacity-0">
+                                Applied
+                            </span>
+                            <span className="lp lp-chip-interview absolute top-0 left-0 text-sm font-medium text-accent-deep">
+                                Interview
+                            </span>
+                        </>
+                    ) : (
+                        <span className="lp lp-cell-3 text-sm font-medium text-sub">
+                            Applied
+                        </span>
+                    )}
                 </span>
                 <span className="lp lp-cell-3 hidden text-sm text-sub tabular-nums sm:block">
                     $180k
@@ -136,13 +150,15 @@ export const HeroMock = () => (
             ))}
         </div>
 
-        <div className="flex h-10 items-center border-t border-hairline px-4">
-            <span className="lp lp-activity flex items-center gap-2">
-                <span className="icon-[simple-icons--gmail] size-3 text-muted" />
-                <span className="text-xs text-sub">
-                    Ramp moved to Interview from your inbox
+        {emailSyncPromotionEnabled && (
+            <div className="flex h-10 items-center border-t border-hairline px-4">
+                <span className="lp lp-activity flex items-center gap-2">
+                    <span className="icon-[simple-icons--gmail] size-3 text-muted" />
+                    <span className="text-xs text-sub">
+                        Ramp moved to Interview from your inbox
+                    </span>
                 </span>
-            </span>
-        </div>
+            </div>
+        )}
     </div>
 );

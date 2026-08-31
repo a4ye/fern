@@ -69,7 +69,11 @@ const FooterColumn = ({
     </div>
 );
 
-export const SiteFooter = () => (
+export const SiteFooter = ({
+    emailSyncPromotionEnabled = false,
+}: {
+    emailSyncPromotionEnabled?: boolean;
+}) => (
     <footer className="border-t border-hairline bg-surface">
         <div className="mx-auto w-full max-w-6xl px-6 py-14 sm:px-10">
             <div className="grid gap-10 md:grid-cols-[1.6fr_1fr_1fr_1fr]">
@@ -84,8 +88,18 @@ export const SiteFooter = () => (
                         </span>
                     </Link>
                     <p className="mt-4 max-w-xs text-sm leading-6 text-sub">
-                        Stop updating spreadsheets. Paste a link, connect your
-                        inbox, and let the tracker do the rest.
+                        {emailSyncPromotionEnabled ? (
+                            <>
+                                Stop updating spreadsheets. Paste a link,
+                                connect your inbox, and let the tracker do the
+                                rest.
+                            </>
+                        ) : (
+                            <>
+                                Stop updating spreadsheets. Paste a posting link
+                                and keep every application organized.
+                            </>
+                        )}
                     </p>
                     <a
                         href={GITHUB_URL}
