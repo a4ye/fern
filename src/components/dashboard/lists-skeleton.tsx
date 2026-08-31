@@ -1,4 +1,10 @@
 import { LIST_PAGE_SIZE } from "@/components/dashboard/data";
+import {
+    LIST_ROW_ACTION,
+    LIST_ROW_MAIN,
+    LIST_ROW_META,
+    LIST_ROW_PIN_ACTION,
+} from "@/components/dashboard/list-row-layout";
 
 // Loading placeholders for the lists index. The row markup mirrors ListRow
 // (same padding and line-box heights) and a full page of rows plus the
@@ -7,7 +13,7 @@ import { LIST_PAGE_SIZE } from "@/components/dashboard/data";
 
 const SkeletonRow = () => (
     <li className="flex items-stretch border-b border-faint last:border-b-0">
-        <div className="flex min-w-0 flex-1 items-center gap-4 px-5 py-4">
+        <div className={LIST_ROW_MAIN}>
             <div className="min-w-0 flex-1">
                 <div className="flex h-6 items-center gap-3">
                     <span className="skeleton h-3.5 w-40" />
@@ -17,12 +23,18 @@ const SkeletonRow = () => (
                     <span className="skeleton h-3 w-64 max-w-full" />
                 </div>
             </div>
-            <div className="hidden items-center gap-6 sm:flex">
-                <span className="skeleton h-3.5 w-24" />
-                <span className="skeleton h-3.5 w-14" />
+            <div className={LIST_ROW_META}>
+                <span className="skeleton h-3.5 w-24 justify-self-end" />
+                <span className="skeleton h-3.5 w-28 justify-self-end" />
             </div>
         </div>
-        <div className="flex shrink-0 items-center px-4">
+        <div className={LIST_ROW_ACTION}>
+            <span className="skeleton size-4" />
+        </div>
+        <div className={LIST_ROW_ACTION}>
+            <span className="skeleton size-4" />
+        </div>
+        <div className={LIST_ROW_PIN_ACTION}>
             <span className="skeleton size-4" />
         </div>
     </li>
@@ -49,7 +61,11 @@ export const ListRowsSkeleton = ({
     </div>
 );
 
-export const ListsPageSkeleton = () => (
+export const ListsPageSkeleton = ({
+    hasInboxSync,
+}: {
+    hasInboxSync: boolean;
+}) => (
     <div className="mx-auto w-full max-w-7xl flex-1 px-6 py-10 sm:px-10">
         <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
@@ -64,7 +80,13 @@ export const ListsPageSkeleton = () => (
                 <span className="skeleton h-8 w-full sm:w-56" />
                 <div className="flex items-center gap-3">
                     <span className="skeleton h-8 w-44" />
-                    <span className="skeleton h-8 w-24" />
+                    {hasInboxSync ? (
+                        <span className="skeleton h-8 w-36" />
+                    ) : null}
+                    <span className="skeleton inline-flex h-8 shrink-0 items-center gap-1.5 px-3 text-sm font-medium whitespace-nowrap">
+                        <span className="size-4 shrink-0" />
+                        <span className="invisible">New list</span>
+                    </span>
                 </div>
             </div>
         </div>

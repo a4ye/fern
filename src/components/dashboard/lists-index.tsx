@@ -26,6 +26,12 @@ import {
     type ListSummary,
 } from "@/components/dashboard/data";
 import { EmailSyncMenu } from "@/components/dashboard/email-sync";
+import {
+    LIST_ROW_ACTION,
+    LIST_ROW_MAIN,
+    LIST_ROW_META,
+    LIST_ROW_PIN_ACTION,
+} from "@/components/dashboard/list-row-layout";
 import { LocalDateTime } from "@/components/dashboard/local-date-time";
 import { ListRowsSkeleton } from "@/components/dashboard/lists-skeleton";
 import {
@@ -82,7 +88,7 @@ const ListRow = ({
     <li className="group flex items-stretch border-b border-faint last:border-b-0">
         <Link
             href={href}
-            className="flex min-w-0 flex-1 items-center gap-4 px-5 py-4 transition-colors hover:bg-surface"
+            className={`${LIST_ROW_MAIN} transition-colors hover:bg-surface`}
         >
             <div className="min-w-0 flex-1">
                 <div className="flex h-6 items-center gap-3">
@@ -95,11 +101,11 @@ const ListRow = ({
                     {list.description}
                 </p>
             </div>
-            <div className="hidden items-baseline gap-6 text-sm text-sub sm:flex">
-                <span className="tabular-nums">
+            <div className={LIST_ROW_META}>
+                <span className="truncate text-right tabular-nums">
                     {list.totalApplications} applications
                 </span>
-                <span className="text-muted">
+                <span className="truncate text-right text-muted">
                     Edited{" "}
                     <LocalDateTime
                         dateTime={list.updatedAt}
@@ -116,7 +122,7 @@ const ListRow = ({
             onClick={() => onEdit(list)}
             aria-label="Edit list"
             title="Edit list"
-            className="flex shrink-0 cursor-pointer items-center px-3 transition-colors hover:bg-surface"
+            className={`${LIST_ROW_ACTION} cursor-pointer transition-colors hover:bg-surface`}
         >
             <span
                 aria-hidden="true"
@@ -128,7 +134,7 @@ const ListRow = ({
             onClick={() => onDelete(list)}
             aria-label="Delete list"
             title="Delete list"
-            className="flex shrink-0 cursor-pointer items-center px-3 transition-colors hover:bg-surface"
+            className={`${LIST_ROW_ACTION} cursor-pointer transition-colors hover:bg-surface`}
         >
             <span
                 aria-hidden="true"
@@ -141,7 +147,7 @@ const ListRow = ({
             aria-pressed={list.pinned}
             aria-label={list.pinned ? "Unpin list" : "Pin list"}
             title={list.pinned ? "Unpin list" : "Pin list"}
-            className="flex shrink-0 cursor-pointer items-center px-4 transition-colors hover:bg-surface"
+            className={`${LIST_ROW_PIN_ACTION} cursor-pointer transition-colors hover:bg-surface`}
         >
             <span
                 aria-hidden="true"
@@ -715,7 +721,7 @@ export const ListsIndex = ({
                             className="focus-frame h-8 w-full border border-hairline bg-background pr-2.5 pl-8 text-sm text-ink transition-colors placeholder:text-muted hover:border-tile-border"
                         />
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="relative flex items-center gap-3">
                         <SortSelect value={sort} onChange={onSortChange} />
                         {emailPanel ? (
                             <EmailSyncMenu panel={emailPanel} />

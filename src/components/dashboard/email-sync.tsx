@@ -136,7 +136,7 @@ const EmailSyncPopover = ({
 }: EmailSyncPopoverProps) => (
     <div
         data-open={open ? true : undefined}
-        className="popup absolute right-0 top-full z-50 mt-2 w-[calc(100vw-1.5rem)] flex-col border border-hairline bg-background shadow-sm sm:w-[28rem]"
+        className="popup absolute right-0 top-full z-50 mt-2 w-full flex-col border border-hairline bg-background shadow-sm sm:w-[28rem]"
     >
         <div className="flex h-14 items-center justify-between gap-3 border-b border-hairline px-4">
             <div className="flex min-w-0 items-center gap-2">
@@ -400,7 +400,7 @@ export const EmailSyncMenu = ({ panel }: { panel: EmailSyncPanel }) => {
     };
 
     return (
-        <div ref={ref} className="relative">
+        <div ref={ref} className="static sm:relative">
             <EmailSyncTrigger
                 count={count}
                 open={open}
