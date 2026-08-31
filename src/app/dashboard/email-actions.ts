@@ -4,31 +4,32 @@ import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { auth, emailSyncEnabled, GOOGLE_PROVIDER_ID } from "@/lib/auth";
-import {
-    applySuggestion,
-    dismissSuggestion,
-    getApplicationsForUser,
-    insertEmailSuggestions,
-    recordEmailSync,
-} from "@/db/email";
-import { classifyEmails } from "@/lib/email/classify";
+import { applySuggestion, dismissSuggestion } from "@/db/email";
 import { createGmailProvider } from "@/lib/email/gmail";
+import { syncEmailInbox } from "@/lib/email/sync";
+import { EMAIL_SYNC_COPY } from "@/lib/email/copy";
 import { EmailAuthError } from "@/lib/email/types";
 import { recordMetrics } from "@/db/metrics";
 import { withinBudget } from "@/db/rate-limit";
 import { INBOX_SCAN, INBOX_SUGGESTION, record } from "@/lib/metrics";
 import { TOO_MANY_REQUESTS } from "@/lib/limits";
 import { timeZoneSchema } from "@/lib/validation";
-
-const MAX_EMAILS = 25;
-const NEWER_THAN_DAYS = 30;
+import { isEmailSyncApproved } from "@/lib/email/access";
 
 export type SyncResult =
-    | { ok: true; found: number; scanned: number }
+    | {
+          ok: true;
+          found: number;
+          scanned: number;
+          remaining: number;
+          hasMore: boolean;
+          initialScanLimited: boolean;
+      }
     | {
           ok: false;
           reason:
               | "unauthenticated"
+              | "not_approved"
               | "not_connected"
               | "auth_expired"
               | "ai_unconfigured"
@@ -43,7 +44,15 @@ export const syncInbox = async (): Promise<SyncResult> => {
         return {
             ok: false,
             reason: "unauthenticated",
-            message: "Sign in to sync your inbox.",
+            message: EMAIL_SYNC_COPY.signIn,
+        };
+    }
+
+    if (!isEmailSyncApproved(session.user.email)) {
+        return {
+            ok: false,
+            reason: "not_approved",
+            message: EMAIL_SYNC_COPY.notApproved,
         };
     }
 
@@ -51,8 +60,7 @@ export const syncInbox = async (): Promise<SyncResult> => {
         return {
             ok: false,
             reason: "ai_unconfigured",
-            message:
-                "Inbox sync is not configured for privacy-safe processing.",
+            message: EMAIL_SYNC_COPY.unconfigured,
         };
     }
 
@@ -75,7 +83,7 @@ export const syncInbox = async (): Promise<SyncResult> => {
         return {
             ok: false,
             reason: "not_connected",
-            message: "Connect a Google account to sync your inbox.",
+            message: EMAIL_SYNC_COPY.connectGoogle,
         };
     }
 
@@ -83,74 +91,26 @@ export const syncInbox = async (): Promise<SyncResult> => {
 
     try {
         const provider = createGmailProvider(accessToken);
-        const [emails, applications] = await Promise.all([
-            provider.fetchRecent({
-                maxResults: MAX_EMAILS,
-                newerThanDays: NEWER_THAN_DAYS,
-            }),
-            getApplicationsForUser(userId),
-        ]);
-
-        const matches = await classifyEmails(
-            applications.map((app) => ({
-                company: app.company,
-                role: app.role,
-                currentStatus: app.status,
-            })),
-            emails,
-        );
-
-        const suggestions = new Map<string, (typeof matches)[number]>();
-        for (const match of matches) {
-            const email = emails[match.emailIndex];
-            const application = applications[match.applicationIndex];
-            // Skip matches that only restate the current status.
-            if (application.status === match.suggestedStatus) continue;
-            const key = `${application.id}\u0000${email.id}`;
-            const previous = suggestions.get(key);
-            if (!previous || previous.confidence < match.confidence) {
-                suggestions.set(key, match);
-            }
-            if (suggestions.size >= MAX_EMAILS) break;
-        }
-
-        const found = await insertEmailSuggestions(
-            userId,
-            [...suggestions.values()].map((match) => {
-                const email = emails[match.emailIndex];
-                const application = applications[match.applicationIndex];
-                return {
-                    applicationId: application.id,
-                    messageId: email.id,
-                    from: email.from,
-                    subject: email.subject,
-                    snippet: email.snippet,
-                    receivedAt: email.receivedAt,
-                    currentStatus: application.status,
-                    suggestedStatus: match.suggestedStatus,
-                    confidence: match.confidence,
-                    reasoning: match.reasoning,
-                };
-            }),
-        );
-        await recordEmailSync(userId);
+        const outcome = await syncEmailInbox(userId, provider);
         // What the model was given and what it proposed, which together are the
         // only measure of whether it is worth paying for. What becomes of each
         // proposal is counted where the user answers it.
         after(() =>
             recordMetrics([
-                record(INBOX_SCAN, "read", { total: emails.length }),
-                record(INBOX_SUGGESTION, "offered", { count: found }),
+                record(INBOX_SCAN, "read", { total: outcome.scanned }),
+                record(INBOX_SUGGESTION, "offered", {
+                    count: outcome.found,
+                }),
             ]),
         );
         revalidatePath("/dashboard", "layout");
-        return { ok: true, found, scanned: emails.length };
+        return { ok: true, ...outcome };
     } catch (error) {
         if (error instanceof EmailAuthError) {
             return {
                 ok: false,
                 reason: "auth_expired",
-                message: "Google access expired. Reconnect to keep syncing.",
+                message: EMAIL_SYNC_COPY.accessExpired,
             };
         }
         return {
@@ -159,7 +119,7 @@ export const syncInbox = async (): Promise<SyncResult> => {
             message:
                 error instanceof Error
                     ? error.message
-                    : "Sync failed. Please try again.",
+                    : EMAIL_SYNC_COPY.genericFailure,
         };
     }
 };
@@ -170,6 +130,7 @@ export const acceptSuggestion = async (
 ): Promise<void> => {
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session) return;
+    if (!isEmailSyncApproved(session.user.email)) return;
     if (!(await withinBudget(session.user.id, "write"))) return;
 
     const parsedTimeZone = timeZoneSchema.safeParse(timeZone);
@@ -185,6 +146,7 @@ export const dismissSuggestionAction = async (
 ): Promise<void> => {
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session) return;
+    if (!isEmailSyncApproved(session.user.email)) return;
     if (!(await withinBudget(session.user.id, "write"))) return;
 
     await dismissSuggestion(session.user.id, suggestionId);

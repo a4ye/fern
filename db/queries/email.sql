@@ -63,14 +63,10 @@ select
     a.role_title,
     l.id as list_id,
     l.name as list_name,
-    s.email_from,
+    s.message_id,
     s.email_subject,
-    s.email_snippet,
-    s.email_received_at,
     s.current_status,
-    s.suggested_status,
-    s.confidence,
-    s.reasoning
+    s.suggested_status
 from email_suggestions s
 join applications a on a.id = s.application_id
 join lists l on l.id = a.list_id
@@ -95,7 +91,7 @@ from email_suggestions
 where user_id = @user_id and state = 'pending';
 
 -- name: RecordEmailSync :exec
-with pruned as (
+with pruned_suggestions as (
     delete from email_suggestions
     where id in (
         select id
@@ -105,10 +101,56 @@ with pruned as (
         order by created_at
         limit 500
     )
+),
+pruned_messages as (
+    delete from email_sync_messages
+    where (user_id, message_id) in (
+        select user_id, message_id
+        from email_sync_messages
+        where processed_at <= now() - interval '90 days'
+        order by processed_at
+        limit 1000
+    )
 )
 insert into email_sync_state (user_id, last_synced_at)
 values (@user_id, now())
 on conflict (user_id) do update set last_synced_at = now();
 
 -- name: GetEmailSyncState :one
-select last_synced_at from email_sync_state where user_id = @user_id;
+select last_synced_at, history_id
+from email_sync_state
+where user_id = @user_id;
+
+-- name: InsertEmailSyncMessages :many
+insert into email_sync_messages (user_id, message_id)
+select @user_id, input.value
+from jsonb_array_elements_text(@message_ids::jsonb) as input(value)
+on conflict (user_id, message_id) do nothing
+returning message_id;
+
+-- name: SetEmailSyncCursor :exec
+insert into email_sync_state (user_id, history_id)
+values (@user_id, @history_id)
+on conflict (user_id) do update set history_id = excluded.history_id;
+
+-- name: ListPendingEmailSyncMessages :many
+select message_id
+from email_sync_messages
+where user_id = @user_id and processed_at is null
+order by discovered_at, message_id
+limit @row_limit::int;
+
+-- name: MarkEmailSyncMessagesProcessed :exec
+update email_sync_messages
+set processed_at = now()
+where user_id = @user_id
+    and processed_at is null
+    and message_id in (
+        select input.value
+        from jsonb_array_elements_text(@message_ids::jsonb) as input(value)
+    );
+
+-- name: CountPendingEmailSyncMessages :one
+select count(*)::int as total
+from email_sync_messages
+where user_id = @user_id and processed_at is null;

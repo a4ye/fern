@@ -1,8 +1,10 @@
-import { betterAuth } from "better-auth";
+import { APIError, betterAuth } from "better-auth";
+import { createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
 import { cache } from "react";
 import { headers } from "next/headers";
 import { getPool } from "@/db/client";
+import { isEmailSyncApproved } from "@/lib/email/access";
 
 const requiredEnv = (name: string): string => {
     const value = process.env[name];
@@ -69,6 +71,36 @@ export const auth = betterAuth({
                   },
               }
             : {}),
+    },
+    hooks: {
+        before: createAuthMiddleware(async (context) => {
+            const isGoogleCallback =
+                context.path === `/callback/${GOOGLE_PROVIDER_ID}`;
+            if (
+                context.body?.provider !== GOOGLE_PROVIDER_ID &&
+                !isGoogleCallback
+            ) {
+                return;
+            }
+
+            // Google is only for linking Gmail to an existing GitHub account,
+            // never for signing in to Job Tracker directly.
+            if (context.path === "/sign-in/social") {
+                throw APIError.from("FORBIDDEN", {
+                    code: "GOOGLE_SIGN_IN_DISABLED",
+                    message: "Google sign-in is not available.",
+                });
+            }
+            if (context.path !== "/link-social" && !isGoogleCallback) return;
+
+            const session = await getSessionFromCtx(context);
+            if (!session || !isEmailSyncApproved(session.user.email)) {
+                throw APIError.from("FORBIDDEN", {
+                    code: "EMAIL_SYNC_NOT_APPROVED",
+                    message: "Inbox sync is not available for this account.",
+                });
+            }
+        }),
     },
     // Sign-in and the OAuth callbacks are the only endpoints anyone can reach
     // without a session, so they are the only ones an anonymous caller can

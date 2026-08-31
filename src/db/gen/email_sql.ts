@@ -124,14 +124,10 @@ select
     a.role_title,
     l.id as list_id,
     l.name as list_name,
-    s.email_from,
+    s.message_id,
     s.email_subject,
-    s.email_snippet,
-    s.email_received_at,
     s.current_status,
-    s.suggested_status,
-    s.confidence,
-    s.reasoning
+    s.suggested_status
 from email_suggestions s
 join applications a on a.id = s.application_id
 join lists l on l.id = a.list_id
@@ -150,14 +146,10 @@ export interface ListPendingSuggestionsRow {
     roleTitle: string | null;
     listId: string;
     listName: string;
-    emailFrom: string;
+    messageId: string;
     emailSubject: string;
-    emailSnippet: string;
-    emailReceivedAt: Date;
     currentStatus: string;
     suggestedStatus: string;
-    confidence: number;
-    reasoning: string | null;
 }
 
 export async function listPendingSuggestions(client: Client, args: ListPendingSuggestionsArgs): Promise<ListPendingSuggestionsRow[]> {
@@ -174,14 +166,10 @@ export async function listPendingSuggestions(client: Client, args: ListPendingSu
             roleTitle: row[3],
             listId: row[4],
             listName: row[5],
-            emailFrom: row[6],
+            messageId: row[6],
             emailSubject: row[7],
-            emailSnippet: row[8],
-            emailReceivedAt: row[9],
-            currentStatus: row[10],
-            suggestedStatus: row[11],
-            confidence: row[12],
-            reasoning: row[13]
+            currentStatus: row[8],
+            suggestedStatus: row[9]
         };
     });
 }
@@ -270,7 +258,7 @@ export async function countPendingSuggestions(client: Client, args: CountPending
 }
 
 export const recordEmailSyncQuery = `-- name: RecordEmailSync :exec
-with pruned as (
+with pruned_suggestions as (
     delete from email_suggestions
     where id in (
         select id
@@ -279,6 +267,16 @@ with pruned as (
             and created_at <= now() - interval '90 days'
         order by created_at
         limit 500
+    )
+),
+pruned_messages as (
+    delete from email_sync_messages
+    where (user_id, message_id) in (
+        select user_id, message_id
+        from email_sync_messages
+        where processed_at <= now() - interval '90 days'
+        order by processed_at
+        limit 1000
     )
 )
 insert into email_sync_state (user_id, last_synced_at)
@@ -298,7 +296,9 @@ export async function recordEmailSync(client: Client, args: RecordEmailSyncArgs)
 }
 
 export const getEmailSyncStateQuery = `-- name: GetEmailSyncState :one
-select last_synced_at from email_sync_state where user_id = $1`;
+select last_synced_at, history_id
+from email_sync_state
+where user_id = $1`;
 
 export interface GetEmailSyncStateArgs {
     userId: string;
@@ -306,6 +306,7 @@ export interface GetEmailSyncStateArgs {
 
 export interface GetEmailSyncStateRow {
     lastSyncedAt: Date | null;
+    historyId: string | null;
 }
 
 export async function getEmailSyncState(client: Client, args: GetEmailSyncStateArgs): Promise<GetEmailSyncStateRow | null> {
@@ -319,7 +320,135 @@ export async function getEmailSyncState(client: Client, args: GetEmailSyncStateA
     }
     const row = result.rows[0];
     return {
-        lastSyncedAt: row[0]
+        lastSyncedAt: row[0],
+        historyId: row[1]
+    };
+}
+
+export const insertEmailSyncMessagesQuery = `-- name: InsertEmailSyncMessages :many
+insert into email_sync_messages (user_id, message_id)
+select $1, input.value
+from jsonb_array_elements_text($2::jsonb) as input(value)
+on conflict (user_id, message_id) do nothing
+returning message_id`;
+
+export interface InsertEmailSyncMessagesArgs {
+    userId: string;
+    messageIds: any;
+}
+
+export interface InsertEmailSyncMessagesRow {
+    messageId: string;
+}
+
+export async function insertEmailSyncMessages(client: Client, args: InsertEmailSyncMessagesArgs): Promise<InsertEmailSyncMessagesRow[]> {
+    const result = await client.query({
+        text: insertEmailSyncMessagesQuery,
+        values: [args.userId, args.messageIds],
+        rowMode: "array"
+    });
+    return result.rows.map(row => {
+        return {
+            messageId: row[0]
+        };
+    });
+}
+
+export const setEmailSyncCursorQuery = `-- name: SetEmailSyncCursor :exec
+insert into email_sync_state (user_id, history_id)
+values ($1, $2)
+on conflict (user_id) do update set history_id = excluded.history_id`;
+
+export interface SetEmailSyncCursorArgs {
+    userId: string;
+    historyId: string | null;
+}
+
+export async function setEmailSyncCursor(client: Client, args: SetEmailSyncCursorArgs): Promise<void> {
+    await client.query({
+        text: setEmailSyncCursorQuery,
+        values: [args.userId, args.historyId],
+        rowMode: "array"
+    });
+}
+
+export const listPendingEmailSyncMessagesQuery = `-- name: ListPendingEmailSyncMessages :many
+select message_id
+from email_sync_messages
+where user_id = $1 and processed_at is null
+order by discovered_at, message_id
+limit $2::int`;
+
+export interface ListPendingEmailSyncMessagesArgs {
+    userId: string;
+    rowLimit: number;
+}
+
+export interface ListPendingEmailSyncMessagesRow {
+    messageId: string;
+}
+
+export async function listPendingEmailSyncMessages(client: Client, args: ListPendingEmailSyncMessagesArgs): Promise<ListPendingEmailSyncMessagesRow[]> {
+    const result = await client.query({
+        text: listPendingEmailSyncMessagesQuery,
+        values: [args.userId, args.rowLimit],
+        rowMode: "array"
+    });
+    return result.rows.map(row => {
+        return {
+            messageId: row[0]
+        };
+    });
+}
+
+export const markEmailSyncMessagesProcessedQuery = `-- name: MarkEmailSyncMessagesProcessed :exec
+update email_sync_messages
+set processed_at = now()
+where user_id = $1
+    and processed_at is null
+    and message_id in (
+        select input.value
+        from jsonb_array_elements_text($2::jsonb) as input(value)
+    )`;
+
+export interface MarkEmailSyncMessagesProcessedArgs {
+    userId: string;
+    messageIds: any;
+}
+
+export async function markEmailSyncMessagesProcessed(client: Client, args: MarkEmailSyncMessagesProcessedArgs): Promise<void> {
+    await client.query({
+        text: markEmailSyncMessagesProcessedQuery,
+        values: [args.userId, args.messageIds],
+        rowMode: "array"
+    });
+}
+
+export const countPendingEmailSyncMessagesQuery = `-- name: CountPendingEmailSyncMessages :one
+select count(*)::int as total
+from email_sync_messages
+where user_id = $1 and processed_at is null`;
+
+export interface CountPendingEmailSyncMessagesArgs {
+    userId: string;
+}
+
+export interface CountPendingEmailSyncMessagesRow {
+    total: number;
+}
+
+export async function countPendingEmailSyncMessages(client: Client, args: CountPendingEmailSyncMessagesArgs): Promise<CountPendingEmailSyncMessagesRow | null> {
+    const result = await client.query({
+        text: countPendingEmailSyncMessagesQuery,
+        values: [args.userId],
+        rowMode: "array"
+    });
+    if (result.rows.length !== 1) {
+        return null;
+    }
+    const row = result.rows[0];
+    return {
+        total: row[0]
     };
 }
 

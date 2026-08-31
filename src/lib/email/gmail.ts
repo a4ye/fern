@@ -1,5 +1,8 @@
 import {
     EmailAuthError,
+    EmailHistoryExpiredError,
+    EmailMessageUnavailableError,
+    type EmailDiscovery,
     type EmailProvider,
     type FetchOptions,
     type NormalizedEmail,
@@ -19,6 +22,13 @@ type GmailMessage = {
     snippet?: string;
     internalDate?: string;
     payload?: GmailPart & { headers?: GmailHeader[] };
+};
+type GmailProfile = {
+    historyId: string;
+};
+type GmailHistory = {
+    id: string;
+    messagesAdded?: { message: { id: string } }[];
 };
 
 const decodeBase64Url = (data: string): string =>
@@ -72,6 +82,7 @@ const gmailErrorMessage = (body: string, status: number): string => {
 const authedFetch = async (
     accessToken: string,
     path: string,
+    notFound: "history" | "message" | null = null,
 ): Promise<Response> => {
     const response = await fetch(`${GMAIL_API}${path}`, {
         headers: { Authorization: `Bearer ${accessToken}` },
@@ -79,6 +90,10 @@ const authedFetch = async (
     if (response.ok) return response;
 
     const body = await response.text();
+    if (response.status === 404) {
+        if (notFound === "history") throw new EmailHistoryExpiredError();
+        if (notFound === "message") throw new EmailMessageUnavailableError();
+    }
     // A 401, or a 403 caused specifically by missing scopes, means the grant is
     // bad and the user must reconnect. Other 403s are configuration problems
     // (e.g. the Gmail API disabled on the Cloud project) and would only mislead
@@ -93,45 +108,122 @@ const authedFetch = async (
     throw new Error(gmailErrorMessage(body, response.status));
 };
 
-export const createGmailProvider = (accessToken: string): EmailProvider => ({
-    async fetchRecent({
-        maxResults,
-        newerThanDays,
-    }: FetchOptions): Promise<NormalizedEmail[]> {
-        // Scope to the inbox: recruiter status updates land there, while the
-        // user's own outgoing mail (sent-only) and drafts are excluded. A
-        // message sent to oneself keeps the INBOX label, so it still matches.
-        const query = encodeURIComponent(
-            `in:inbox newer_than:${newerThanDays}d`,
-        );
-        const listResponse = await authedFetch(
-            accessToken,
-            `/messages?maxResults=${maxResults}&q=${query}`,
-        );
-        const list = (await listResponse.json()) as {
-            messages?: { id: string }[];
-        };
-        const ids = (list.messages ?? []).map((message) => message.id);
+const unique = (values: string[]): string[] => [...new Set(values)];
 
+export const createGmailProvider = (accessToken: string): EmailProvider => {
+    const fetchMessages = async (ids: string[]): Promise<NormalizedEmail[]> => {
         const messages = await Promise.all(
-            ids.map(async (id): Promise<NormalizedEmail> => {
-                const response = await authedFetch(
-                    accessToken,
-                    `/messages/${id}?format=full`,
-                );
-                const message = (await response.json()) as GmailMessage;
-                const headers = message.payload?.headers ?? [];
-                const body = extractBody(message.payload).slice(0, BODY_LIMIT);
-                return {
-                    id: message.id,
-                    from: headerValue(headers, "From"),
-                    subject: headerValue(headers, "Subject"),
-                    snippet: message.snippet ?? "",
-                    body,
-                    receivedAt: new Date(Number(message.internalDate ?? 0)),
-                };
+            ids.map(async (id): Promise<NormalizedEmail | null> => {
+                try {
+                    const response = await authedFetch(
+                        accessToken,
+                        `/messages/${id}?format=full`,
+                        "message",
+                    );
+                    const message = (await response.json()) as GmailMessage;
+                    const headers = message.payload?.headers ?? [];
+                    const body = extractBody(message.payload).slice(
+                        0,
+                        BODY_LIMIT,
+                    );
+                    return {
+                        id: message.id,
+                        from: headerValue(headers, "From"),
+                        subject: headerValue(headers, "Subject"),
+                        snippet: message.snippet ?? "",
+                        body,
+                        receivedAt: new Date(Number(message.internalDate ?? 0)),
+                    };
+                } catch (error) {
+                    if (error instanceof EmailMessageUnavailableError) {
+                        return null;
+                    }
+                    throw error;
+                }
             }),
         );
-        return messages;
-    },
-});
+        return messages.filter(
+            (message): message is NormalizedEmail => message !== null,
+        );
+    };
+
+    return {
+        async discoverRecent({
+            maxResults,
+            newerThanDays,
+        }: FetchOptions): Promise<EmailDiscovery> {
+            // Take the cursor first. Mail arriving during the bounded list has a
+            // later history ID and is therefore recovered by the next delta.
+            const profileResponse = await authedFetch(accessToken, "/profile");
+            const profile = (await profileResponse.json()) as GmailProfile;
+
+            // Scope to the inbox: recruiter status updates land there, while the
+            // user's own outgoing mail (sent-only) and drafts are excluded. A
+            // message sent to oneself keeps the INBOX label, so it still matches.
+            const query = encodeURIComponent(
+                `in:inbox newer_than:${newerThanDays}d`,
+            );
+            const listResponse = await authedFetch(
+                accessToken,
+                `/messages?maxResults=${maxResults}&q=${query}`,
+            );
+            const list = (await listResponse.json()) as {
+                messages?: { id: string }[];
+                nextPageToken?: string;
+            };
+            return {
+                messageIds: unique(
+                    (list.messages ?? []).map((message) => message.id),
+                ),
+                historyId: profile.historyId,
+                hasMore: Boolean(list.nextPageToken),
+            };
+        },
+
+        async discoverSince(
+            historyId: string,
+            maxResults: number,
+        ): Promise<EmailDiscovery> {
+            const params = new URLSearchParams({
+                startHistoryId: historyId,
+                historyTypes: "messageAdded",
+                labelId: "INBOX",
+                maxResults: String(maxResults),
+            });
+            const response = await authedFetch(
+                accessToken,
+                `/history?${params.toString()}`,
+                "history",
+            );
+            const page = (await response.json()) as {
+                history?: GmailHistory[];
+                historyId: string;
+                nextPageToken?: string;
+            };
+            const history = page.history ?? [];
+            const messageIds = unique(
+                history.flatMap((entry) =>
+                    (entry.messagesAdded ?? []).map(
+                        (addition) => addition.message.id,
+                    ),
+                ),
+            );
+            const lastRecordId = history.at(-1)?.id;
+            if (page.nextPageToken && !lastRecordId) {
+                throw new Error("Gmail returned an invalid history page.");
+            }
+            return {
+                messageIds,
+                // Page tokens are deliberately not persisted. The last fully
+                // staged history record is a durable cursor for the next call.
+                historyId:
+                    page.nextPageToken && lastRecordId
+                        ? lastRecordId
+                        : page.historyId,
+                hasMore: Boolean(page.nextPageToken),
+            };
+        },
+
+        fetchMessages,
+    };
+};

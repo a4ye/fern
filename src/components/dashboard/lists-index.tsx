@@ -515,7 +515,7 @@ export const ListsIndex = ({
     pageCount: number;
     search: string;
     sort: ListSort;
-    emailPanel: EmailSyncPanel;
+    emailPanel: EmailSyncPanel | null;
 }) => {
     const router = useRouter();
     const pathname = usePathname();
@@ -717,7 +717,9 @@ export const ListsIndex = ({
                     </div>
                     <div className="flex items-center gap-3">
                         <SortSelect value={sort} onChange={onSortChange} />
-                        <EmailSyncMenu panel={emailPanel} />
+                        {emailPanel ? (
+                            <EmailSyncMenu panel={emailPanel} />
+                        ) : null}
                         <button
                             type="button"
                             onClick={() => setIsComposing(true)}

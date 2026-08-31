@@ -119,5 +119,4 @@ export const FILE_TOO_LARGE = "That file is larger than 5 MB.";
 // What a caller is told when a budget above is spent. Deliberately vague about
 // the window: the number is ours to tune, and someone who has met it is either
 // automating or has hit a bug worth hearing about.
-export const TOO_MANY_REQUESTS =
-    "You are doing that too quickly. Wait a moment and try again.";
+export const TOO_MANY_REQUESTS = "Please wait a moment, then try again.";

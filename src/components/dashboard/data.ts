@@ -568,14 +568,10 @@ export type EmailSuggestion = {
     role: string | null;
     listId: string;
     listName: string;
-    from: string;
+    messageId: string;
     subject: string;
-    snippet: string;
-    receivedAt: string;
     currentStatus: ApplicationStatus;
     suggestedStatus: ApplicationStatus;
-    confidence: number;
-    reasoning: string | null;
 };
 
 export type EmailSyncPanel = {

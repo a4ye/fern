@@ -32,7 +32,7 @@ const DashboardPage = async ({
             page: requestedPage,
             pageSize: LIST_PAGE_SIZE,
         }),
-        loadEmailPanel(session.user.id, requestHeaders),
+        loadEmailPanel(session.user.id, session.user.email, requestHeaders),
     ]);
 
     return (
