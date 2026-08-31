@@ -90,7 +90,11 @@ const InboxPanel = () => (
     </div>
 );
 
-const TrackerPanel = () => (
+const TrackerPanel = ({
+    emailSyncPromotionEnabled,
+}: {
+    emailSyncPromotionEnabled: boolean;
+}) => (
     <div className="border border-hairline bg-background shadow-xl shadow-ink/5">
         <div className="h-0.75 bg-accent" />
         <div className="flex h-9 items-center border-b border-hairline px-4">
@@ -106,40 +110,67 @@ const TrackerPanel = () => (
                     Frontend Engineer
                 </span>
             </span>
-            <span className="text-sm font-medium text-accent-deep">
-                Interview
+            <span
+                className={`text-sm font-medium ${emailSyncPromotionEnabled ? "text-accent-deep" : "text-sub"}`}
+            >
+                {emailSyncPromotionEnabled ? "Interview" : "Applied"}
             </span>
         </div>
         <div className="flex items-center gap-2 border-t border-faint px-4 py-2">
             <span className="text-xs text-sub">
-                Salary, dates, and stage kept current
+                {emailSyncPromotionEnabled
+                    ? "Salary, dates, and stage kept current"
+                    : "Role, salary, and dates from the posting"}
             </span>
         </div>
     </div>
 );
 
-export const SystemDiagram = () => (
+export const SystemDiagram = ({
+    emailSyncPromotionEnabled,
+}: {
+    emailSyncPromotionEnabled: boolean;
+}) => (
     <div aria-hidden="true">
         <div className="hidden lg:grid lg:grid-cols-[minmax(0,5fr)_5rem_minmax(0,6fr)]">
             <div className="flex flex-col justify-center gap-12">
                 <PostingPanel />
-                <InboxPanel />
+                {emailSyncPromotionEnabled && <InboxPanel />}
             </div>
-            <div className="grid grid-rows-2">
-                <FlowCurve d="M0 50 C 45 50, 55 100, 100 100" />
-                <FlowCurve d="M0 50 C 45 50, 55 0, 100 0" delay={1300} />
+            <div
+                className={emailSyncPromotionEnabled ? "grid grid-rows-2" : ""}
+            >
+                {emailSyncPromotionEnabled ? (
+                    <>
+                        <FlowCurve d="M0 50 C 45 50, 55 100, 100 100" />
+                        <FlowCurve
+                            d="M0 50 C 45 50, 55 0, 100 0"
+                            delay={1300}
+                        />
+                    </>
+                ) : (
+                    <FlowCurve d="M0 50 L100 50" />
+                )}
             </div>
             <div className="self-center">
-                <TrackerPanel />
+                <TrackerPanel
+                    emailSyncPromotionEnabled={emailSyncPromotionEnabled}
+                />
             </div>
         </div>
 
         <div className="flex flex-col gap-2 lg:hidden">
             <PostingPanel />
             <VConn />
-            <TrackerPanel />
-            <VConn up delay={1300} />
-            <InboxPanel />
+            <TrackerPanel
+                emailSyncPromotionEnabled={emailSyncPromotionEnabled}
+            />
+            {emailSyncPromotionEnabled && (
+                <>
+                    <VConn up delay={1300} />
+                    <InboxPanel />
+                </>
+            )}
         </div>
     </div>
 );
