@@ -64,3 +64,49 @@ export async function saveUserSettings(client: Client, args: SaveUserSettingsArg
     });
 }
 
+export const getOnboardedAtQuery = `-- name: GetOnboardedAt :one
+select onboarded_at
+from user_settings
+where user_id = $1`;
+
+export interface GetOnboardedAtArgs {
+    userId: string;
+}
+
+export interface GetOnboardedAtRow {
+    onboardedAt: Date | null;
+}
+
+export async function getOnboardedAt(client: Client, args: GetOnboardedAtArgs): Promise<GetOnboardedAtRow | null> {
+    const result = await client.query({
+        text: getOnboardedAtQuery,
+        values: [args.userId],
+        rowMode: "array"
+    });
+    if (result.rows.length !== 1) {
+        return null;
+    }
+    const row = result.rows[0];
+    return {
+        onboardedAt: row[0]
+    };
+}
+
+export const markOnboardedQuery = `-- name: MarkOnboarded :exec
+insert into user_settings (user_id, onboarded_at)
+values ($1, now())
+on conflict (user_id) do update
+set onboarded_at = now()`;
+
+export interface MarkOnboardedArgs {
+    userId: string;
+}
+
+export async function markOnboarded(client: Client, args: MarkOnboardedArgs): Promise<void> {
+    await client.query({
+        text: markOnboardedQuery,
+        values: [args.userId],
+        rowMode: "array"
+    });
+}
+

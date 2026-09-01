@@ -3,9 +3,11 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getRequestSession } from "@/lib/auth";
 import { getListsForUser } from "@/db/dashboard";
+import { hasOnboarded } from "@/db/settings";
 import { loadEmailPanel } from "@/lib/email/panel";
 import { LIST_PAGE_SIZE, parseListSort } from "@/components/dashboard/data";
 import { ListsIndex } from "@/components/dashboard/lists-index";
+import { Welcome } from "@/components/onboarding/welcome";
 
 export const metadata: Metadata = {
     title: "Lists",
@@ -25,18 +27,21 @@ const DashboardPage = async ({
     const sort = parseListSort(params.sort);
     const requestedPage = Math.max(1, Number(params.page) || 1);
 
-    const [{ lists, total, page, pageCount }, emailPanel] = await Promise.all([
-        getListsForUser(session.user.id, {
-            search,
-            sort,
-            page: requestedPage,
-            pageSize: LIST_PAGE_SIZE,
-        }),
-        loadEmailPanel(session.user.id, session.user.email, requestHeaders),
-    ]);
+    const [{ lists, total, page, pageCount }, emailPanel, onboarded] =
+        await Promise.all([
+            getListsForUser(session.user.id, {
+                search,
+                sort,
+                page: requestedPage,
+                pageSize: LIST_PAGE_SIZE,
+            }),
+            loadEmailPanel(session.user.id, session.user.email, requestHeaders),
+            hasOnboarded(session.user.id),
+        ]);
 
     return (
         <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-6 py-10 sm:px-10">
+            <Welcome due={!onboarded} />
             <ListsIndex
                 lists={lists}
                 total={total}

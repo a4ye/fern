@@ -44,3 +44,13 @@ export const saveUserSettings = async (
         tidyTitles: settings.tidyTitles,
     });
 };
+
+// No row and a null column both mean the welcome has not been dismissed yet.
+export const hasOnboarded = async (userId: string): Promise<boolean> => {
+    const row = await gen.getOnboardedAt(getPool(), { userId });
+    return row?.onboardedAt != null;
+};
+
+export const markOnboarded = async (userId: string): Promise<void> => {
+    await gen.markOnboarded(getPool(), { userId });
+};
