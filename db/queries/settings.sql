@@ -12,3 +12,16 @@ set default_currency = excluded.default_currency,
     employer_links = excluded.employer_links,
     tidy_titles = excluded.tidy_titles,
     updated_at = now();
+
+-- name: GetOnboardedAt :one
+select onboarded_at
+from user_settings
+where user_id = $1;
+
+-- Onboarding is not a preference, so it is written on its own rather than
+-- through SaveUserSettings, which would otherwise carry it on every form save.
+-- name: MarkOnboarded :exec
+insert into user_settings (user_id, onboarded_at)
+values ($1, now())
+on conflict (user_id) do update
+set onboarded_at = now();
