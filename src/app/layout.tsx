@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
 import { Be_Vietnam_Pro } from "next/font/google";
+import Script from "next/script";
 import { Toaster } from "sonner";
 import { APP_NAME } from "@/lib/site";
 import "./globals.css";
+
+const UMAMI_WEBSITE_ID = "6a9ac013-be45-4553-9eef-24306af4c24b";
 
 const beVietnamPro = Be_Vietnam_Pro({
     variable: "--font-be-vietnam-pro",
@@ -53,6 +56,18 @@ const RootLayout = ({
                     },
                 }}
             />
+            {process.env.NODE_ENV === "production" && (
+                <>
+                    <Script
+                        src="https://umami.aaronye.dev/script.js"
+                        data-website-id={UMAMI_WEBSITE_ID}
+                    />
+                    <Script
+                        src="https://umami.aaronye.dev/recorder.js"
+                        data-website-id={UMAMI_WEBSITE_ID}
+                    />
+                </>
+            )}
         </body>
     </html>
 );
