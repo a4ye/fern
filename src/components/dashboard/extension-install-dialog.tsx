@@ -1,6 +1,7 @@
 "use client";
 
 import { useModalDialog } from "@/components/dashboard/use-modal-dialog";
+import { APP_NAME } from "@/lib/site";
 
 type BrowserKind = "chrome" | "firefox";
 
@@ -86,13 +87,13 @@ export const ExtensionInstallDialog = ({
                             aria-hidden="true"
                             className="icon-[lucide--shield-check] mt-0.5 size-4 shrink-0 text-accent-deep"
                         />
-                        If a posting needs to be opened first, Job Tracker will
+                        If a posting needs to be opened first, {APP_NAME} will
                         always ask before opening it.
                     </p>
                 </div>
 
                 <p className="mt-3 text-pretty text-xs text-muted">
-                    After installing, refresh Job Tracker once to start using
+                    After installing, refresh {APP_NAME} once to start using
                     faster imports.
                 </p>
 

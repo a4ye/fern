@@ -4,14 +4,14 @@ import { GITHUB_URL } from "@/lib/site";
 describe("GITHUB_URL", () => {
     describe("format", () => {
         it("is the project repository over https", () => {
-            expect(GITHUB_URL).toBe("https://github.com/a4ye/job-tracker");
+            expect(GITHUB_URL).toBe("https://github.com/a4ye/fern");
         });
 
         it("parses to the expected host and path", () => {
             const url = new URL(GITHUB_URL);
             expect(url.protocol).toBe("https:");
             expect(url.hostname).toBe("github.com");
-            expect(url.pathname).toBe("/a4ye/job-tracker");
+            expect(url.pathname).toBe("/a4ye/fern");
         });
     });
 
@@ -33,7 +33,7 @@ describe("GITHUB_URL", () => {
                 );
             }
             expect(res.status).toBe(200);
-            expect(res.url).toContain("github.com/a4ye/job-tracker");
+            expect(res.url).toContain("github.com/a4ye/fern");
         }, 15000);
     });
 });

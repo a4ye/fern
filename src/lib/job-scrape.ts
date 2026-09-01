@@ -20,7 +20,7 @@ export {
     type ScrapedPosting,
 } from "@/lib/job-import/shared";
 
-const USER_AGENT = "Mozilla/5.0 (compatible; JobTracker/1.0)";
+const USER_AGENT = "Mozilla/5.0 (compatible; Fern/1.0)";
 const SERVER_ATS_HOSTS = [
     "greenhouse.io",
     "lever.co",

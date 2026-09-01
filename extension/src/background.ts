@@ -189,7 +189,7 @@ const handleRequest = async (
         if (appTabId === undefined) {
             return extensionResponse(request.requestId, {
                 status: "error",
-                message: "The Job Tracker tab could not be found.",
+                message: "The Fern tab could not be found.",
             });
         }
         return openVisibleImport(request, appTabId, url);

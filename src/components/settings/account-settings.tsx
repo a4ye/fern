@@ -16,6 +16,7 @@ import {
     formInputClass,
     primaryButtonClass,
 } from "@/components/dashboard/table-controls";
+import { APP_NAME } from "@/lib/site";
 import { DISPLAY_NAME_MAX } from "@/lib/validation";
 
 const Section = ({
@@ -213,7 +214,7 @@ export const AccountSettings = ({
                 </Row>
                 <Row
                     label="Remove link tracking"
-                    hint="Job links often include tracking codes. Job Tracker removes them."
+                    hint={`Job links often include tracking codes. ${APP_NAME} removes them.`}
                 >
                     <Toggle
                         label="Remove link tracking"
@@ -233,7 +234,7 @@ export const AccountSettings = ({
                 </Row>
                 <Row
                     label="Auto shorten role titles"
-                    hint="Job titles often include dates and extra wording. Job Tracker shortens them. Turn this off to confirm each one first."
+                    hint={`Job titles often include dates and extra wording. ${APP_NAME} shortens them. Turn this off to confirm each one first.`}
                 >
                     <Toggle
                         label="Auto shorten role titles"

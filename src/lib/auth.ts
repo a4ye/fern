@@ -84,7 +84,7 @@ export const auth = betterAuth({
             }
 
             // Google is only for linking Gmail to an existing GitHub account,
-            // never for signing in to Job Tracker directly.
+            // never for signing in to Fern directly.
             if (context.path === "/sign-in/social") {
                 throw APIError.from("FORBIDDEN", {
                     code: "GOOGLE_SIGN_IN_DISABLED",
