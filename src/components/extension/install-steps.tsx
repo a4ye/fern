@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { EXTENSION_BROWSERS, type ExtensionBrowser } from "@/lib/site";
+import {
+    APP_NAME,
+    EXTENSION_BROWSERS,
+    type ExtensionBrowser,
+} from "@/lib/site";
 
 type Step = { text: string; address?: string };
 
@@ -20,7 +24,7 @@ const BROWSERS: Record<
                 address: "chrome://extensions",
             },
             { text: "Click Load unpacked and select the unzipped folder." },
-            { text: "Refresh Job Tracker." },
+            { text: `Refresh ${APP_NAME}.` },
         ],
     },
     firefox: {
@@ -35,7 +39,7 @@ const BROWSERS: Record<
             {
                 text: "Click Load Temporary Add-on and select the file you downloaded.",
             },
-            { text: "Refresh Job Tracker." },
+            { text: `Refresh ${APP_NAME}.` },
         ],
     },
 };

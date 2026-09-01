@@ -39,7 +39,7 @@ const baseManifest = {
     version: EXTENSION_VERSION,
     permissions: ["scripting", "tabs"],
     // Seamless arbitrary-URL imports require up-front access. The extension
-    // never sends raw page HTML to Job Tracker; only parsed application fields.
+    // never sends raw page HTML to Fern; only parsed application fields.
     host_permissions: ["http://*/*", "https://*/*"],
     content_scripts: [
         {

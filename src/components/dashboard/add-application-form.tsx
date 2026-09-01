@@ -31,6 +31,7 @@ import {
 } from "@/components/dashboard/table-controls";
 import { useModalDialog } from "@/components/dashboard/use-modal-dialog";
 import { useJobImportExtension } from "@/components/dashboard/use-job-import-extension";
+import { APP_NAME } from "@/lib/site";
 import {
     browserTimeZone,
     todayDateInput,
@@ -553,7 +554,7 @@ export const AddApplicationForm = ({
                                         </p>
                                         <p className="mt-0.5 text-pretty text-xs leading-5 text-sub">
                                             Some job sites need to be opened
-                                            once before Job Tracker can fill
+                                            once before {APP_NAME} can fill
                                             their details.
                                         </p>
                                     </div>

@@ -20,6 +20,7 @@ import {
     type EmailSyncPanel,
 } from "@/components/dashboard/data";
 import { LocalDateTime } from "@/components/dashboard/local-date-time";
+import { APP_NAME } from "@/lib/site";
 
 // Gmail read-only scope, requested when the user links their Google account.
 // Kept as a literal here so this client bundle never imports server auth code.
@@ -245,16 +246,16 @@ const EmailSyncPopover = ({
                 </h3>
                 <div className="mt-3 space-y-3 text-pretty text-xs leading-5 text-sub">
                     <p>
-                        Job Tracker can read recent Gmail messages to look for
+                        {APP_NAME} can read recent Gmail messages to look for
                         job application updates. It cannot send, edit, or delete
                         email.
                     </p>
                     <p>
-                        To look for updates, Job Tracker sends relevant email
+                        To look for updates, {APP_NAME} sends relevant email
                         content and your application details to Google Gemini.
                     </p>
                     <p>
-                        Job Tracker only saves the details needed to show a
+                        {APP_NAME} only saves the details needed to show a
                         suggestion, not a full copy of the email. Nothing
                         changes until you approve it. See the{" "}
                         <Link

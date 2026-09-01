@@ -69,8 +69,8 @@ const heading = (title: string) => console.log(`\n${title}`);
 const report = (summary: MetricSummary, corpus: CorpusStats) => {
     console.log(
         days === undefined
-            ? "\nJob Tracker, since counting began"
-            : `\nJob Tracker, last ${days} days`,
+            ? "\nFern, since counting began"
+            : `\nFern, last ${days} days`,
     );
 
     heading("Reading a posting from a link");

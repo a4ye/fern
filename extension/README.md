@@ -1,8 +1,8 @@
-# Job Tracker Importer
+# Fern Importer
 
 The extension imports public job postings from the user's browser, then sends
-only the parsed company, role, location, arrangement, and pay fields back to Job
-Tracker. Normal imports run in the background without opening a tab. The app can
+only the parsed company, role, location, arrangement, and pay fields back to
+Fern. Normal imports run in the background without opening a tab. The app can
 explicitly open a JavaScript-rendered posting when its initial HTML has no job
 data; the extension reads that visible page after it renders.
 
@@ -12,19 +12,19 @@ data; the extension reads that visible page after it renders.
 bun run extension:build
 ```
 
-Development builds connect to Job Tracker on `localhost` or `127.0.0.1` on any
+Development builds connect to Fern on `localhost` or `127.0.0.1` on any
 port. Reload the unpacked extension after rebuilding it, then refresh the open
-Job Tracker tab so the new extension files can connect.
+Fern tab so the new extension files can connect.
 
-Before building a store release, set the public URL where Job Tracker is
-deployed. This is the Job Tracker website, not a job-board URL. The extension
-uses this list to know which copies of Job Tracker it can connect to:
+Before building a store release, set the public URL where Fern is deployed. This
+is the Fern website, not a job-board URL. The extension uses this list to know
+which copies of Fern it can connect to:
 
 ```bash
 JOB_TRACKER_EXTENSION_APP_ORIGINS="https://example.com/*" bun run extension:build
 ```
 
-Separate multiple Job Tracker deployments with commas. For example:
+Separate multiple Fern deployments with commas. For example:
 
 ```bash
 JOB_TRACKER_EXTENSION_APP_ORIGINS="https://jobs.example.com/*,https://preview.example.com/*" bun run extension:build
@@ -50,6 +50,6 @@ Without `JOB_TRACKER_EXTENSION_APP_ORIGINS`, a build on Vercel falls back to
 `VERCEL_PROJECT_PRODUCTION_URL` so the downloadable build is never limited to
 localhost. Set the variable explicitly when more than one deployment needs it.
 
-Store releases should be built with the production Job Tracker URL and
+Store releases should be built with the production Fern URL and
 configured in the web app with `NEXT_PUBLIC_CHROME_EXTENSION_URL` and
 `NEXT_PUBLIC_FIREFOX_EXTENSION_URL`.
