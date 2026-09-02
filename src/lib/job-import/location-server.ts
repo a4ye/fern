@@ -8,8 +8,11 @@ import {
     countryAliasesFor,
     locationFingerprint,
     locationWords,
+    normalizeLocationPhrase,
+    popularLocationPriority,
     regionAliasesFor,
     resolvePopularLocation,
+    searchPopularLocations,
     type ImportedLocationResolution,
     type LocationRecord,
 } from "@/lib/job-import/location";
@@ -32,6 +35,7 @@ type GeneratedCityData = {
     lastModified?: string;
     maxAliasLength: number;
     maxCityWords: number;
+    entities: string[];
     rows: CityRow[];
     buckets: Record<string, AliasRow[]>;
 };
@@ -48,9 +52,11 @@ type Span = {
 
 type Candidate = {
     record: IndexedRecord;
+    match: "exact" | "prefix" | "fuzzy";
     distance: number;
     cityWordCount: number;
-    contextual: boolean;
+    contextQuality: number;
+    matchScore: number;
 };
 
 const CITY_DATA = generated as unknown as GeneratedCityData;
@@ -58,8 +64,20 @@ const MAX_INPUT_WORDS = 12;
 const MAX_SUGGESTIONS = 3;
 const SIGNIFICANT_CITY_POPULATION = 50_000;
 const DOMINANT_CITY_POPULATION = 100_000;
+const ENTITY_NAME_CITY_POPULATION = 500_000;
 const rememberedRecords = new Map<number, IndexedRecord>();
 const rememberedContexts = new WeakMap<IndexedRecord, Set<string>>();
+const STANDALONE_ENTITIES = new Set([
+    ...CITY_DATA.entities,
+    "africa",
+    "asia",
+    "europe",
+    "global",
+    "middle east",
+    "north america",
+    "south america",
+    "worldwide",
+]);
 
 const recordAt = (index: number): IndexedRecord | null => {
     const remembered = rememberedRecords.get(index);
@@ -153,19 +171,58 @@ const contextKeysFor = (record: IndexedRecord): Set<string> => {
     return keys;
 };
 
+const contextQualityFor = (
+    record: IndexedRecord,
+    words: readonly string[],
+    span: Span,
+): number => {
+    const context = contextFingerprint(words, span);
+    if (!context) return 0;
+    if (contextKeysFor(record).has(context)) return 2;
+
+    const queryWords = context.split(" ");
+    if (queryWords.some((word) => word.length < 3)) return -1;
+    const prefixMatch = [...contextKeysFor(record)].some((key) => {
+        const candidates = key.split(" ").filter(Boolean);
+        const used = new Set<number>();
+        return queryWords.every((word) => {
+            const at = candidates.findIndex(
+                (candidate, index) =>
+                    !used.has(index) && candidate.startsWith(word),
+            );
+            if (at < 0) return false;
+            used.add(at);
+            return true;
+        });
+    });
+    return prefixMatch ? 1 : -1;
+};
+
 const candidateFor = (
     record: IndexedRecord,
     words: readonly string[],
     span: Span,
+    match: Candidate["match"],
     distance: number,
+    aliasLength: number,
 ): Candidate | null => {
-    const context = contextFingerprint(words, span);
-    if (!contextKeysFor(record).has(context)) return null;
+    const contextQuality = contextQualityFor(record, words, span);
+    if (contextQuality < 0) return null;
+    const similarity =
+        1 - distance / Math.max(span.value.length, aliasLength, 1);
+    const coverage = span.value.length / Math.max(aliasLength, 1);
     return {
         record,
+        match,
         distance,
         cityWordCount: span.end - span.start,
-        contextual: context.length > 0,
+        contextQuality,
+        matchScore:
+            match === "exact"
+                ? 100
+                : match === "prefix"
+                  ? 80 + 20 * coverage
+                  : 70 + 25 * similarity,
     };
 };
 
@@ -222,11 +279,61 @@ const exactCandidates = (words: readonly string[]): Candidate[] => {
         for (const index of alias[1]) {
             const record = recordAt(index);
             if (!record) continue;
-            const candidate = candidateFor(record, words, span, 0);
+            const candidate = candidateFor(
+                record,
+                words,
+                span,
+                "exact",
+                0,
+                alias[0].length,
+            );
             if (candidate) candidates.push(candidate);
         }
     }
     return candidates;
+};
+
+let rememberedInitialsByLength: Map<number, string[]> | null = null;
+
+const initialsForLength = (length: number): readonly string[] => {
+    if (!rememberedInitialsByLength) {
+        rememberedInitialsByLength = new Map<number, string[]>();
+        for (const key of Object.keys(CITY_DATA.buckets)) {
+            const colon = key.lastIndexOf(":");
+            const bucketLength = Number(key.slice(colon + 1));
+            const initial = key.slice(0, colon);
+            const initials = rememberedInitialsByLength.get(bucketLength) ?? [];
+            initials.push(initial);
+            rememberedInitialsByLength.set(bucketLength, initials);
+        }
+    }
+    return rememberedInitialsByLength.get(length) ?? [];
+};
+
+// The regular typo scan stays in the same first-character bucket. These exact
+// probes cover a wrong, missing, extra, or transposed first character without
+// scanning every alias of the same length.
+const initialTypoAliases = (value: string, allowance: number): AliasRow[] => {
+    const aliases = new Map<string, AliasRow>();
+    const remember = (candidate: string) => {
+        if (!candidate) return;
+        const alias = exactAlias(bucketFor(candidate), candidate);
+        if (alias) aliases.set(alias[0], alias);
+    };
+
+    if (value.length > 1) {
+        remember(`${value[1]}${value[0]}${value.slice(2)}`);
+        remember(value.slice(1));
+    }
+    for (const initial of initialsForLength(value.length)) {
+        remember(`${initial}${value.slice(1)}`);
+    }
+    if (allowance > 0) {
+        for (const initial of initialsForLength(value.length + 1)) {
+            remember(`${initial}${value}`);
+        }
+    }
+    return [...aliases.values()];
 };
 
 const fuzzyCandidates = (words: readonly string[]): Candidate[] => {
@@ -235,6 +342,8 @@ const fuzzyCandidates = (words: readonly string[]): Candidate[] => {
         const allowance = typoAllowance(span.value);
         if (allowance === 0) continue;
 
+        const aliases = new Map<string, AliasRow>();
+
         for (
             let length = Math.max(1, span.value.length - allowance);
             length <= span.value.length + allowance;
@@ -242,42 +351,60 @@ const fuzzyCandidates = (words: readonly string[]): Candidate[] => {
         ) {
             const bucket = CITY_DATA.buckets[`${span.value[0]}:${length}`];
             for (const alias of bucket ?? []) {
-                const distance = editDistance(span.value, alias[0], allowance);
-                if (distance === 0 || distance > allowance) continue;
-                for (const index of alias[1]) {
-                    const record = recordAt(index);
-                    if (!record) continue;
-                    const candidate = candidateFor(
-                        record,
-                        words,
-                        span,
-                        distance,
-                    );
-                    if (candidate) candidates.push(candidate);
-                }
+                aliases.set(alias[0], alias);
+            }
+        }
+        for (const alias of initialTypoAliases(span.value, allowance)) {
+            aliases.set(alias[0], alias);
+        }
+
+        for (const alias of aliases.values()) {
+            const distance = editDistance(span.value, alias[0], allowance);
+            if (distance === 0 || distance > allowance) continue;
+            for (const index of alias[1]) {
+                const record = recordAt(index);
+                if (!record) continue;
+                const candidate = candidateFor(
+                    record,
+                    words,
+                    span,
+                    "fuzzy",
+                    distance,
+                    alias[0].length,
+                );
+                if (candidate) candidates.push(candidate);
             }
         }
     }
     return candidates;
 };
 
-const strongestCandidates = (candidates: Candidate[]): Candidate[] => {
-    if (candidates.length === 0) return [];
-    const bestDistance = Math.min(
-        ...candidates.map((candidate) => candidate.distance),
-    );
-    const closest = candidates.filter(
-        (candidate) => candidate.distance === bestDistance,
-    );
-    const contextual = closest.some((candidate) => candidate.contextual);
-    const withContext = contextual
-        ? closest.filter((candidate) => candidate.contextual)
-        : closest;
-    const longest = Math.max(
-        ...withContext.map((candidate) => candidate.cityWordCount),
-    );
-    return withContext.filter(
-        (candidate) => candidate.cityWordCount === longest,
+const isPopular = (candidate: Candidate): boolean =>
+    popularLocationPriority(candidate.record.label) < Number.MAX_SAFE_INTEGER;
+
+const compareCandidates = (left: Candidate, right: Candidate): number => {
+    const leftExact = left.match === "exact";
+    const rightExact = right.match === "exact";
+    const exactWordDifference =
+        leftExact && rightExact ? right.cityWordCount - left.cityWordCount : 0;
+    const leftPopular = isPopular(left);
+    const rightPopular = isPopular(right);
+    const popularityDifference =
+        leftPopular && rightPopular
+            ? popularLocationPriority(left.record.label) -
+              popularLocationPriority(right.record.label)
+            : 0;
+    return (
+        Number(rightExact) - Number(leftExact) ||
+        exactWordDifference ||
+        right.contextQuality - left.contextQuality ||
+        Number(rightPopular) - Number(leftPopular) ||
+        popularityDifference ||
+        right.matchScore - left.matchScore ||
+        right.cityWordCount - left.cityWordCount ||
+        left.distance - right.distance ||
+        right.record.population - left.record.population ||
+        left.record.label.localeCompare(right.record.label, "en")
     );
 };
 
@@ -285,20 +412,11 @@ const uniqueCandidates = (candidates: Candidate[]): Candidate[] => {
     const byLocation = new Map<string, Candidate>();
     for (const candidate of candidates) {
         const previous = byLocation.get(candidate.record.label);
-        if (
-            !previous ||
-            candidate.distance < previous.distance ||
-            candidate.record.population > previous.record.population
-        ) {
+        if (!previous || compareCandidates(candidate, previous) < 0) {
             byLocation.set(candidate.record.label, candidate);
         }
     }
-    return [...byLocation.values()].sort(
-        (left, right) =>
-            left.distance - right.distance ||
-            right.record.population - left.record.population ||
-            left.record.label.localeCompare(right.record.label, "en"),
-    );
+    return [...byLocation.values()].sort(compareCandidates);
 };
 
 const isDominant = (candidates: readonly Candidate[]): boolean => {
@@ -315,20 +433,31 @@ const isDominant = (candidates: readonly Candidate[]): boolean => {
 
 const resolutionFor = (
     rawCandidates: Candidate[],
-    fuzzy: boolean,
+    exact: boolean,
 ): ImportedLocationResolution => {
-    const candidates = uniqueCandidates(strongestCandidates(rawCandidates));
+    const ranked = uniqueCandidates(rawCandidates);
+    const bestContext = ranked[0]?.contextQuality;
+    const candidates = ranked.filter(
+        (candidate) => candidate.contextQuality === bestContext,
+    );
     if (candidates.length === 0) return { status: "unmatched" };
 
-    const contextual = candidates[0]?.contextual === true;
-    if (
-        candidates.length === 1 &&
-        (!fuzzy || contextual || isDominant(candidates))
-    ) {
+    if (exact && candidates.length === 1) {
         return { status: "matched", location: candidates[0].record.label };
     }
-    if (!contextual && isDominant(candidates)) {
+    if (exact && isDominant(candidates)) {
         return { status: "matched", location: candidates[0].record.label };
+    }
+    if (!exact && candidates[0].match === "fuzzy") {
+        const hasPrefixCompetitor = candidates.some(
+            (candidate) => candidate.match === "prefix",
+        );
+        if (
+            candidates[0].contextQuality === 2 ||
+            (!hasPrefixCompetitor && isDominant(candidates))
+        ) {
+            return { status: "matched", location: candidates[0].record.label };
+        }
     }
     const significant = candidates.filter(
         (candidate) =>
@@ -346,14 +475,38 @@ const resolutionFor = (
 export const resolveComprehensiveLocation = (
     raw: string,
 ): ImportedLocationResolution => {
+    const popular = resolvePopularLocation(raw);
+    if (popular.status !== "unmatched") return popular;
+
     const words = locationWords(raw);
     if (words.length === 0 || words.length > MAX_INPUT_WORDS) {
         return { status: "unmatched" };
     }
+    const standaloneEntity = STANDALONE_ENTITIES.has(
+        normalizeLocationPhrase(words.join(" ")),
+    );
+    if (words.join(" ").length < 4) return { status: "unmatched" };
 
     const exact = exactCandidates(words);
-    if (exact.length > 0) return resolutionFor(exact, false);
-    return resolutionFor(fuzzyCandidates(words), true);
+    if (standaloneEntity) {
+        const citySuggestions = uniqueCandidates(exact).filter(
+            (candidate) =>
+                candidate.record.population >= ENTITY_NAME_CITY_POPULATION,
+        );
+        return citySuggestions.length > 0
+            ? {
+                  status: "suggestions",
+                  suggestions: citySuggestions
+                      .slice(0, MAX_SUGGESTIONS)
+                      .map((candidate) => candidate.record.label),
+              }
+            : { status: "unmatched" };
+    }
+    if (exact.length > 0) return resolutionFor(exact, true);
+    return resolutionFor(
+        [...prefixCandidates(words), ...fuzzyCandidates(words)],
+        false,
+    );
 };
 
 const prefixStart = (bucket: readonly AliasRow[], prefix: string): number => {
@@ -370,53 +523,10 @@ const prefixStart = (bucket: readonly AliasRow[], prefix: string): number => {
     return low;
 };
 
-const contextMatchesPrefixes = (
-    record: IndexedRecord,
-    words: readonly string[],
-): boolean => {
-    if (words.length === 0) return true;
-    return [...contextKeysFor(record)].some((key) => {
-        const candidates = key.split(" ").filter(Boolean);
-        const used = new Set<number>();
-        return words.every((word) => {
-            const at = candidates.findIndex(
-                (candidate, index) =>
-                    !used.has(index) && candidate.startsWith(word),
-            );
-            if (at < 0) return false;
-            used.add(at);
-            return true;
-        });
-    });
-};
-
-type PrefixCandidate = {
-    record: IndexedRecord;
-    exact: boolean;
-    prefixLength: number;
-    cityWordCount: number;
-    contextual: boolean;
-};
-
-const comparePrefixStrength = (
-    left: PrefixCandidate,
-    right: PrefixCandidate,
-): number =>
-    Number(right.contextual) - Number(left.contextual) ||
-    Number(right.exact) - Number(left.exact) ||
-    right.cityWordCount - left.cityWordCount ||
-    right.prefixLength - left.prefixLength ||
-    right.record.population - left.record.population ||
-    left.record.label.localeCompare(right.record.label, "en");
-
-const prefixCandidates = (words: readonly string[]): PrefixCandidate[] => {
-    const byLocation = new Map<string, PrefixCandidate>();
+const prefixCandidates = (words: readonly string[]): Candidate[] => {
+    const byLocation = new Map<string, Candidate>();
     for (const span of spansOf(words)) {
         if (span.value.length < 2) continue;
-        const context = [
-            ...words.slice(0, span.start),
-            ...words.slice(span.end),
-        ];
         for (
             let length = span.value.length;
             length <= CITY_DATA.maxAliasLength;
@@ -431,20 +541,20 @@ const prefixCandidates = (words: readonly string[]): PrefixCandidate[] => {
             ) {
                 for (const index of bucket[at][1]) {
                     const record = recordAt(index);
-                    if (!record || !contextMatchesPrefixes(record, context)) {
-                        continue;
-                    }
-                    const candidate: PrefixCandidate = {
+                    if (!record) continue;
+                    const candidate = candidateFor(
                         record,
-                        exact: bucket[at][0] === span.value,
-                        prefixLength: span.value.length,
-                        cityWordCount: span.end - span.start,
-                        contextual: context.length > 0,
-                    };
+                        words,
+                        span,
+                        bucket[at][0] === span.value ? "exact" : "prefix",
+                        0,
+                        bucket[at][0].length,
+                    );
+                    if (!candidate) continue;
                     const previous = byLocation.get(record.label);
                     if (
                         !previous ||
-                        comparePrefixStrength(candidate, previous) < 0
+                        compareCandidates(candidate, previous) < 0
                     ) {
                         byLocation.set(record.label, candidate);
                     }
@@ -452,12 +562,9 @@ const prefixCandidates = (words: readonly string[]): PrefixCandidate[] => {
             }
         }
     }
-    return [...byLocation.values()].sort(comparePrefixStrength);
+    return [...byLocation.values()].sort(compareCandidates);
 };
 
-// Search is separate from resolution: a partial value can legitimately be an
-// exact name of a tiny place and still be the beginning of a larger city. Exact
-// and typo resolutions lead, then the indexed prefix results fill the list.
 export const searchComprehensiveLocations = (
     raw: string,
     limit = 8,
@@ -472,32 +579,77 @@ export const searchComprehensiveLocations = (
         return [];
     }
 
-    const prefixes = prefixCandidates(words);
-    if (prefixes.length > 0) {
-        const significant = prefixes.filter(
-            (candidate) =>
-                candidate.record.population >= SIGNIFICANT_CITY_POPULATION,
-        );
-        const exactSignificant = significant.filter(
-            (candidate) => candidate.exact,
-        );
-        const ranked =
-            exactSignificant.length >= 2
-                ? exactSignificant
-                : significant.length >= 2
-                  ? significant
-                  : prefixes;
-        return ranked
+    const popularResolution = resolvePopularLocation(raw);
+    const exactMatches = exactCandidates(words);
+    if (
+        popularResolution.status === "unmatched" &&
+        STANDALONE_ENTITIES.has(normalizeLocationPhrase(words.join(" ")))
+    ) {
+        return uniqueCandidates(exactMatches)
             .slice(0, limit)
             .map((candidate) => candidate.record.label);
     }
+    const ranked = uniqueCandidates([
+        ...exactMatches,
+        ...prefixCandidates(words),
+        ...(exactMatches.length === 0 &&
+        popularResolution.status === "unmatched"
+            ? fuzzyCandidates(words)
+            : []),
+    ]);
+    const bestContext = ranked[0]?.contextQuality;
+    const contextual = ranked.filter(
+        (candidate) => candidate.contextQuality === bestContext,
+    );
+    const exact = contextual.filter((candidate) => candidate.match === "exact");
+    let globalCandidates: Candidate[];
+    if (exact.length > 0) {
+        const significantExact = exact.filter(
+            (candidate) =>
+                candidate.record.population >= SIGNIFICANT_CITY_POPULATION,
+        );
+        const leadingExact =
+            significantExact.length >= 2 ? significantExact : exact;
+        globalCandidates =
+            leadingExact.length >= 2
+                ? leadingExact
+                : [
+                      ...leadingExact,
+                      ...contextual.filter(
+                          (candidate) => candidate.match !== "exact",
+                      ),
+                  ];
+    } else {
+        const significant = contextual.filter(
+            (candidate) =>
+                candidate.record.population >= SIGNIFICANT_CITY_POPULATION,
+        );
+        globalCandidates = significant.length >= 2 ? significant : contextual;
+    }
 
-    const resolution = resolveComprehensiveLocation(raw);
-    return resolution.status === "matched"
-        ? [resolution.location]
-        : resolution.status === "suggestions"
-          ? resolution.suggestions.slice(0, limit)
-          : [];
+    const popular = searchPopularLocations(raw, limit);
+    const globalSource =
+        popularResolution.status === "matched" && exact.length === 0
+            ? []
+            : popularResolution.status === "matched"
+              ? exact
+              : globalCandidates;
+    const global = globalSource.map((candidate) => candidate.record.label);
+    const popularFirst =
+        popularResolution.status !== "unmatched" ||
+        (words.join(" ").length <= 3 && exact.length > 0);
+    const ordered = popularFirst
+        ? [...popular, ...global]
+        : [...global, ...popular];
+    const seen = new Set<string>();
+    return ordered
+        .filter((location) => {
+            const key = normalizeLocationPhrase(location);
+            if (!key || seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        })
+        .slice(0, limit);
 };
 
 export const comprehensiveCityCount = (): number => CITY_DATA.rows.length;

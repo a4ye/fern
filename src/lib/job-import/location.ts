@@ -88,6 +88,19 @@ const POPULAR_LOCATIONS: readonly LocationRecord[] = [
         bareCityAliases: ["Boston"],
     },
     {
+        city: "Cambridge",
+        region: "Massachusetts",
+        country: "United States",
+        countryCode: "US",
+        countryCode3: "USA",
+        adminCode: "MA",
+        population: 118_488,
+        // Cambridge is deliberately not a bare auto-match because the cities
+        // in England and Ontario are also common. It still receives the
+        // technology-hub ranking boost in search results.
+        bareCityAliases: [],
+    },
+    {
         city: "Los Angeles",
         region: "California",
         country: "United States",
@@ -127,6 +140,17 @@ const POPULAR_LOCATIONS: readonly LocationRecord[] = [
         adminCode: "IL",
         population: 2_746_388,
         bareCityAliases: ["Chicago"],
+    },
+    {
+        city: "St. Louis",
+        region: "Missouri",
+        country: "United States",
+        countryCode: "US",
+        countryCode3: "USA",
+        adminCode: "MO",
+        population: 279_695,
+        cityAliases: ["St Louis", "Saint Louis", "STL"],
+        bareCityAliases: ["St. Louis", "St Louis", "Saint Louis", "STL"],
     },
     {
         city: "Washington",
@@ -276,6 +300,18 @@ const POPULAR_LOCATIONS: readonly LocationRecord[] = [
         bareCityAliases: ["Amsterdam"],
     },
     {
+        city: "The Hague",
+        region: "South Holland",
+        country: "Netherlands",
+        countryCode: "NL",
+        countryCode3: "NLD",
+        adminCode: "11",
+        population: 474_292,
+        cityAliases: ["Den Haag", "The Hague", "'s-Gravenhage"],
+        countryAliases: ["The Netherlands"],
+        bareCityAliases: ["Den Haag", "The Hague", "'s-Gravenhage"],
+    },
+    {
         city: "Berlin",
         region: "Berlin",
         country: "Germany",
@@ -284,6 +320,17 @@ const POPULAR_LOCATIONS: readonly LocationRecord[] = [
         adminCode: "16",
         population: 3_664_088,
         bareCityAliases: ["Berlin"],
+    },
+    {
+        city: "Cologne",
+        region: "North Rhine-Westphalia",
+        country: "Germany",
+        countryCode: "DE",
+        countryCode3: "DEU",
+        adminCode: "07",
+        population: 1_024_621,
+        cityAliases: ["Köln", "Koeln"],
+        bareCityAliases: ["Cologne", "Köln", "Koeln"],
     },
     {
         city: "Paris",
@@ -391,6 +438,17 @@ const POPULAR_LOCATIONS: readonly LocationRecord[] = [
         bareCityAliases: ["Warsaw", "Warszawa"],
     },
     {
+        city: "Kyiv",
+        region: "Kyiv City",
+        country: "Ukraine",
+        countryCode: "UA",
+        countryCode3: "UKR",
+        adminCode: "12",
+        population: 2_952_301,
+        cityAliases: ["Kiev"],
+        bareCityAliases: ["Kyiv", "Kiev"],
+    },
+    {
         city: "Prague",
         region: "Prague",
         country: "Czechia",
@@ -470,6 +528,30 @@ const POPULAR_LOCATIONS: readonly LocationRecord[] = [
         bareCityAliases: ["Pune"],
     },
     {
+        city: "Chennai",
+        region: "Tamil Nadu",
+        country: "India",
+        countryCode: "IN",
+        countryCode3: "IND",
+        adminCode: "25",
+        population: 4_681_087,
+        cityAliases: ["Madras"],
+        regionAliases: ["TN"],
+        bareCityAliases: ["Chennai", "Madras"],
+    },
+    {
+        city: "Kolkata",
+        region: "West Bengal",
+        country: "India",
+        countryCode: "IN",
+        countryCode3: "IND",
+        adminCode: "28",
+        population: 4_631_392,
+        cityAliases: ["Calcutta"],
+        regionAliases: ["WB"],
+        bareCityAliases: ["Kolkata", "Calcutta"],
+    },
+    {
         city: "Singapore",
         region: "Singapore",
         country: "Singapore",
@@ -480,6 +562,17 @@ const POPULAR_LOCATIONS: readonly LocationRecord[] = [
         bareCityAliases: ["Singapore"],
     },
     {
+        city: "Ho Chi Minh City",
+        region: "Ho Chi Minh City",
+        country: "Vietnam",
+        countryCode: "VN",
+        countryCode3: "VNM",
+        adminCode: "79",
+        population: 14_002_598,
+        cityAliases: ["Saigon", "Sai Gon", "HCMC"],
+        bareCityAliases: ["Ho Chi Minh City", "Saigon", "Sai Gon", "HCMC"],
+    },
+    {
         city: "Tokyo",
         region: "Tokyo",
         country: "Japan",
@@ -488,6 +581,17 @@ const POPULAR_LOCATIONS: readonly LocationRecord[] = [
         adminCode: "40",
         population: 14_047_594,
         bareCityAliases: ["Tokyo"],
+    },
+    {
+        city: "Beijing",
+        region: "Beijing",
+        country: "China",
+        countryCode: "CN",
+        countryCode3: "CHN",
+        adminCode: "22",
+        population: 18_960_744,
+        cityAliases: ["Peking"],
+        bareCityAliases: ["Beijing", "Peking"],
     },
     {
         city: "Seoul",
@@ -603,6 +707,7 @@ const COUNTRY_ALIASES: Readonly<Record<string, readonly string[]>> = {
     GB: ["UK", "Great Britain", "Britain"],
     HK: ["Hong Kong SAR"],
     KR: ["Republic of Korea", "Korea"],
+    NL: ["The Netherlands"],
     US: ["United States of America", "America"],
 };
 
@@ -649,6 +754,40 @@ const REGION_CODE_ALIASES: Readonly<Record<string, string>> = {
     "BR:rio grande do sul": "RS",
     "BR:santa catarina": "SC",
     "BR:sao paulo": "SP",
+    // Mexico. These are the postal/ISO abbreviations job boards commonly use;
+    // GeoNames admin codes for Mexico are numeric and cannot match them alone.
+    "MX:aguascalientes": "AGU",
+    "MX:baja california": "BCN",
+    "MX:baja california sur": "BCS",
+    "MX:campeche": "CAM",
+    "MX:chiapas": "CHP",
+    "MX:chihuahua": "CHH",
+    "MX:coahuila": "COA",
+    "MX:colima": "COL",
+    "MX:durango": "DUR",
+    "MX:guanajuato": "GUA",
+    "MX:guerrero": "GRO",
+    "MX:hidalgo": "HID",
+    "MX:jalisco": "JAL",
+    "MX:mexico": "MEX",
+    "MX:mexico city": "CMX",
+    "MX:michoacan": "MIC",
+    "MX:morelos": "MOR",
+    "MX:nayarit": "NAY",
+    "MX:nuevo leon": "NL",
+    "MX:oaxaca": "OAX",
+    "MX:puebla": "PUE",
+    "MX:queretaro": "QUE",
+    "MX:quintana roo": "ROO",
+    "MX:san luis potosi": "SLP",
+    "MX:sinaloa": "SIN",
+    "MX:sonora": "SON",
+    "MX:tabasco": "TAB",
+    "MX:tamaulipas": "TAM",
+    "MX:tlaxcala": "TLA",
+    "MX:veracruz": "VER",
+    "MX:yucatan": "YUC",
+    "MX:zacatecas": "ZAC",
 };
 
 const INITIALS = /\b([a-z])\.(?=[a-z]\.?)/gi;
@@ -778,12 +917,13 @@ const POPULAR_INDEX = popularIndex();
 type PopularSearchRecord = {
     label: string;
     population: number;
+    priority: number;
     cityAliases: string[];
     words: string[];
 };
 
 const POPULAR_SEARCH_RECORDS: PopularSearchRecord[] = POPULAR_LOCATIONS.map(
-    (record) => {
+    (record, priority) => {
         const cityAliases = uniqueNormalized([
             record.city,
             ...(record.cityAliases ?? []),
@@ -806,6 +946,7 @@ const POPULAR_SEARCH_RECORDS: PopularSearchRecord[] = POPULAR_LOCATIONS.map(
         return {
             label: canonicalLocation(record),
             population: record.population,
+            priority,
             cityAliases,
             words: searchable.flatMap((value) =>
                 normalizeLocationPhrase(value).split(" "),
@@ -813,6 +954,13 @@ const POPULAR_SEARCH_RECORDS: PopularSearchRecord[] = POPULAR_LOCATIONS.map(
         };
     },
 );
+
+const POPULAR_PRIORITIES = new Map(
+    POPULAR_SEARCH_RECORDS.map((record) => [record.label, record.priority]),
+);
+
+export const popularLocationPriority = (location: string): number =>
+    POPULAR_PRIORITIES.get(location) ?? Number.MAX_SAFE_INTEGER;
 
 const wordsMatchPrefixes = (
     queryWords: readonly string[],
@@ -828,6 +976,52 @@ const wordsMatchPrefixes = (
         used.add(at);
         return true;
     });
+};
+
+// Optimal string alignment distance with a small ceiling. This runs over the
+// curated list only, so popular-city typo suggestions remain instant in the
+// browser without adding the worldwide data to the client bundle.
+const editDistance = (left: string, right: string, max: number): number => {
+    if (Math.abs(left.length - right.length) > max) return max + 1;
+    if (left === right) return 0;
+
+    let beforePrevious: number[] = [];
+    let previous = Array.from(
+        { length: right.length + 1 },
+        (_, index) => index,
+    );
+    for (let i = 1; i <= left.length; i += 1) {
+        const current = [i];
+        let best = i;
+        for (let j = 1; j <= right.length; j += 1) {
+            const cost = left[i - 1] === right[j - 1] ? 0 : 1;
+            let distance = Math.min(
+                previous[j] + 1,
+                current[j - 1] + 1,
+                previous[j - 1] + cost,
+            );
+            if (
+                i > 1 &&
+                j > 1 &&
+                left[i - 1] === right[j - 2] &&
+                left[i - 2] === right[j - 1]
+            ) {
+                distance = Math.min(distance, beforePrevious[j - 2] + 1);
+            }
+            current[j] = distance;
+            best = Math.min(best, distance);
+        }
+        if (best > max) return max + 1;
+        beforePrevious = previous;
+        previous = current;
+    }
+    return previous[right.length];
+};
+
+const typoAllowance = (value: string): number => {
+    const length = value.replace(/\s/g, "").length;
+    if (length < 5) return 0;
+    return length < 9 ? 1 : 2;
 };
 
 export const resolvePopularLocation = (
@@ -875,13 +1069,26 @@ export const searchPopularLocations = (raw: string, limit = 8): string[] => {
                     .some((cityWord) => cityWord.startsWith(queryWord)),
             ),
         );
-        if (!cityWordPrefix || !wordsMatchPrefixes(queryWords, record.words)) {
+        const prefixMatch =
+            cityWordPrefix && wordsMatchPrefixes(queryWords, record.words);
+        const allowance = typoAllowance(query);
+        const typoDistance =
+            prefixMatch || allowance === 0
+                ? allowance + 1
+                : Math.min(
+                      ...record.cityAliases.map((alias) =>
+                          editDistance(query, alias, allowance),
+                      ),
+                  );
+        if (!prefixMatch && typoDistance > allowance) {
             return null;
         }
         return {
             label: record.label,
             population: record.population,
-            score: exactCity ? 3 : cityPhrasePrefix ? 2 : 1,
+            priority: record.priority,
+            score: exactCity ? 4 : cityPhrasePrefix ? 3 : prefixMatch ? 2 : 1,
+            typoDistance,
         };
     })
         .filter(
@@ -890,12 +1097,16 @@ export const searchPopularLocations = (raw: string, limit = 8): string[] => {
             ): match is {
                 label: string;
                 population: number;
+                priority: number;
                 score: number;
+                typoDistance: number;
             } => match !== null,
         )
         .sort(
             (left, right) =>
                 right.score - left.score ||
+                left.typoDistance - right.typoDistance ||
+                left.priority - right.priority ||
                 right.population - left.population ||
                 left.label.localeCompare(right.label, "en"),
         )

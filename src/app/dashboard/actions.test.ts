@@ -228,6 +228,11 @@ describe("searchImportedLocations", () => {
             "London, England, United Kingdom",
             "London, Ontario, Canada",
         ]);
+        expect((await searchImportedLocations("cambrid")).slice(0, 3)).toEqual([
+            "Cambridge, Massachusetts, United States",
+            "Cambridge, England, United Kingdom",
+            "Cambridge, Ontario, Canada",
+        ]);
     });
 });
 

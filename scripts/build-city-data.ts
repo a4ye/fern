@@ -140,6 +140,24 @@ const rows: CityRow[] = sourceRows.map((row) => [
     row[7],
 ]);
 
+// Standalone country and region names are not cities. Shipping this compact
+// set with the generated index lets runtime matching reject inputs such as
+// "Ontario" or "Canada" without walking every city row on the first request.
+const entities = [
+    ...new Set(
+        [
+            ...[...countries.entries()].flatMap(([code, country]) => [
+                code,
+                country.iso3,
+                country.name,
+            ]),
+            ...regions.values(),
+        ]
+            .map(normalizeAlias)
+            .filter(Boolean),
+    ),
+].sort((left, right) => left.localeCompare(right, "en"));
+
 // The runtime can now jump straight to names with the same first character and
 // length instead of building maps for the whole world on its first request.
 // Entries inside a bucket are sorted, so exact aliases use binary search while
@@ -155,7 +173,7 @@ sourceRows.forEach((row, cityIndex) => {
         maxAliasLength = Math.max(maxAliasLength, alias.length);
         maxCityWords = Math.max(
             maxCityWords,
-            Math.min(alias.split(" ").length, 5),
+            Math.min(alias.split(" ").length, 12),
         );
         const bucketKey = `${alias[0]}:${alias.length}`;
         const bucket = bucketMaps.get(bucketKey) ?? new Map<string, number[]>();
@@ -190,6 +208,7 @@ const output = {
     ...(lastModified ? { lastModified } : {}),
     maxAliasLength,
     maxCityWords,
+    entities,
     rows,
     buckets,
 };

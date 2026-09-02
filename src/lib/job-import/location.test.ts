@@ -31,6 +31,30 @@ describe("resolvePopularLocation", () => {
             status: "matched",
             location: "Munich, Bavaria, Germany",
         });
+        expect(resolvePopularLocation("Kiev")).toEqual({
+            status: "matched",
+            location: "Kyiv, Kyiv City, Ukraine",
+        });
+        expect(resolvePopularLocation("Calcutta")).toEqual({
+            status: "matched",
+            location: "Kolkata, West Bengal, India",
+        });
+        expect(resolvePopularLocation("Madras")).toEqual({
+            status: "matched",
+            location: "Chennai, Tamil Nadu, India",
+        });
+        expect(resolvePopularLocation("Peking")).toEqual({
+            status: "matched",
+            location: "Beijing, Beijing, China",
+        });
+        expect(resolvePopularLocation("Saigon")).toEqual({
+            status: "matched",
+            location: "Ho Chi Minh City, Ho Chi Minh City, Vietnam",
+        });
+        expect(resolvePopularLocation("Den Haag")).toEqual({
+            status: "matched",
+            location: "The Hague, South Holland, Netherlands",
+        });
     });
 
     test("does not settle known ambiguous bare names and abbreviations", () => {
@@ -73,6 +97,24 @@ describe("searchPopularLocations", () => {
         expect(searchPopularLocations("Canada, Tor")[0]).toBe(
             "Toronto, Ontario, Canada",
         );
+        expect(searchPopularLocations("otronto")[0]).toBe(
+            "Toronto, Ontario, Canada",
+        );
+        expect(searchPopularLocations("parsi")[0]).toBe(
+            "Paris, Île-de-France, France",
+        );
+    });
+
+    test("uses curated technology relevance before population for equal matches", () => {
+        expect(searchPopularLocations("san").slice(0, 3)).toEqual([
+            "San Francisco, California, United States",
+            "San Jose, California, United States",
+            "San Diego, California, United States",
+        ]);
+        expect(searchPopularLocations("new").slice(0, 2)).toEqual([
+            "New York, New York, United States",
+            "Delhi, Delhi, India",
+        ]);
     });
 
     test("does not turn a country-only query into an arbitrary city list", () => {

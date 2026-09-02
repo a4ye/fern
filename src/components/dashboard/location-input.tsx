@@ -142,16 +142,12 @@ export const LocationInput = ({
         () => searchPopularLocations(value, MAX_OPTIONS),
         [value],
     );
-    const suggestions = useMemo(
-        () =>
-            uniqueLocations([
-                promotedSuggestions,
-                popular,
-                queryCache.get(query) ??
-                    (remote.query === query ? remote.options : []),
-            ]),
-        [promotedSuggestions, popular, query, remote],
-    );
+    const suggestions = useMemo(() => {
+        const cached = queryCache.get(query);
+        const settled =
+            cached ?? (remote.query === query ? remote.options : null);
+        return uniqueLocations([promotedSuggestions, settled ?? popular]);
+    }, [promotedSuggestions, popular, query, remote]);
     const customValue = value.trim();
     const hasExactSuggestion = suggestions.some(
         (suggestion) => normalizeLocationPhrase(suggestion) === query,
