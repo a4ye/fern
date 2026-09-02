@@ -87,6 +87,7 @@ mock.module("@/db/quotas", () => ({
     applicationsAtEventCap: async () => atEventCap,
 }));
 mock.module("@/db/history", () => ({
+    HISTORY_LOAD_PAGE_SIZE: 20,
     getListHistory: async () => ({
         items: [],
         nextCursor: null,
@@ -112,6 +113,8 @@ const {
     loadListHistoryChanges,
     permanentlyRemoveApplication,
     permanentlyRemoveDeletedApplication,
+    resolveImportedLocation,
+    searchImportedLocations,
     clearListHistory,
     restoreListHistoryVersion,
     setApplicationsArrangement,
@@ -191,6 +194,39 @@ describe("suggestFromUrl", () => {
             "user-1",
             "jobs.lever.co",
             1,
+        ]);
+    });
+});
+
+describe("resolveImportedLocation", () => {
+    it("does not expose the city index to signed-out callers", async () => {
+        session = null;
+        expect(await resolveImportedLocation("London")).toEqual({
+            status: "unmatched",
+        });
+    });
+
+    it("settles common locations without loading the complete fallback", async () => {
+        expect(await resolveImportedLocation("Canada, Toronto")).toEqual({
+            status: "matched",
+            location: "Toronto, Ontario, Canada",
+        });
+    });
+});
+
+describe("searchImportedLocations", () => {
+    it("does not expose worldwide suggestions to signed-out callers", async () => {
+        session = null;
+        expect(await searchImportedLocations("Gue")).toEqual([]);
+    });
+
+    it("returns indexed prefix and ambiguity suggestions", async () => {
+        expect(await searchImportedLocations("Gue")).toContain(
+            "Guelph, Ontario, Canada",
+        );
+        expect((await searchImportedLocations("Londn")).slice(0, 2)).toEqual([
+            "London, England, United Kingdom",
+            "London, Ontario, Canada",
         ]);
     });
 });

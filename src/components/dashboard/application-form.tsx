@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode, RefObject } from "react";
+import { LocationInput } from "@/components/dashboard/location-input";
 import {
     ARRANGEMENT_OPTIONS,
     CURRENCY_OPTIONS,
@@ -21,7 +22,6 @@ import { DEFAULT_CURRENCY } from "@/lib/pay";
 import {
     AMOUNT_INPUT_MAX,
     COMPANY_MAX,
-    LOCATION_MAX,
     NOTES_MAX,
     PAY_MAX,
     ROLE_MAX,
@@ -148,6 +148,8 @@ export const BasicsFields = ({
     omitLink = false,
     companyRef,
     roleNote,
+    locationSuggestions,
+    onDismissLocationSuggestions,
 }: {
     draft: ApplicationFields;
     set: SetField;
@@ -155,6 +157,8 @@ export const BasicsFields = ({
     omitLink?: boolean;
     companyRef?: RefObject<HTMLInputElement | null>;
     roleNote?: ReactNode;
+    locationSuggestions?: readonly string[];
+    onDismissLocationSuggestions?: () => void;
 }) => (
     <Section title="Basics">
         <Field label="Company" required>
@@ -193,12 +197,13 @@ export const BasicsFields = ({
             </Field>
         )}
         <Field label="Location">
-            <input
+            <LocationInput
                 value={draft.location}
-                onChange={(event) => set("location", event.target.value)}
-                maxLength={LOCATION_MAX}
+                onChange={(location) => set("location", location)}
                 disabled={disabled}
                 className={fieldClass}
+                promotedSuggestions={locationSuggestions}
+                onDismissPromotedSuggestions={onDismissLocationSuggestions}
             />
         </Field>
         <PickerField label="Arrangement">

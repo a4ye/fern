@@ -110,7 +110,11 @@ const readLocation = (posting: JsonObject): string | null => {
     if (!isObject(address)) return null;
     const city = asString(address["addressLocality"]);
     const region = asString(address["addressRegion"]);
-    return [city, region].filter(Boolean).join(", ") || null;
+    const countryNode = address["addressCountry"];
+    const country = isObject(countryNode)
+        ? asString(countryNode["name"])
+        : asString(countryNode);
+    return [city, region, country].filter(Boolean).join(", ") || null;
 };
 
 // Emitted as a suffix on the pay string, which parsePay reads back into the

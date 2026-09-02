@@ -4,3 +4,4 @@ out/
 build/
 public/
 src/db/gen/
+src/lib/job-import/city-data.generated.json
