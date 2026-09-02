@@ -53,6 +53,22 @@ describe("parsePosting", () => {
         expect(parsePosting(html).arrangement).toBe("hybrid");
     });
 
+    it("keeps every structured address level for location matching", () => {
+        const html = jsonLd({
+            "@type": "JobPosting",
+            title: "Backend Intern",
+            jobLocation: {
+                address: {
+                    addressLocality: "Toronto",
+                    addressRegion: "ON",
+                    addressCountry: { name: "Canada" },
+                },
+            },
+        });
+
+        expect(parsePosting(html).location).toBe("Toronto, ON, Canada");
+    });
+
     // The scraped pay is a suggestion the user can edit, and is stored through
     // the same parser as typed input, so the two have to agree.
     it("emits a pay string that parsePay can read into columns", () => {

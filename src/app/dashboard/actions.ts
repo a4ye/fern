@@ -79,6 +79,7 @@ import {
     firstIssue,
     listCreateSchema,
     listUpdateSchema,
+    LOCATION_MAX,
     stepEditsSchema,
     timeZoneSchema,
     type ActionResult,
@@ -362,6 +363,55 @@ export const suggestFromUrl = async (
     } catch {
         after(() => recordMetrics([record(POSTING_FALLBACK, "missed")]));
         return { status: "missed", posting: EMPTY_POSTING };
+    }
+};
+
+export type { ImportedLocationResolution } from "@/lib/job-import/location";
+
+// Common technology hubs settle in the browser without a request. Everything
+// else reaches the complete index here, so its several megabytes never enter
+// the create drawer's client bundle. A miss leaves the posting's own text alone.
+export const resolveImportedLocation = async (
+    raw: string,
+): Promise<import("@/lib/job-import/location").ImportedLocationResolution> => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    const location = raw.trim();
+    if (!session || !location || location.length > LOCATION_MAX * 2) {
+        return { status: "unmatched" };
+    }
+
+    const { resolvePopularLocation } =
+        await import("@/lib/job-import/location");
+    const popular = resolvePopularLocation(location);
+    if (popular.status !== "unmatched") return popular;
+
+    try {
+        const { resolveComprehensiveLocation } =
+            await import("@/lib/job-import/location-server");
+        return resolveComprehensiveLocation(location);
+    } catch {
+        return { status: "unmatched" };
+    }
+};
+
+// The location combobox calls this only after a short client debounce. The
+// popular-city results are already visible synchronously in the browser; this
+// authenticated action contributes the worldwide prefix and typo matches.
+export const searchImportedLocations = async (
+    raw: string,
+): Promise<string[]> => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    const location = raw.trim();
+    if (!session || location.length < 2 || location.length > LOCATION_MAX) {
+        return [];
+    }
+
+    try {
+        const { searchComprehensiveLocations } =
+            await import("@/lib/job-import/location-server");
+        return searchComprehensiveLocations(location);
+    } catch {
+        return [];
     }
 };
 

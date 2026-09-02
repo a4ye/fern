@@ -8,7 +8,11 @@ import {
     type ClipboardEvent,
     type KeyboardEvent,
 } from "react";
-import { addApplication, suggestFromUrl } from "@/app/dashboard/actions";
+import {
+    addApplication,
+    resolveImportedLocation,
+    suggestFromUrl,
+} from "@/app/dashboard/actions";
 import { recordPostingRead } from "@/app/dashboard/metrics-actions";
 import {
     BasicsFields,
@@ -50,6 +54,7 @@ import {
     isScrapedPosting,
     type ScrapedPosting,
 } from "@/lib/job-import/shared";
+import { resolvePopularLocation } from "@/lib/job-import/location";
 import { URL_MAX } from "@/lib/validation";
 
 const LINK_INPUT_ID = "add-application-link";
@@ -63,6 +68,8 @@ const employerHost = (raw: string): string => {
         return "Employer website";
     }
 };
+
+const postingReadStartedAt = (): number => Date.now();
 
 // Which readers a link was put in front of, and which one filled the form, is
 // only knowable here: two of the three never reach the server. Sent rather than
@@ -123,6 +130,9 @@ export const AddApplicationForm = ({
     // for it: the shorter reading is proposed rather than taken, because only
     // the user knows which of the words left out mattered to them.
     const [tidyRole, setTidyRole] = useState<string | null>(null);
+    const [locationSuggestions, setLocationSuggestions] = useState<string[]>(
+        [],
+    );
     const [error, setError] = useState<string | null>(null);
     const [fetching, setFetching] = useState(false);
     const [, startScrape] = useTransition();
@@ -156,6 +166,7 @@ export const AddApplicationForm = ({
         value: ApplicationFields[K],
     ) => {
         editedFields.current.add(key);
+        if (key === "location") setLocationSuggestions([]);
         setDraft((current) => ({ ...current, [key]: value }));
     };
 
@@ -171,14 +182,50 @@ export const AddApplicationForm = ({
     };
 
     const applyPosting = (found: ScrapedPosting, url: string) => {
+        const locationFetchId = fetchId.current;
+        const popularLocation = resolvePopularLocation(found.location);
+        const posting =
+            popularLocation.status === "matched"
+                ? { ...found, location: popularLocation.location }
+                : found;
         setDraft((current) =>
             mergeImportedApplication(
                 current,
-                found,
+                posting,
                 editedFields.current,
                 defaultCurrency,
             ),
         );
+        setLocationSuggestions(
+            popularLocation.status === "suggestions"
+                ? popularLocation.suggestions
+                : [],
+        );
+
+        // The complete index is server-only and asked in the background. Other
+        // imported fields appear immediately; a late answer may touch location
+        // only while it is still the untouched value from this same posting.
+        if (found.location && popularLocation.status !== "matched") {
+            void resolveImportedLocation(found.location)
+                .then((resolution) => {
+                    if (
+                        fetchId.current !== locationFetchId ||
+                        editedFields.current.has("location")
+                    ) {
+                        return;
+                    }
+                    if (resolution.status === "matched") {
+                        setDraft((current) => ({
+                            ...current,
+                            location: resolution.location,
+                        }));
+                        setLocationSuggestions([]);
+                    } else if (resolution.status === "suggestions") {
+                        setLocationSuggestions(resolution.suggestions);
+                    }
+                })
+                .catch(() => undefined);
+        }
         const employer =
             found.employerUrl && found.employerUrl !== url
                 ? found.employerUrl
@@ -222,7 +269,8 @@ export const AddApplicationForm = ({
         setVisibleImportUrl(null);
         setEmployerUrl(null);
         setTidyRole(null);
-        const startedAt = Date.now();
+        setLocationSuggestions([]);
+        const startedAt = postingReadStartedAt();
         // Grows as each reader is reached, so what is reported is what was
         // actually tried rather than what might have been.
         const attempted: PostingReader[] = [];
@@ -306,7 +354,7 @@ export const AddApplicationForm = ({
         setFetching(true);
         setMissed(false);
         setRateLimited(false);
-        const startedAt = Date.now();
+        const startedAt = postingReadStartedAt();
         startScrape(async () => {
             const response = await extension.openAndImport(url);
             if (fetchId.current !== id) return;
@@ -375,6 +423,7 @@ export const AddApplicationForm = ({
         set("url", value);
         setEmployerUrl(null);
         setTidyRole(null);
+        setLocationSuggestions([]);
         setVisibleImportUrl(null);
         setMissed(false);
         setRateLimited(false);
@@ -680,6 +729,10 @@ export const AddApplicationForm = ({
                                     </div>
                                 </div>
                             )
+                        }
+                        locationSuggestions={locationSuggestions}
+                        onDismissLocationSuggestions={() =>
+                            setLocationSuggestions([])
                         }
                     />
 
