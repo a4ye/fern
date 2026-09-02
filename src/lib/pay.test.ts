@@ -111,6 +111,18 @@ describe("parsePay", () => {
         });
     });
 
+    // A glyph repeated on the far end of a range is the same currency said
+    // twice, not prose between two numbers. The plain "$" ranges above only
+    // worked because that glyph carries no letters to be mistaken for words.
+    it.each([
+        ["CA$140K – CA$188K", "CAD", "140000.00", "188000.00"],
+        ["R$675K – R$750K", "BRL", "675000.00", "750000.00"],
+        ["A$130K – A$145K", "AUD", "130000.00", "145000.00"],
+        ["NZ$100K – NZ$120K", "NZD", "100000.00", "120000.00"],
+    ])("keeps both ends of %p", (input, payCurrency, payMin, payMax) => {
+        expect(parsePay(input)).toMatchObject({ payMin, payMax, payCurrency });
+    });
+
     it("reads an amount followed by a separate bonus", () => {
         expect(parsePay("$2k / month + $1k bonus")).toMatchObject({
             payMin: "2000.00",

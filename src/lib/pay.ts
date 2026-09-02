@@ -239,8 +239,17 @@ const PLAN_TOKENS = /\b40[13]\s*\(?[kb]\)?(?!\w)/gi;
 // tilde, or a joining word. A comma, a plus or any prose in between means the
 // second number is a different thing altogether, as in "$120k base + 15% bonus"
 // or "$120,000/yr, 401k match". Currency written between the two ends is not
-// prose, so it is dropped before the gap is judged.
-const CURRENCY_NOISE = new RegExp(`\\b(?:${CURRENCIES.join("|")})\\b`, "gi");
+// prose, so it is dropped before the gap is judged. Glyphs go as well as codes,
+// or the "CA" in "CA$140K – CA$188K" reads as prose and the range loses its top
+// end; the plain "$" ranges only worked because that glyph has no letters.
+const escape = (value: string): string =>
+    value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const CURRENCY_NOISE = new RegExp(
+    `\\b(?:${CURRENCIES.join("|")})\\b` +
+        `|${GLYPH_CURRENCY.map(([glyph]) => escape(glyph)).join("|")}`,
+    "gi",
+);
 
 const RANGE_JOIN =
     /^[^\p{L}\d]*(?:[-–—~]|\bto\b|\band\b|\buntil\b)[^\p{L}\d]*$/iu;

@@ -22,6 +22,7 @@ import {
     greenhouseIds,
     parseGreenhouseJob,
     parseRipplingJob,
+    payText,
     type JobArrangement,
     type ScrapedPosting,
 } from "@/lib/job-import/shared";
@@ -35,6 +36,19 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
 
 const text = (value: unknown): string | null =>
     typeof value === "string" && value.trim() ? value.trim() : null;
+
+const number = (value: unknown): number | null =>
+    typeof value === "number" && Number.isFinite(value) ? value : null;
+
+// Each board spells the interval its own way, so each reduces it to the unit
+// word before looking it up here. A unit with no pay_period column of its own is
+// left off rather than rounded into a neighbouring one.
+const PERIOD_SUFFIX: Record<string, string> = {
+    hour: "/hr",
+    week: "/wk",
+    month: "/mo",
+    year: "/yr",
+};
 
 const webUrl = (rawUrl: string): URL | null => {
     try {
@@ -63,6 +77,24 @@ const leverIds = (url: URL): { company: string; id: string } | null => {
     return company && id ? { company, id } : null;
 };
 
+// Lever names the interval in full, as "per-year-salary" or "per-hour-wage",
+// where the middle word is the only part that says anything.
+const leverPeriod = (interval: string | null): string => {
+    const unit = interval?.match(/^per-(\w+)-/i)?.[1];
+    return unit ? (PERIOD_SUFFIX[unit.toLowerCase()] ?? "") : "";
+};
+
+const leverPay = (value: Record<string, unknown>): string | null => {
+    const range = value["salaryRange"];
+    if (!isObject(range)) return null;
+    return payText(
+        number(range["min"]),
+        number(range["max"]),
+        text(range["currency"]),
+        leverPeriod(text(range["interval"])),
+    );
+};
+
 const parseLeverPosting = (value: unknown, url: URL): ScrapedPosting | null => {
     if (!isObject(value)) return null;
     const role = text(value["text"]);
@@ -80,10 +112,10 @@ const parseLeverPosting = (value: unknown, url: URL): ScrapedPosting | null => {
         location,
         arrangement:
             LEVER_WORKPLACE[workplace] ?? arrangementFromText(location),
-        // Lever carries pay on the posting only sometimes and in a shape this
-        // has not been able to observe, so it is left for the person to fill in
-        // rather than read out of a guess.
-        pay: null,
+        // Only the boards that have turned pay transparency on carry a range,
+        // and null on the rest means the same as it always did.
+        pay: leverPay(value),
+        payNote: null,
         source: "lever",
         employerUrl: null,
     };
@@ -101,6 +133,73 @@ const ashbyIds = (url: URL): { org: string; id: string } | null => {
     return org && id ? { org, id } : null;
 };
 
+// Ashby writes an interval as "1 YEAR" or "1 HOUR", and as "NONE" where the
+// component is not paid on a clock at all.
+const ashbyPeriod = (interval: string | null): string => {
+    const unit = interval?.match(/^1\s+(\w+)$/i)?.[1];
+    return unit ? (PERIOD_SUFFIX[unit.toLowerCase()] ?? "") : "";
+};
+
+// Both kinds of equity say the same thing to someone reading a pay column: the
+// offer includes stock. Which of the two it is describes how Ashby measured it,
+// not what is on offer.
+const ASHBY_COMPONENT: Record<string, string> = {
+    EquityCashValue: "Equity",
+    EquityPercentage: "Equity",
+    Bonus: "Bonus",
+    Commission: "Commission",
+};
+
+// Ashby lists the components in no order it holds to, so the note is written in
+// this one instead and two postings offering the same things read alike.
+const NOTE_ORDER = ["Equity", "Bonus", "Commission"];
+
+const ashbyAmount = (component: Record<string, unknown>): string | null =>
+    payText(
+        number(component["minValue"]),
+        number(component["maxValue"]),
+        text(component["currencyCode"]),
+        ashbyPeriod(text(component["interval"])),
+    );
+
+// `summaryComponents` is the whole offer broken out, already merged across the
+// per-location tiers. It is read instead of `compensationTierSummary` because it
+// is the numbers themselves: the summary is display text, which spells the
+// currency as a glyph and joins a range with an en dash, so reading it back is a
+// guess where this is a fact.
+const ashbyCompensation = (
+    job: Record<string, unknown>,
+): { pay: string | null; payNote: string | null } => {
+    const compensation = isObject(job["compensation"])
+        ? job["compensation"]
+        : {};
+    const components = compensation["summaryComponents"];
+    if (!Array.isArray(components)) return { pay: null, payNote: null };
+
+    let pay: string | null = null;
+    const extras = new Map<string, string>();
+    for (const component of components) {
+        if (!isObject(component)) continue;
+        const kind = text(component["compensationType"]);
+        if (kind === "Salary") {
+            pay ??= ashbyAmount(component);
+            continue;
+        }
+        // Ashby states equity and a bonus as a fact far more often than as an
+        // amount, so the label is what carries over, with a range beside it
+        // wherever there is one to give.
+        const label = kind ? ASHBY_COMPONENT[kind] : undefined;
+        if (!label || extras.has(label)) continue;
+        const amount = ashbyAmount(component);
+        extras.set(label, amount ? `${label} ${amount}` : label);
+    }
+
+    const note = NOTE_ORDER.filter((label) => extras.has(label))
+        .map((label) => extras.get(label))
+        .join(", ");
+    return { pay, payNote: note || null };
+};
+
 const parseAshbyBoard = (value: unknown, url: URL): ScrapedPosting | null => {
     const ids = ashbyIds(url);
     if (!ids || !isObject(value) || !Array.isArray(value["jobs"])) return null;
@@ -115,9 +214,7 @@ const parseAshbyBoard = (value: unknown, url: URL): ScrapedPosting | null => {
 
     const location = text(job["location"]);
     const workplace = text(job["workplaceType"])?.toLowerCase() ?? "";
-    const compensation = isObject(job["compensation"])
-        ? job["compensation"]
-        : {};
+    const { pay, payNote } = ashbyCompensation(job);
 
     return {
         company: companyFromUrl(url),
@@ -128,13 +225,8 @@ const parseAshbyBoard = (value: unknown, url: URL): ScrapedPosting | null => {
             (job["isRemote"] === true
                 ? "remote"
                 : arrangementFromText(location)),
-        // The summary reads as a sentence about the whole offer, of which the
-        // figures are the opening clause. Only that clause belongs in a pay
-        // column; the rest is for the posting to say.
-        pay:
-            text(compensation["compensationTierSummary"])
-                ?.split("•")[0]
-                .trim() ?? null,
+        pay,
+        payNote,
         source: "ashby",
         employerUrl: null,
     };
@@ -154,8 +246,11 @@ const readers: {
     {
         apiUrl: (url) => {
             const ids = greenhouseIds(url);
+            // Greenhouse leaves the pay ranges out of the answer unless they
+            // are asked for by name, so a posting that publishes one still
+            // reads as a posting with no pay at all without this.
             return ids
-                ? `https://boards-api.greenhouse.io/v1/boards/${ids.slug}/jobs/${ids.id}`
+                ? `https://boards-api.greenhouse.io/v1/boards/${ids.slug}/jobs/${ids.id}?pay_transparency=true`
                 : null;
         },
         parse: parseGreenhouseJob,

@@ -153,6 +153,7 @@ describe("suggestFromUrl", () => {
         location: null,
         arrangement: null,
         pay: null,
+        payNote: null,
         source: "json-ld",
         employerUrl: null,
     } as const;
@@ -166,6 +167,7 @@ describe("suggestFromUrl", () => {
                 location: null,
                 arrangement: null,
                 pay: null,
+                payNote: null,
                 source: "none",
                 employerUrl: null,
             },

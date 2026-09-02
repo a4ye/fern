@@ -18,13 +18,29 @@ const LEVER_POSTING = {
         location: "London, United Kingdom",
         team: "Administrative",
     },
+    salaryRange: {
+        interval: "per-year-salary",
+        currency: "USD",
+        min: 150000,
+        max: 180000,
+    },
     hostedUrl: "https://jobs.lever.co/palantir/ac978161",
 };
 
+// Greenhouse states the amounts in cents and gives them no interval of their
+// own, only the heading they are printed under.
 const GREENHOUSE_JOB = {
     title: "Software Engineer, Infrastructure",
     company_name: "Anthropic",
     location: { name: "San Francisco, CA" },
+    pay_input_ranges: [
+        {
+            min_cents: 22280000,
+            max_cents: 29000000,
+            currency_type: "USD",
+            title: "Annual Salary:",
+        },
+    ],
 };
 
 const RIPPLING_JOB = {
@@ -46,6 +62,8 @@ const RIPPLING_JOB = {
     ],
 };
 
+// `summaryComponents` is the offer broken into figures, already merged across
+// the per-location tiers. The display summary beside it is what a person reads.
 const ASHBY_BOARD = {
     jobs: [
         {
@@ -57,6 +75,22 @@ const ASHBY_BOARD = {
             compensation: {
                 compensationTierSummary:
                     "$213K – $251K • Offers Equity • This role is also eligible for medical benefits, 401(k) plan, and other company perk programs.",
+                summaryComponents: [
+                    {
+                        compensationType: "Salary",
+                        interval: "1 YEAR",
+                        currencyCode: "USD",
+                        minValue: 213000,
+                        maxValue: 251000,
+                    },
+                    {
+                        compensationType: "EquityCashValue",
+                        interval: "1 YEAR",
+                        currencyCode: "USD",
+                        minValue: null,
+                        maxValue: null,
+                    },
+                ],
             },
         },
         {
@@ -66,6 +100,43 @@ const ASHBY_BOARD = {
             workplaceType: "Hybrid",
             isRemote: false,
             compensation: { compensationTierSummary: null },
+        },
+        // A Canadian range, which is the case the display summary loses: it
+        // writes both ends as "CA$", and the letters in that glyph read as
+        // prose between two numbers rather than as one range.
+        {
+            id: "c7d40b19",
+            title: "Account Executive",
+            location: "Toronto",
+            workplaceType: "Onsite",
+            isRemote: false,
+            compensation: {
+                compensationTierSummary:
+                    "CA$140K – CA$188K • Offers Equity • Offers Commission • 70/30 split",
+                summaryComponents: [
+                    {
+                        compensationType: "EquityPercentage",
+                        interval: "NONE",
+                        currencyCode: null,
+                        minValue: null,
+                        maxValue: null,
+                    },
+                    {
+                        compensationType: "Salary",
+                        interval: "1 YEAR",
+                        currencyCode: "CAD",
+                        minValue: 140000,
+                        maxValue: 188000,
+                    },
+                    {
+                        compensationType: "Commission",
+                        interval: "1 YEAR",
+                        currencyCode: "CAD",
+                        minValue: 189000,
+                        maxValue: 220500,
+                    },
+                ],
+            },
         },
     ],
 };
@@ -128,13 +199,15 @@ describe("importDirect", () => {
             "https://job-boards.greenhouse.io/anthropic/jobs/5101378008",
         );
 
+        // Greenhouse leaves the ranges out unless they are asked for by name.
         expect(asked[0]).toBe(
-            "https://boards-api.greenhouse.io/v1/boards/anthropic/jobs/5101378008",
+            "https://boards-api.greenhouse.io/v1/boards/anthropic/jobs/5101378008?pay_transparency=true",
         );
         expect(posting).toMatchObject({
             company: "Anthropic",
             role: "Software Engineer, Infrastructure",
             location: "San Francisco, CA",
+            pay: "USD 222800-290000/yr",
             source: "greenhouse",
         });
     });
@@ -156,6 +229,7 @@ describe("importDirect", () => {
             role: "Administrative Business Partner",
             location: "London, United Kingdom",
             arrangement: "hybrid",
+            pay: "USD 150000-180000/yr",
             source: "lever",
         });
     });
@@ -214,9 +288,44 @@ describe("importDirect", () => {
             role: "Senior / Staff Fullstack Engineer",
             location: "Europe",
             arrangement: "remote",
-            // The figures, without the sentence about benefits that follows.
-            pay: "$213K – $251K",
+            // The figures themselves, not the sentence they are printed in.
+            pay: "USD 213000-251000/yr",
+            // Ashby offers equity as a fact and no amount, which is still worth
+            // saying: it is the note the pay field cannot hold.
+            payNote: "Equity",
             source: "ashby",
+        });
+    });
+
+    it("keeps both ends of an Ashby range the display summary would lose", async () => {
+        answerWith(ASHBY_BOARD);
+
+        const posting = await importDirect(
+            "https://jobs.ashbyhq.com/linear/c7d40b19",
+        );
+
+        // "CA$140K – CA$188K" read as text gives up its top end, because the
+        // letters in the repeated glyph look like prose between two numbers.
+        expect(posting).toMatchObject({
+            role: "Account Executive",
+            pay: "CAD 140000-188000/yr",
+            payNote: "Equity, Commission CAD 189000-220500/yr",
+            source: "ashby",
+        });
+    });
+
+    it("leaves Ashby pay for the person where the board states none", async () => {
+        answerWith(ASHBY_BOARD);
+
+        const posting = await importDirect(
+            "https://jobs.ashbyhq.com/linear/a2f0e1aa",
+        );
+
+        expect(posting).toMatchObject({
+            role: "Product Designer",
+            arrangement: "hybrid",
+            pay: null,
+            payNote: null,
         });
     });
 

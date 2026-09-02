@@ -20,6 +20,10 @@ export type ScrapedPosting = {
     location: string | null;
     arrangement: JobArrangement | null;
     pay: string | null;
+    // What the offer carries besides a salary: equity, a bonus, commission. A
+    // board states these as a fact rather than an amount ("Offers Equity"), so
+    // they belong in the note beside the pay and not in a number column.
+    payNote: string | null;
     source: PostingSource;
     // The employer's own posting, where the link given was an aggregator's.
     // Offered to the user rather than swapped in: it is a third party's claim
@@ -33,6 +37,7 @@ export const EMPTY_POSTING: ScrapedPosting = {
     location: null,
     arrangement: null,
     pay: null,
+    payNote: null,
     source: "none",
     employerUrl: null,
 };
@@ -65,12 +70,14 @@ const asString = (value: unknown): string | null =>
         ? decodeEntities(value).replace(/\s+/g, " ").trim()
         : null;
 
-// JSON-LD numbers arrive as `number`, not `string`, so salary fields need this.
-const asNumeric = (value: unknown): string | null => {
-    if (typeof value === "number" && Number.isFinite(value)) {
-        return String(value);
-    }
-    return asString(value);
+// Salary fields arrive as `number` from some boards and as `string` from others,
+// and a string one may carry the grouping a person would write.
+const asNumber = (value: unknown): number | null => {
+    if (typeof value === "number") return Number.isFinite(value) ? value : null;
+    const text = asString(value);
+    if (text === null) return null;
+    const parsed = Number(text.replace(/,/g, ""));
+    return Number.isFinite(parsed) ? parsed : null;
 };
 
 // JSON-LD nodes are untyped external data, so we narrow defensively.
@@ -122,6 +129,29 @@ const PAY_PERIOD: Record<string, string> = {
     YEAR: "/yr",
 };
 
+// Every provider that states pay in numbers is put through here, so what
+// parsePay reads back is always "USD 140000-188000/yr" and never the board's own
+// display text. A board writes that text for a person ("CA$140K – CA$188K"), and
+// reading it back is a guess at the currency and a chance to lose an end of the
+// range; the numbers beside it are neither.
+export const payText = (
+    min: number | null,
+    max: number | null,
+    currency: string | null,
+    period: string | null,
+): string | null => {
+    const low = min ?? max;
+    if (low === null) return null;
+    const high = max ?? min;
+    const amount = high !== null && high !== low ? `${low}-${high}` : `${low}`;
+    return (
+        [asString(currency), amount].filter(Boolean).join(" ") + (period ?? "")
+    );
+};
+
+const periodSuffix = (unit: string | null): string =>
+    unit ? (PAY_PERIOD[unit.toUpperCase()] ?? "") : "";
+
 const REMOTE_TEXT = /\bremote\b/i;
 const HYBRID_TEXT = /\bhybrid\b/i;
 const ONSITE_TEXT = /\bon-?site\b|\bin[-\s]office\b/i;
@@ -150,16 +180,13 @@ const readPay = (posting: JsonObject): string | null => {
     if (!isObject(salary)) return null;
     const value = salary["value"];
     if (!isObject(value)) return null;
-    const amount =
-        asNumeric(value["value"]) ??
-        [asNumeric(value["minValue"]), asNumeric(value["maxValue"])]
-            .filter(Boolean)
-            .join("-");
-    if (!amount) return null;
-    const currency = asString(salary["currency"]);
-    const unit = asString(value["unitText"]);
-    const period = unit ? (PAY_PERIOD[unit.toUpperCase()] ?? "") : "";
-    return [currency, amount].filter(Boolean).join(" ") + period;
+    const exact = asNumber(value["value"]);
+    return payText(
+        exact ?? asNumber(value["minValue"]),
+        exact ?? asNumber(value["maxValue"]),
+        asString(salary["currency"]),
+        periodSuffix(asString(value["unitText"])),
+    );
 };
 
 const fromJsonLd = (html: string): ScrapedPosting | null => {
@@ -184,6 +211,7 @@ const fromJsonLd = (html: string): ScrapedPosting | null => {
             location,
             arrangement: readArrangement(posting, location),
             pay: readPay(posting),
+            payNote: null,
             source: "json-ld",
             employerUrl: null,
         };
@@ -218,16 +246,12 @@ const dig = (root: unknown, ...keys: string[]): unknown => {
 const SIMPLIFY_PERIOD: Record<number, string> = { 1: "/hr", 4: "/yr" };
 
 const simplifyPay = (posting: JsonObject): string | null => {
-    const min = asNumeric(posting["min_salary"]);
-    const max = asNumeric(posting["max_salary"]);
-    const amount = min && max && min !== max ? `${min}-${max}` : (min ?? max);
-    if (!amount) return null;
     const period = posting["salary_period"];
-    const unit =
-        typeof period === "number" ? (SIMPLIFY_PERIOD[period] ?? "") : "";
-    return (
-        [asString(posting["currency_type"]), amount].filter(Boolean).join(" ") +
-        unit
+    return payText(
+        asNumber(posting["min_salary"]),
+        asNumber(posting["max_salary"]),
+        asString(posting["currency_type"]),
+        typeof period === "number" ? (SIMPLIFY_PERIOD[period] ?? "") : "",
     );
 };
 
@@ -248,6 +272,7 @@ const fromSimplify = (html: string): ScrapedPosting | null => {
         location,
         arrangement: arrangementFromText(location),
         pay: simplifyPay(posting),
+        payNote: null,
         source: "simplify",
         employerUrl: null,
     };
@@ -262,14 +287,11 @@ const ripplingPay = (job: JsonObject): string | null => {
     const range: unknown = ranges[0];
     if (!isObject(range)) return null;
 
-    const min = asNumeric(range["rangeStart"]);
-    const max = asNumeric(range["rangeEnd"]);
-    const amount = min && max && min !== max ? `${min}-${max}` : (min ?? max);
-    if (!amount) return null;
-    const frequency = asString(range["frequency"]);
-    const unit = frequency ? (PAY_PERIOD[frequency.toUpperCase()] ?? "") : "";
-    return (
-        [asString(range["currency"]), amount].filter(Boolean).join(" ") + unit
+    return payText(
+        asNumber(range["rangeStart"]),
+        asNumber(range["rangeEnd"]),
+        asString(range["currency"]),
+        periodSuffix(asString(range["frequency"])),
     );
 };
 
@@ -294,6 +316,7 @@ export const parseRipplingJob = (value: unknown): ScrapedPosting | null => {
         location,
         arrangement: arrangementFromText(location),
         pay: ripplingPay(value),
+        payNote: null,
         source: "rippling",
         employerUrl: null,
     };
@@ -333,6 +356,7 @@ const fromOpenGraph = (html: string): ScrapedPosting => {
         location: null,
         arrangement: arrangementFromText(role),
         pay: null,
+        payNote: null,
         source: "opengraph",
         employerUrl: null,
     };
@@ -410,6 +434,40 @@ export const employerLink = (raw: string): string | null => {
     return url.toString();
 };
 
+// Greenhouse gives the range no interval of its own, only the heading it is
+// printed under, so the period is taken where that heading states one ("Annual
+// Salary:") and left unset where it does not ("Local Pay Range"). Guessing it
+// from the size of the number would be a guess about someone's salary.
+const GREENHOUSE_PERIOD: [RegExp, string][] = [
+    [/\bhourly\b|\bper hour\b/i, "/hr"],
+    [/\bweekly\b/i, "/wk"],
+    [/\bmonthly\b/i, "/mo"],
+    [/\bannual(?:ly)?\b|\byearly\b/i, "/yr"],
+];
+
+// Several ranges are per location or per pay zone, and nothing in the payload
+// says which one this posting is offered at, so the choice is left to the person
+// rather than made by picking a row. The same rule the Rippling reader follows.
+const greenhousePay = (job: JsonObject): string | null => {
+    const ranges = job["pay_input_ranges"];
+    if (!Array.isArray(ranges) || ranges.length !== 1) return null;
+    const range: unknown = ranges[0];
+    if (!isObject(range)) return null;
+
+    const title = asString(range["title"]) ?? "";
+    const period = GREENHOUSE_PERIOD.find(([pattern]) => pattern.test(title));
+    const cents = (value: unknown): number | null => {
+        const amount = asNumber(value);
+        return amount === null ? null : amount / 100;
+    };
+    return payText(
+        cents(range["min_cents"]),
+        cents(range["max_cents"]),
+        asString(range["currency_type"]),
+        period?.[1] ?? "",
+    );
+};
+
 export const parseGreenhouseJob = (value: unknown): ScrapedPosting | null => {
     if (!isObject(value)) return null;
     const node = value["location"];
@@ -422,7 +480,8 @@ export const parseGreenhouseJob = (value: unknown): ScrapedPosting | null => {
         company,
         location,
         arrangement: arrangementFromText(location),
-        pay: null,
+        pay: greenhousePay(value),
+        payNote: null,
         source: "greenhouse",
         employerUrl: null,
     };
@@ -442,7 +501,8 @@ export const hasPostingSuggestion = (posting: ScrapedPosting): boolean =>
         posting.role ||
         posting.location ||
         posting.arrangement ||
-        posting.pay,
+        posting.pay ||
+        posting.payNote,
     );
 
 export const POSTING_SOURCES = [
@@ -461,6 +521,13 @@ const KNOWN_SOURCE = new Set<PostingSource>(POSTING_SOURCES);
 const nullableString = (value: unknown): value is string | null =>
     value === null || typeof value === "string";
 
+// The extension is installed unpacked from a download, so a copy someone loaded
+// months ago is the copy that speaks to the page today. A field added since then
+// is missing rather than null, and missing has to mean the same thing as null:
+// read any stricter, every extension already out there stops importing at all.
+const absentOrString = (value: unknown): value is string | null =>
+    value === undefined || nullableString(value);
+
 export const isScrapedPosting = (value: unknown): value is ScrapedPosting => {
     if (!isObject(value)) return false;
     return (
@@ -472,6 +539,7 @@ export const isScrapedPosting = (value: unknown): value is ScrapedPosting => {
             value["arrangement"] === "hybrid" ||
             value["arrangement"] === "onsite") &&
         nullableString(value["pay"]) &&
+        absentOrString(value["payNote"]) &&
         KNOWN_SOURCE.has(value["source"] as PostingSource) &&
         nullableString(value["employerUrl"])
     );
