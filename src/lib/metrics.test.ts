@@ -65,6 +65,7 @@ describe("postingFieldsFilled", () => {
                 location: "Toronto",
                 arrangement: "remote",
                 pay: "$120k",
+                payNote: null,
                 source: "greenhouse",
                 // Offered rather than filled in, so it is not one of the five.
                 employerUrl: "https://acme.example/jobs/1",

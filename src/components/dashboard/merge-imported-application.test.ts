@@ -12,6 +12,7 @@ const POSTING: ScrapedPosting = {
     location: "Toronto, ON",
     arrangement: "hybrid",
     pay: "CAD 90,000 to 110,000 yearly",
+    payNote: null,
     source: "json-ld",
     employerUrl: null,
 };

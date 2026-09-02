@@ -6,6 +6,7 @@ import {
     serverImportHost,
     serverImportRequestCost,
 } from "@/lib/job-scrape";
+import { isScrapedPosting } from "@/lib/job-import/shared";
 import { parsePay } from "@/lib/pay";
 
 const jsonLd = (posting: Record<string, unknown>) =>
@@ -134,6 +135,7 @@ describe("parsePosting", () => {
             location: "Toronto, ON (Hybrid)",
             arrangement: "hybrid",
             pay: "CAD 120000-150000/yr",
+            payNote: null,
             source: "simplify",
             employerUrl: null,
         });
@@ -183,6 +185,7 @@ describe("parsePosting", () => {
             location: "Remote (San Francisco Bay Area)",
             arrangement: "remote",
             pay: "USD 185000-215000/yr",
+            payNote: null,
             source: "rippling",
         });
     });
@@ -204,6 +207,7 @@ describe("scrapePosting", () => {
             location: null,
             arrangement: null,
             pay: null,
+            payNote: null,
             source: "none",
             employerUrl: null,
         });
@@ -395,5 +399,40 @@ describe("scrapePosting", () => {
 
         expect(posting.source).toBe("none");
         expect(fetched).toBeFalse();
+    });
+});
+
+describe("isScrapedPosting", () => {
+    const POSTING = {
+        company: "Acme",
+        role: "Engineer",
+        location: "Toronto",
+        arrangement: "hybrid",
+        pay: "CAD 140000-188000/yr",
+        payNote: "Equity",
+        source: "ashby",
+        employerUrl: null,
+    };
+
+    it("accepts a posting the current extension sends", () => {
+        expect(isScrapedPosting(POSTING)).toBeTrue();
+    });
+
+    // The extension is loaded unpacked from a download and never updates itself,
+    // so a copy built before `payNote` existed is still out there sending
+    // postings without it. Rejecting those would break importing outright.
+    it("accepts a posting from an extension built before payNote existed", () => {
+        const { payNote: _omitted, ...older } = POSTING;
+
+        expect(isScrapedPosting(older)).toBeTrue();
+    });
+
+    it("rejects a posting whose fields are the wrong shape", () => {
+        expect(isScrapedPosting({ ...POSTING, payNote: 7 })).toBeFalse();
+        expect(
+            isScrapedPosting({ ...POSTING, arrangement: "onsite-ish" }),
+        ).toBeFalse();
+        expect(isScrapedPosting({ ...POSTING, source: "workday" })).toBeFalse();
+        expect(isScrapedPosting(null)).toBeFalse();
     });
 });
