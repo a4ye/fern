@@ -32,12 +32,13 @@ const BROWSERS: Record<
         icon: "icon-[simple-icons--firefoxbrowser]",
         note: "Firefox removes the add-on when you close it. Load it again next time.",
         steps: [
+            { text: "Unzip the file you downloaded." },
             {
                 text: "Open this address and click This Firefox.",
                 address: "about:debugging",
             },
             {
-                text: "Click Load Temporary Add-on and select the file you downloaded.",
+                text: "Click Load Temporary Add-on and select manifest.json in the unzipped folder.",
             },
             { text: `Refresh ${APP_NAME}.` },
         ],
@@ -87,6 +88,10 @@ export const InstallSteps = ({
     initialBrowser: ExtensionBrowser;
 }) => {
     const [selected, setSelected] = useState(initialBrowser);
+    const browsers = [
+        initialBrowser,
+        ...EXTENSION_BROWSERS.filter((name) => name !== initialBrowser),
+    ];
 
     return (
         <div>
@@ -95,7 +100,7 @@ export const InstallSteps = ({
                 aria-label="Browser"
                 className="inline-flex border border-hairline"
             >
-                {EXTENSION_BROWSERS.map((name) => {
+                {browsers.map((name) => {
                     const active = name === selected;
                     return (
                         <button
@@ -122,7 +127,7 @@ export const InstallSteps = ({
             {/* Both browsers stay mounted in one grid cell so the taller set of
                 steps sets the height and switching does not move the page. */}
             <div className="mt-6 grid">
-                {EXTENSION_BROWSERS.map((name) => {
+                {browsers.map((name) => {
                     const active = name === selected;
                     return (
                         <div
