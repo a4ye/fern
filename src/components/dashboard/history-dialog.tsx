@@ -34,7 +34,7 @@ import {
 import { useModalDialog } from "@/components/dashboard/use-modal-dialog";
 import { ConfirmDialog } from "@/components/dashboard/confirm-dialog";
 import { useLocalDateTimeFormatter } from "@/components/dashboard/local-date-time";
-import { currencyCountry } from "@/lib/pay";
+import { CurrencyFlag } from "@/components/dashboard/currency-flag";
 import {
     HISTORY_APPLICATIONS_PAGE_SIZE,
     HISTORY_CHANGES_PAGE_SIZE,
@@ -188,10 +188,7 @@ const HistoryFieldValue = ({
           : PAY_AMOUNT_CODES.includes(change.code)
             ? (currency ?? defaultCurrency)
             : null;
-    const country =
-        currencyCode && /^[A-Z]{3}$/.test(currencyCode)
-            ? currencyCountry(currencyCode)
-            : null;
+    const flagged = currencyCode !== null && /^[A-Z]{3}$/.test(currencyCode);
     const listStatus =
         change.scope === "list" &&
         change.code === "s" &&
@@ -201,19 +198,9 @@ const HistoryFieldValue = ({
             : null;
     return (
         <span
-            className={`${HISTORY_VALUE_CLASS} justify-self-start ${country ? "gap-1.5" : ""} ${PAY_AMOUNT_CODES.includes(change.code) ? "tabular-nums" : ""} ${change.code === "u" ? "break-all" : "break-words"} ${listStatus ? listStatus.plate : empty ? "bg-faint text-muted" : current ? "bg-accent-tint text-accent-deep" : "bg-hairline text-sub"}`}
+            className={`${HISTORY_VALUE_CLASS} justify-self-start ${flagged ? "gap-1.5" : ""} ${PAY_AMOUNT_CODES.includes(change.code) ? "tabular-nums" : ""} ${change.code === "u" ? "break-all" : "break-words"} ${listStatus ? listStatus.plate : empty ? "bg-faint text-muted" : current ? "bg-accent-tint text-accent-deep" : "bg-hairline text-sub"}`}
         >
-            {country && (
-                // Flags are tiny local SVGs, so image optimisation would add
-                // more work than it removes.
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                    src={`/flags/${country}.svg`}
-                    alt=""
-                    loading="lazy"
-                    className="size-4 shrink-0"
-                />
-            )}
+            {flagged && <CurrencyFlag code={currencyCode} />}
             {formattedFieldValue(change, value, currency, defaultCurrency)}
         </span>
     );

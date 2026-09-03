@@ -46,11 +46,13 @@ import {
     applicationsView,
     isFiltered,
     nextSort,
+    payInCurrency,
     type Filters,
     type Sort,
 } from "@/components/dashboard/applications-view";
 import {
     CellSelect,
+    CURRENCY_OPTIONS,
     DateField,
     STATUS_OPTIONS,
     ARRANGEMENT_OPTIONS,
@@ -64,6 +66,7 @@ import {
     secondaryButtonClass,
 } from "@/components/dashboard/table-controls";
 import { ConfirmDialog } from "@/components/dashboard/confirm-dialog";
+import { CURRENCY_MARK_CLASS } from "@/components/dashboard/currency-flag";
 import {
     STATUS_META,
     arrangementLabel,
@@ -119,12 +122,19 @@ const sameDraft = (a: Draft, b: Draft): boolean =>
 // company or role is still readable without opening the editor.
 const Cell = ({
     value,
+    title,
     className = "text-sub",
 }: {
     value: string | null;
+    // What hovering says, when that is not simply the whole of a truncated
+    // cell: a converted figure hangs the amount on record here instead.
+    title?: string | null;
     className?: string;
 }) => (
-    <span className={`truncate ${className}`} title={value ?? undefined}>
+    <span
+        className={`truncate ${className}`}
+        title={title ?? value ?? undefined}
+    >
         {value}
     </span>
 );
@@ -210,6 +220,7 @@ const REVEAL_CLASS =
 
 const ReadRow = ({
     app,
+    convertedPay,
     selected,
     opening,
     onSelect,
@@ -218,6 +229,7 @@ const ReadRow = ({
     onDelete,
 }: {
     app: ApplicationRow;
+    convertedPay: string | null;
     selected: boolean;
     opening: boolean;
     onSelect: (selected: boolean) => void;
@@ -256,7 +268,15 @@ const ReadRow = ({
                     app.arrangement ? arrangementLabel(app.arrangement) : null
                 }
             />
-            <Cell value={app.pay} className="text-sub tabular-nums" />
+            <Cell
+                value={convertedPay ?? app.pay}
+                title={
+                    convertedPay &&
+                    app.pay &&
+                    `${convertedPay}, from ${app.pay}`
+                }
+                className="text-sub tabular-nums"
+            />
             <Cell
                 value={app.appliedAt ? formatDay(app.appliedAt) : null}
                 className="text-sub tabular-nums"
@@ -454,6 +474,22 @@ const STAGED_ARRANGEMENT_OPTIONS: Option<
     Arrangement | null | typeof UNCHANGED
 >[] = [{ value: UNCHANGED, label: "Leave unchanged" }, ...ARRANGEMENT_OPTIONS];
 
+// The way back out of reading the column in one currency. Leaving it is a
+// choice like the currencies are and so is an option among them rather than a
+// second control beside the picker, and it carries a mark of its own so the
+// labels start on the same pixel as every flag below it.
+const ORIGINAL_PAY: Option<string | null> = {
+    value: null,
+    label: "Original",
+    keywords: ["none", "off", "as recorded", "unconverted"],
+    icon: (
+        <span
+            aria-hidden="true"
+            className={`icon-[lucide--circle-dashed] ${CURRENCY_MARK_CLASS}`}
+        />
+    ),
+};
+
 const EXPORT_FORMATS: readonly DownloadFormat<ExportFormat>[] = [
     { id: "csv", label: "CSV", icon: "icon-[lucide--file-text]" },
     { id: "xlsx", label: "XLSX", icon: "icon-[lucide--sheet]" },
@@ -513,6 +549,9 @@ export const ApplicationsTable = ({
     // it is how one person is reading the table right now, not where they are.
     const [filters, setFilters] = useState<Filters>(NO_FILTERS);
     const [sort, setSort] = useState<Sort | null>(null);
+    // Null to begin with: a row reads in the money it was offered in until
+    // somebody asks for a currency to read the whole column in.
+    const [convertTo, setConvertTo] = useState<string | null>(null);
     const selectAllRef = useRef<HTMLInputElement>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
     const listRef = useRef<HTMLUListElement>(null);
@@ -560,9 +599,31 @@ export const ApplicationsTable = ({
         },
     );
 
+    // The account's own currency leads the alphabet, being the one a column is
+    // most often wanted in, and appears once rather than in both places.
+    const currencyOptions = useMemo(
+        () => [
+            ORIGINAL_PAY,
+            ...CURRENCY_OPTIONS.filter(
+                (option) => option.value === defaultCurrency,
+            ),
+            ...CURRENCY_OPTIONS.filter(
+                (option) => option.value !== defaultCurrency,
+            ),
+        ],
+        [defaultCurrency],
+    );
+
     const view = useMemo(
-        () => applicationsView(optimisticApplications, filters, sort, rates),
-        [optimisticApplications, filters, sort, rates],
+        () =>
+            applicationsView(
+                optimisticApplications,
+                filters,
+                sort,
+                rates,
+                convertTo,
+            ),
+        [optimisticApplications, filters, sort, rates, convertTo],
     );
     const filtered = isFiltered(filters);
     const rowWindow = useRowWindow(
@@ -985,6 +1046,23 @@ export const ApplicationsTable = ({
                                             />
                                         </div>
                                     )}
+                                    <CellSelect
+                                        value={convertTo}
+                                        options={currencyOptions}
+                                        onChange={setConvertTo}
+                                        label="Currency to read pay in"
+                                        triggerLabel={
+                                            convertTo
+                                                ? `Pay in ${convertTo}`
+                                                : "Pay currency"
+                                        }
+                                        variant="button"
+                                        searchable
+                                        // Held at the width of its longest
+                                        // label, so choosing a currency does
+                                        // not shove the controls beside it.
+                                        className="max-sm:grow sm:w-44"
+                                    />
                                     {view.rows.length > 0 && (
                                         <>
                                             <button
@@ -1173,6 +1251,10 @@ export const ApplicationsTable = ({
                                     <ReadRow
                                         key={app.id}
                                         app={app}
+                                        convertedPay={
+                                            convertTo &&
+                                            payInCurrency(app, convertTo, rates)
+                                        }
                                         selected={selected.has(app.id)}
                                         onSelect={(isSelected) =>
                                             toggleSelected(app.id, isSelected)

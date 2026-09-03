@@ -8,6 +8,7 @@ import {
     useRef,
     useState,
     type KeyboardEvent as ReactKeyboardEvent,
+    type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -22,8 +23,9 @@ import {
     type ApplicationStatus,
     type Arrangement,
 } from "@/components/dashboard/data";
+import { CurrencyFlag } from "@/components/dashboard/currency-flag";
 import { searchScore } from "@/lib/fuzzy";
-import { CURRENCIES, currencyCountry, currencyName } from "@/lib/pay";
+import { CURRENCIES, currencyName } from "@/lib/pay";
 import { APPLIED_MIN, APPLIED_MIN_YEAR } from "@/lib/validation";
 
 // Bulk mode turns every cell of every row into a field, so borders on all of
@@ -61,27 +63,33 @@ export const quietButtonClass =
     "inline-flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap text-xs text-sub transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 
 // `keywords` are searched but never shown, so an option can be found by what it
-// means as well as by what it is called. `icon` is the source of a small image
-// drawn ahead of the label; a list where only some options carry one still
-// reserves the space on all of them, so the labels line up either way.
+// means as well as by what it is called. `icon` is a small mark drawn ahead of
+// the label; a list where only some options carry one still reserves the space
+// on all of them, so the labels line up either way.
 export type Option<T> = {
     value: T;
     label: string;
     text?: string;
     keywords?: readonly string[];
-    icon?: string;
+    icon?: ReactNode;
 };
 
 // "cell" sits on the table grid and stays invisible until touched, "form"
-// matches the bordered inputs of the add row and the detail panel.
+// matches the bordered inputs of the add row and the detail panel, and "button"
+// stands in the toolbar as a peer of the buttons on either side of it.
 const FIELD_CLASS = {
     cell: cellFieldClass,
     form: formInputClass,
+    // Fills whatever width it is given, so a toolbar can hold one at a size
+    // that fits its longest label and nothing beside it moves as the label
+    // changes.
+    button: `${secondaryButtonClass} w-full`,
 };
 
 const FIELD_OPEN_CLASS = {
     cell: "bg-background outline-accent",
     form: "border-accent bg-background",
+    button: "border-tile-border",
 };
 
 export type FieldVariant = keyof typeof FIELD_CLASS;
@@ -122,16 +130,9 @@ const placeFrom = (
 };
 
 // Decoration beside a label, and the empty slot an option without one keeps so
-// that the labels stay in a column. A plain <img> rather than next/image: these
-// are a few hundred bytes of SVG each, nothing to optimise, and `lazy` is what
-// keeps a list of two hundred of them to the handful actually on screen.
-const OptionIcon = ({ src }: { src?: string }) =>
-    src ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={src} alt="" loading="lazy" className="size-4 shrink-0" />
-    ) : (
-        <span aria-hidden="true" className="size-4 shrink-0" />
-    );
+// that the labels stay in a column.
+const OptionIcon = ({ icon }: { icon?: ReactNode }) =>
+    icon ?? <span aria-hidden="true" className="size-4 shrink-0" />;
 
 // An open modal dialog makes the rest of the document inert, so a popup sent to
 // the body would render but refuse every click. Inside one, it belongs to the
@@ -176,12 +177,16 @@ const within = (style: Placement, host: HTMLElement): Placement => {
 // A custom dropdown rather than a native <select>: the browser's native option
 // popup can't be styled to match the table. Passing `placeholder` turns it into
 // an action menu, where the button keeps its label instead of showing the value.
+// `triggerLabel` is for the other case, where the value is shown but the button
+// has to say more about it than the list can: an option reading "CAD" among a
+// hundred others is a button reading "Pay in CAD" on its own in a toolbar.
 export const CellSelect = <T,>({
     value,
     options,
     onChange,
     label,
     placeholder,
+    triggerLabel,
     className = "",
     variant = "cell",
     searchable = false,
@@ -192,6 +197,7 @@ export const CellSelect = <T,>({
     onChange: (value: T) => void;
     label: string;
     placeholder?: string;
+    triggerLabel?: string;
     className?: string;
     variant?: FieldVariant;
     searchable?: boolean;
@@ -355,13 +361,16 @@ export const CellSelect = <T,>({
                 <span className="flex min-w-0 items-center gap-2">
                     {iconic && (
                         <OptionIcon
-                            src={placeholder ? undefined : current?.icon}
+                            icon={placeholder ? undefined : current?.icon}
                         />
                     )}
                     <span
                         className={`truncate ${placeholder ? "text-sub" : (current?.text ?? "")}`}
                     >
-                        {placeholder ?? current?.label ?? "Not set"}
+                        {placeholder ??
+                            triggerLabel ??
+                            current?.label ??
+                            "Not set"}
                     </span>
                 </span>
                 <span
@@ -435,7 +444,9 @@ export const CellSelect = <T,>({
                                             }`}
                                         >
                                             {iconic && (
-                                                <OptionIcon src={option.icon} />
+                                                <OptionIcon
+                                                    icon={option.icon}
+                                                />
                                             )}
                                             <span
                                                 className={`truncate ${option.text ?? "text-ink"}`}
@@ -889,19 +900,15 @@ export const STATUS_OPTIONS: Option<ApplicationStatus>[] =
     }));
 
 // Codes are what people recognise, so the currency's name is searchable rather
-// than shown, and the flag carries the recognition instead. The flags are files
-// under public/, written by `bun run flags:sync`, so a page that never opens
-// this list downloads none of them and one that does takes only the few it
-// draws.
-export const CURRENCY_OPTIONS: Option<string>[] = CURRENCIES.map((code) => {
-    const country = currencyCountry(code);
-    return {
-        value: code,
-        label: code,
-        keywords: [currencyName.of(code) ?? code],
-        icon: country ? `/flags/${country}.svg` : undefined,
-    };
-});
+// than shown, and the flag carries the recognition instead. Every entry draws a
+// round mark, a flag or the globe standing in for one, so the codes read as a
+// column rather than stepping in and out around the ones nobody flies.
+export const CURRENCY_OPTIONS: Option<string>[] = CURRENCIES.map((code) => ({
+    value: code,
+    label: code,
+    keywords: [currencyName.of(code) ?? code],
+    icon: <CurrencyFlag code={code} />,
+}));
 
 export const ARRANGEMENT_OPTIONS: Option<Arrangement | null>[] = [
     { value: null, label: "Not set" },

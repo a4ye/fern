@@ -30,3 +30,19 @@ export const inBaseCurrency = (
     const rate = rates[currency];
     return rate > 0 ? amount / rate : null;
 };
+
+// The same amount written in another currency, by way of the one every rate is
+// quoted against. Null when either end is a currency the provider does not
+// quote, which leaves the figure as it was written rather than guessed at.
+export const convertAmount = (
+    amount: number,
+    from: string,
+    to: string,
+    rates: ExchangeRates,
+): number | null => {
+    const base = inBaseCurrency(amount, from, rates);
+    if (base === null) return null;
+    if (to === RATE_BASE) return base;
+    const rate = rates[to];
+    return rate > 0 ? base * rate : null;
+};

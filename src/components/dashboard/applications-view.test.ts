@@ -4,6 +4,7 @@ import {
     NO_FILTERS,
     applicationsView,
     nextSort,
+    payInCurrency,
     type Filters,
     type SortKey,
 } from "@/components/dashboard/applications-view";
@@ -245,6 +246,83 @@ describe("searching", () => {
 
     test("shows everything when the box is empty", () => {
         expect(found(rows, { query: "   " })).toHaveLength(3);
+    });
+});
+
+describe("reading pay in one currency", () => {
+    const yearly = (fields: Partial<ApplicationRow>) =>
+        app("row", { payPeriod: "yearly", ...fields });
+
+    test("rewrites an amount into the currency asked for", () => {
+        const row = yearly({ payMin: "120000.00", payCurrency: "USD" });
+        expect(payInCurrency(row, "EUR", RATES)).toBe("EUR 60,000/yr");
+    });
+
+    test("rewrites both ends of a range", () => {
+        const row = yearly({
+            payMin: "100000.00",
+            payMax: "200000.00",
+            payCurrency: "USD",
+        });
+        expect(payInCurrency(row, "EUR", RATES)).toBe("EUR 50,000–100,000/yr");
+    });
+
+    test("goes between two currencies neither of which is the base", () => {
+        const row = yearly({ payMin: "8000000.00", payCurrency: "JPY" });
+        expect(payInCurrency(row, "EUR", RATES)).toBe("EUR 40,000/yr");
+    });
+
+    test("rounds to whole units, cents being a precision a rate lacks", () => {
+        const row = app("row", {
+            payMin: "55.55",
+            payCurrency: "USD",
+            payPeriod: "hourly",
+        });
+        expect(payInCurrency(row, "EUR", RATES)).toBe("EUR 28/hr");
+    });
+
+    test("leaves a row already written in that currency alone", () => {
+        const row = yearly({ payMin: "120000.00", payCurrency: "EUR" });
+        expect(payInCurrency(row, "EUR", RATES)).toBeNull();
+    });
+
+    test("leaves a row alone when either end has no rate", () => {
+        const unquoted = yearly({ payMin: "120000.00", payCurrency: "XXX" });
+        expect(payInCurrency(unquoted, "EUR", RATES)).toBeNull();
+        const quoted = yearly({ payMin: "120000.00", payCurrency: "USD" });
+        expect(payInCurrency(quoted, "XXX", RATES)).toBeNull();
+    });
+
+    test("has nothing to say about pay written as a note", () => {
+        const row = app("row", { payNote: "competitive", payCurrency: "USD" });
+        expect(payInCurrency(row, "EUR", RATES)).toBeNull();
+    });
+
+    test("finds a row by the figure the column is showing", () => {
+        const rows = [
+            yearly({
+                pay: "USD 120,000/yr",
+                payMin: "120000.00",
+                payCurrency: "USD",
+            }),
+            yearly({
+                pay: "USD 20,000/yr",
+                payMin: "20000.00",
+                payCurrency: "USD",
+            }),
+        ];
+        const shown = (query: string, convertTo: string | null) =>
+            applicationsView(
+                rows,
+                { ...NO_FILTERS, query },
+                null,
+                RATES,
+                convertTo,
+            ).rows.length;
+        expect(shown("60,000", null)).toBe(0);
+        expect(shown("60,000", "EUR")).toBe(1);
+        // The figure on record stays searchable behind the converted one.
+        expect(shown("120,000", "EUR")).toBe(1);
     });
 });
 

@@ -13,8 +13,9 @@ import {
 // the interface instead, and a key buys that line back. One refresh a day is
 // nowhere near the 1,500 calls a month the free key allows.
 //
-// Nobody there can be asked when a rate is wrong, which is why these numbers
-// only ever put a column in order and never print a converted figure.
+// Nobody there can be asked when a rate is wrong, which is why a figure these
+// numbers convert is printed as an estimate, beside the one on record, and
+// never written back over what the row says.
 const provider = (key: string) =>
     `https://v6.exchangerate-api.com/v6/${key}/latest/${RATE_BASE}`;
 
