@@ -16,6 +16,39 @@ const Cell = ({ width }: { width: string }) => (
     </span>
 );
 
+// A bar the width of the words it stands in for, so a label cannot drift from
+// the one the real section prints.
+const TextBar = ({
+    children,
+    className = "",
+}: {
+    children: string;
+    className?: string;
+}) => (
+    <span className={`skeleton inline-flex h-3 ${className}`}>
+        <span className="invisible">{children}</span>
+    </span>
+);
+
+// The whole control is painted, sized by its own label inside the real button's
+// box, so adding or renaming one keeps the bar the same length as the toolbar.
+const ControlSkeleton = ({
+    label,
+    className = "",
+}: {
+    label: string;
+    className?: string;
+}) => (
+    <span
+        className={`skeleton inline-flex h-8 shrink-0 items-center gap-1.5 px-3 text-sm whitespace-nowrap ${className}`}
+    >
+        <span className="size-4 shrink-0" />
+        <span className="invisible">{label}</span>
+    </span>
+);
+
+const STAT_LABELS = ["Total", "Active", "Interviewing", "Offers"];
+
 const ApplicationRowSkeleton = () => (
     <li
         className={`${APPLICATION_COLUMNS} ${ROW_HEIGHT} border-b border-faint px-5 last:border-b-0`}
@@ -56,12 +89,18 @@ export const SeasonPageSkeleton = () => (
                         <span className="skeleton h-3.5 w-96 max-w-full" />
                     </span>
                 </div>
-                <div className="flex h-8 w-12 shrink-0 items-center justify-end">
-                    <span className="p-1">
-                        <span className="skeleton block size-4" />
+                <div className="flex min-h-10 shrink-0 items-center justify-end">
+                    <span className="inline-flex h-10 min-w-10 items-center gap-2 pr-2.5 pl-2">
+                        <span className="skeleton size-4 shrink-0" />
+                        <TextBar className="hidden text-sm sm:inline-flex">
+                            History
+                        </TextBar>
                     </span>
-                    <span className="p-1">
-                        <span className="skeleton block size-4" />
+                    <span className="flex size-10 items-center justify-center">
+                        <span className="skeleton size-4" />
+                    </span>
+                    <span className="flex size-10 items-center justify-center">
+                        <span className="skeleton size-4" />
                     </span>
                 </div>
             </div>
@@ -74,16 +113,26 @@ export const SeasonPageSkeleton = () => (
             aria-hidden="true"
             className="mt-6 border border-hairline bg-background sm:flex sm:items-center sm:gap-x-8 sm:px-4 sm:py-3"
         >
-            <div className="grid grid-cols-2 gap-x-8 gap-y-2 px-4 py-3 sm:flex sm:flex-1 sm:flex-wrap sm:items-baseline sm:p-0">
-                {Array.from({ length: 4 }, (_, index) => (
-                    <span key={index} className="flex h-8 items-baseline gap-2">
-                        <span className="skeleton h-5 w-6" />
-                        <span className="skeleton h-3 w-16" />
-                    </span>
-                ))}
+            <div className="px-4 py-3 sm:min-w-0 sm:flex-1 sm:p-0">
+                <div className="grid grid-cols-2 gap-x-8 gap-y-2 sm:flex sm:flex-wrap sm:items-baseline">
+                    {STAT_LABELS.map((label) => (
+                        // h-7 is the line box the real stat's text-lg value
+                        // draws in, which is what sets the row's height. The
+                        // bars sit on a shared baseline rather than centred,
+                        // so the small label reads as text on the same line.
+                        <span
+                            key={label}
+                            className="flex h-7 items-baseline gap-2"
+                        >
+                            <span className="skeleton h-5 w-6" />
+                            <TextBar className="text-xs">{label}</TextBar>
+                        </span>
+                    ))}
+                </div>
             </div>
-            <span className="flex h-11 w-full items-center border-t border-faint px-4 sm:h-8 sm:w-auto sm:shrink-0 sm:border-t-0 sm:px-0">
-                <span className="skeleton h-4 w-20" />
+            <span className="flex h-11 w-full items-center justify-between border-t border-faint px-4 sm:h-8 sm:w-auto sm:shrink-0 sm:justify-start sm:gap-1.5 sm:border-t-0 sm:px-0">
+                <TextBar className="text-sm">Insights</TextBar>
+                <span className="skeleton size-4 shrink-0" />
             </span>
         </div>
 
@@ -100,10 +149,26 @@ export const SeasonPageSkeleton = () => (
                     aria-hidden="true"
                     className="flex flex-wrap items-center gap-2 max-sm:w-full"
                 >
-                    <span className="skeleton h-8 shrink-0 max-sm:w-full sm:w-52" />
-                    <span className="skeleton h-8 w-20 shrink-0 max-sm:grow" />
-                    <span className="skeleton h-8 w-24 shrink-0 max-sm:grow" />
-                    <span className="skeleton h-8 w-36 shrink-0 max-sm:grow" />
+                    {/* Search and filter share a line of their own on a phone,
+                        the way the real bar holds them together. */}
+                    <div className="flex items-center gap-2 max-sm:w-full">
+                        {/* The field yields to the filter button beside it, the
+                            way the real one does; holding its full width would
+                            push that button off the edge of a phone. */}
+                        <span className="skeleton h-8 max-sm:w-full sm:w-52" />
+                        <ControlSkeleton label="Filter" />
+                    </div>
+                    <ControlSkeleton
+                        label="Pay currency"
+                        className="max-sm:grow sm:w-44"
+                    />
+                    <ControlSkeleton label="Edit all" className="max-sm:grow" />
+                    <ControlSkeleton label="Export" className="max-sm:grow" />
+                    <ControlSkeleton label="Import" className="max-sm:grow" />
+                    <ControlSkeleton
+                        label="Add application"
+                        className="font-medium max-sm:grow"
+                    />
                 </div>
             </div>
             <div className="max-h-[70vh] overflow-auto">
