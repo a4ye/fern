@@ -22,9 +22,9 @@ const BENEFITS = [
     "Imports faster",
 ];
 
-const DOWNLOADS: Record<ExtensionBrowser, { label: string; icon: string }> = {
-    chrome: { label: "Chrome", icon: "icon-[simple-icons--googlechrome]" },
-    firefox: { label: "Firefox", icon: "icon-[simple-icons--firefoxbrowser]" },
+const LABELS: Record<ExtensionBrowser, string> = {
+    chrome: "Chrome",
+    firefox: "Firefox",
 };
 
 const Extension = async () => {
@@ -68,29 +68,29 @@ const Extension = async () => {
 
                 <section className="mt-10 border-t border-hairline pt-8">
                     <h2 className="text-base font-semibold">Download</h2>
-                    <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                        {[yours, other].map((name, index) => (
-                            <a
-                                key={name}
-                                href={EXTENSION_DOWNLOAD_PATHS[name]}
-                                download
-                                className={`inline-flex h-10 items-center justify-center gap-2 px-5 text-sm font-medium transition-colors ${
-                                    index === 0
-                                        ? "bg-accent text-background hover:bg-accent-deep"
-                                        : "border border-tile-border bg-background text-ink hover:bg-accent-tint-soft"
-                                }`}
-                            >
-                                <span
-                                    aria-hidden="true"
-                                    className={`${DOWNLOADS[name].icon} size-4`}
-                                />
-                                {DOWNLOADS[name].label}
-                            </a>
-                        ))}
+                    <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-3">
+                        <a
+                            href={EXTENSION_DOWNLOAD_PATHS[yours]}
+                            download
+                            className="focus-frame inline-flex h-11 items-center gap-2.5 bg-accent px-6 text-sm font-medium text-background transition-colors hover:bg-accent-deep"
+                        >
+                            <span
+                                aria-hidden="true"
+                                className="icon-[lucide--download] size-4"
+                            />
+                            Download for {LABELS[yours]}
+                        </a>
+                        <a
+                            href={EXTENSION_DOWNLOAD_PATHS[other]}
+                            download
+                            className="text-sm font-medium text-accent-deep underline decoration-hairline underline-offset-4 transition-colors hover:decoration-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                        >
+                            Download for {LABELS[other]}
+                        </a>
                     </div>
                     <p className="mt-3 text-xs text-muted">
-                        Version {EXTENSION_VERSION}. Use the Chrome download for
-                        Edge, Brave, Arc, and Opera.
+                        Version {EXTENSION_VERSION}, a .zip file. Use the Chrome
+                        download for Edge, Brave, Arc, and Opera.
                     </p>
                 </section>
 
