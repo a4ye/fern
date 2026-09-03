@@ -48,6 +48,29 @@ export const currencyCountry = (code: string): string | null => {
     return (code === "EUR" ? "eu" : code.slice(0, 2)).toLowerCase();
 };
 
+// A euro member is the one country the rule above cannot answer for, since the
+// code names the union rather than any of the states inside it.
+const EURO_COUNTRIES = `AD AT BE CY DE EE ES FI FR GR HR IE IT
+     LT LU LV MC ME MT NL PT SI SK SM VA`.split(/\s+/);
+
+// The same rule read backwards: what a country is paid in. One that spends
+// money named after somewhere else (the CFA francs, the US dollar abroad) is
+// left unanswered rather than guessed at.
+const COUNTRY_CURRENCY = new Map<string, string>([
+    ...CURRENCIES.flatMap((code): [string, string][] => {
+        const country = currencyCountry(code);
+        return country && code !== "EUR" ? [[country.toUpperCase(), code]] : [];
+    }),
+    ...EURO_COUNTRIES.map((country): [string, string] => [country, "EUR"]),
+]);
+
+export const currencyForCountry = (
+    countryCode: string | null,
+): string | null =>
+    countryCode
+        ? (COUNTRY_CURRENCY.get(countryCode.toUpperCase()) ?? null)
+        : null;
+
 // Codes that are also ordinary English words, which is why a code cannot simply
 // be matched case-insensitively: "120k all in" would be paid in Albanian lek.
 // Written in capitals a code is deliberate, so these are read only that way.
@@ -160,7 +183,10 @@ const PERIOD_PATTERNS: [RegExp, PayPeriod][] = [
 
 const MULTIPLIER: Record<string, number> = { k: 1_000, m: 1_000_000 };
 
-const readCurrency = (value: string, fallback: string): string => {
+// The currency a pay text names, or null where it names none and something
+// else has to answer for it.
+export const payCurrencyIn = (value: string | null): string | null => {
+    if (!value) return null;
     const capitals = value.match(CODE_UPPERCASE);
     if (capitals) return capitals[1];
     const code = value.match(CODE_ANY_CASE);
@@ -168,7 +194,7 @@ const readCurrency = (value: string, fallback: string): string => {
     for (const [glyph, currency] of GLYPH_CURRENCY) {
         if (value.includes(glyph)) return currency;
     }
-    return fallback;
+    return null;
 };
 
 // Returns the period plus the text with the period words removed, so a token
@@ -354,7 +380,7 @@ export const parsePay = (
     return {
         payMin: asNumeric(min),
         payMax: second === undefined || max === min ? null : asNumeric(max),
-        payCurrency: readCurrency(raw, fallbackCurrency),
+        payCurrency: payCurrencyIn(raw) ?? fallbackCurrency,
         payPeriod: period,
         payNote: null,
     };

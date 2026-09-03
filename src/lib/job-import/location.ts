@@ -3,7 +3,10 @@
 // would make every visitor download several megabytes before entering a link.
 
 export type ImportedLocationResolution =
-    | { status: "matched"; location: string }
+    // The country is carried alongside the place so that what a posting pays in
+    // can be guessed from where it is, which the label alone cannot answer:
+    // "CA" is California to a reader and Canada to a lookup table.
+    | { status: "matched"; location: string; countryCode: string | null }
     | { status: "suggestions"; suggestions: string[] }
     | { status: "unmatched" };
 
@@ -914,6 +917,13 @@ const popularIndex = (): Map<string, Set<string>> => {
 
 const POPULAR_INDEX = popularIndex();
 
+const POPULAR_COUNTRY_CODES = new Map(
+    POPULAR_LOCATIONS.map((record) => [
+        canonicalLocation(record),
+        record.countryCode,
+    ]),
+);
+
 type PopularSearchRecord = {
     label: string;
     population: number;
@@ -1031,9 +1041,13 @@ export const resolvePopularLocation = (
     const matches = POPULAR_INDEX.get(locationFingerprint(raw));
     if (!matches || matches.size === 0) return { status: "unmatched" };
     const suggestions = [...matches];
-    return suggestions.length === 1
-        ? { status: "matched", location: suggestions[0] }
-        : { status: "suggestions", suggestions };
+    if (suggestions.length > 1) return { status: "suggestions", suggestions };
+    const location = suggestions[0];
+    return {
+        status: "matched",
+        location,
+        countryCode: POPULAR_COUNTRY_CODES.get(location) ?? null,
+    };
 };
 
 // Keystrokes only search the deliberately small technology-hub list. Matching

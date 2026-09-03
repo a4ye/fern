@@ -60,6 +60,52 @@ describe("mergeImportedApplication", () => {
         expect(merged.notes).toBe("Keep this note");
     });
 
+    test("pays in the currency of the country the posting was placed in", () => {
+        const merged = mergeImportedApplication(
+            EMPTY_FIELDS,
+            { ...POSTING, pay: "90,000 to 110,000 yearly" },
+            new Set(),
+            "USD",
+            "CA",
+        );
+
+        expect(merged.payCurrency).toBe("CAD");
+        expect(merged.payMin).toBe("90000");
+    });
+
+    test("still fills a currency where the posting states no pay at all", () => {
+        const merged = mergeImportedApplication(
+            EMPTY_FIELDS,
+            { ...POSTING, pay: null },
+            new Set(),
+            "USD",
+            "DE",
+        );
+
+        expect(merged.payCurrency).toBe("EUR");
+        expect(merged.payMin).toBe("");
+    });
+
+    test("lets a stated currency outrank the country and the country the default", () => {
+        const stated = mergeImportedApplication(
+            EMPTY_FIELDS,
+            POSTING,
+            new Set(),
+            "GBP",
+            "JP",
+        );
+        const unknownCountry = mergeImportedApplication(
+            EMPTY_FIELDS,
+            { ...POSTING, pay: "90,000 yearly" },
+            new Set(),
+            "GBP",
+            null,
+        );
+
+        expect(stated.payCurrency).toBe("CAD");
+        expect(unknownCountry.payCurrency).toBe("GBP");
+    });
+
     test("clears stale unedited values when a later posting omits them", () => {
         const current: ApplicationFields = {
             ...EMPTY_FIELDS,

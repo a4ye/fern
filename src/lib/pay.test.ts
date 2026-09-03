@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { formatPay, type PayPeriod } from "@/components/dashboard/data";
-import { CURRENCIES, parsePay } from "@/lib/pay";
+import { CURRENCIES, currencyForCountry, parsePay } from "@/lib/pay";
 
 describe("parsePay", () => {
     it("reads a plain hourly rate", () => {
@@ -282,5 +282,31 @@ describe("parsePay", () => {
             };
             expect(parsePay(formatPay(fields) as string)).toEqual(fields);
         }
+    });
+});
+
+describe("currencyForCountry", () => {
+    it("reads a currency code back to the country that spends it", () => {
+        expect(currencyForCountry("CA")).toBe("CAD");
+        expect(currencyForCountry("gb")).toBe("GBP");
+        expect(currencyForCountry("IN")).toBe("INR");
+        expect(currencyForCountry("JP")).toBe("JPY");
+        expect(currencyForCountry("CH")).toBe("CHF");
+    });
+
+    // The one currency whose code names no country of its own, and the reason
+    // its members are written out rather than derived.
+    it("pays the euro in every country that uses it", () => {
+        for (const country of ["DE", "IE", "NL", "FR", "ES", "EE", "HR"]) {
+            expect(currencyForCountry(country)).toBe("EUR");
+        }
+    });
+
+    // A country whose money is named after somewhere else is better left to the
+    // user's own default than answered with a guess.
+    it("answers for no country it cannot name a currency for", () => {
+        expect(currencyForCountry("CI")).toBeNull();
+        expect(currencyForCountry("ZZ")).toBeNull();
+        expect(currencyForCountry(null)).toBeNull();
     });
 });

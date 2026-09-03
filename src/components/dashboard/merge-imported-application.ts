@@ -1,6 +1,6 @@
 import type { ApplicationFields } from "@/components/dashboard/application-form";
 import type { ScrapedPosting } from "@/lib/job-import/shared";
-import { parsePay, payAmountInput } from "@/lib/pay";
+import { currencyForCountry, parsePay, payAmountInput } from "@/lib/pay";
 import { PAY_MAX } from "@/lib/validation";
 
 // A posting may name equity, a bonus and commission all with ranges of their
@@ -18,13 +18,20 @@ const noteWithinLimit = (note: string): string => {
     return entries[0].slice(0, PAY_MAX);
 };
 
+// Where the pay text names a currency it is taken at its word. Where it names
+// none, the country the posting was placed in is the better guess: a job in
+// Berlin pays euros whatever the reader's own default happens to be.
 export const mergeImportedApplication = (
     current: ApplicationFields,
     posting: ScrapedPosting,
     edited: ReadonlySet<keyof ApplicationFields>,
     defaultCurrency: string,
+    countryCode: string | null = null,
 ): ApplicationFields => {
-    const pay = parsePay(posting.pay, defaultCurrency);
+    const pay = parsePay(
+        posting.pay,
+        currencyForCountry(countryCode) ?? defaultCurrency,
+    );
 
     return {
         ...current,

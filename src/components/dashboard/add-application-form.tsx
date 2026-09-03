@@ -55,6 +55,7 @@ import {
     type ScrapedPosting,
 } from "@/lib/job-import/shared";
 import { resolvePopularLocation } from "@/lib/job-import/location";
+import { currencyForCountry, payCurrencyIn } from "@/lib/pay";
 import { URL_MAX } from "@/lib/validation";
 
 const LINK_INPUT_ID = "add-application-link";
@@ -194,6 +195,9 @@ export const AddApplicationForm = ({
                 posting,
                 editedFields.current,
                 defaultCurrency,
+                popularLocation.status === "matched"
+                    ? popularLocation.countryCode
+                    : null,
             ),
         );
         setLocationSuggestions(
@@ -203,8 +207,9 @@ export const AddApplicationForm = ({
         );
 
         // The complete index is server-only and asked in the background. Other
-        // imported fields appear immediately; a late answer may touch location
-        // only while it is still the untouched value from this same posting.
+        // imported fields appear immediately; a late answer may touch location,
+        // and the currency that follows from it, only while they are still the
+        // untouched values from this same posting.
         if (found.location && popularLocation.status !== "matched") {
             void resolveImportedLocation(found.location)
                 .then((resolution) => {
@@ -215,9 +220,17 @@ export const AddApplicationForm = ({
                         return;
                     }
                     if (resolution.status === "matched") {
+                        // A posting that named its own currency has already
+                        // answered for it, and so has a user who picked one.
+                        const currency =
+                            editedFields.current.has("payCurrency") ||
+                            payCurrencyIn(found.pay)
+                                ? null
+                                : currencyForCountry(resolution.countryCode);
                         setDraft((current) => ({
                             ...current,
                             location: resolution.location,
+                            payCurrency: currency ?? current.payCurrency,
                         }));
                         setLocationSuggestions([]);
                     } else if (resolution.status === "suggestions") {
