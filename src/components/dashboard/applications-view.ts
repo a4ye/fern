@@ -8,13 +8,19 @@ import {
     ARRANGEMENTS,
     STATUS_META,
     arrangementLabel,
+    formatPay,
     type ApplicationRow,
     type ApplicationStatus,
     type Arrangement,
     type PayPeriod,
 } from "@/components/dashboard/data";
 import { containsMatch } from "@/lib/fuzzy";
-import { RATE_BASE, inBaseCurrency, type ExchangeRates } from "@/lib/exchange";
+import {
+    RATE_BASE,
+    convertAmount,
+    inBaseCurrency,
+    type ExchangeRates,
+} from "@/lib/exchange";
 
 export type SortKey =
     | "company"
@@ -82,6 +88,42 @@ const annualPay = (
     const yearly =
         Number(amount) * (app.payPeriod ? PER_YEAR[app.payPeriod] : 1);
     return inBaseCurrency(yearly, app.payCurrency || RATE_BASE, rates);
+};
+
+// The same range written in one currency, for a column read down rather than a
+// row read across. Null wherever there is nothing to rewrite: a row with no
+// amounts, one already in that money, or one whose currency the rates do not
+// cover. The caller prints what the row actually says in all three cases.
+//
+// Rounded to whole units, a cent carried over a rate published yesterday being
+// a precision the number never had. Nothing on the figure itself says it was
+// converted, so the control that asked for it names the currency it is in and
+// the cell hangs the amount on record on hover.
+export const payInCurrency = (
+    app: ApplicationRow,
+    currency: string,
+    rates: ExchangeRates,
+): string | null => {
+    const from = app.payCurrency || RATE_BASE;
+    if (from === currency) return null;
+
+    const converted = (amount: string | null): string | null => {
+        if (amount === null) return null;
+        const value = convertAmount(Number(amount), from, currency, rates);
+        return value === null ? null : String(Math.round(value));
+    };
+
+    const payMin = converted(app.payMin);
+    const payMax = converted(app.payMax);
+    if (payMin === null && payMax === null) return null;
+
+    return formatPay({
+        payMin,
+        payMax,
+        payCurrency: currency,
+        payPeriod: app.payPeriod,
+        payNote: null,
+    });
 };
 
 const sortValue = (
@@ -165,22 +207,29 @@ export const isFiltered = (filters: Filters): boolean =>
     filters.query.trim() !== "" || activeFilterCount(filters) > 0;
 
 // Every column a row can be found by. Status and arrangement are searched
-// through the label the row prints, so typing what you can see finds it.
-const fieldsOf = (app: ApplicationRow): string[] => [
+// through the label the row prints, so typing what you can see finds it. Pay is
+// searched by both the figure on record and the converted one, so a column
+// showing one currency is still searchable by the other.
+const fieldsOf = (app: ApplicationRow, converted: string | null): string[] => [
     app.company,
     app.role ?? "",
     app.location ?? "",
     app.pay ?? "",
+    converted ?? "",
     STATUS_META[app.status].label,
     app.arrangement ? arrangementLabel(app.arrangement) : "",
 ];
 
 // Each word has to land somewhere, though not all of them in the same column,
 // so "google intern" finds the row whose company holds one and role the other.
-const matchesQuery = (app: ApplicationRow, query: string): boolean => {
+const matchesQuery = (
+    app: ApplicationRow,
+    query: string,
+    converted: string | null,
+): boolean => {
     const terms = query.trim().split(/\s+/).filter(Boolean);
     if (terms.length === 0) return true;
-    const fields = fieldsOf(app);
+    const fields = fieldsOf(app, converted);
     return terms.every((term) =>
         fields.some((field) => containsMatch(term, field)),
     );
@@ -206,12 +255,14 @@ export type ApplicationsView = {
 
 // The count beside a value leaves that facet's own choices out, so it reads as
 // what ticking the box would add rather than as what is already on screen. The
-// search box is not a facet and narrows both.
+// search box is not a facet and narrows both. `convertTo` is the currency the
+// pay column is being read in, or null while every row is read as written.
 export const applicationsView = (
     applications: ApplicationRow[],
     filters: Filters,
     sort: Sort | null,
     rates: ExchangeRates,
+    convertTo: string | null = null,
 ): ApplicationsView => {
     const byStatus = (app: ApplicationRow) =>
         filters.statuses.length === 0 || filters.statuses.includes(app.status);
@@ -220,7 +271,11 @@ export const applicationsView = (
         filters.arrangements.includes(app.arrangement ?? NO_ARRANGEMENT);
 
     const searched = applications.filter((app) =>
-        matchesQuery(app, filters.query),
+        matchesQuery(
+            app,
+            filters.query,
+            convertTo && payInCurrency(app, convertTo, rates),
+        ),
     );
     const rows = searched.filter((app) => byStatus(app) && byArrangement(app));
 
