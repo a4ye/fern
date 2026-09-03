@@ -31,9 +31,22 @@ const appOrigins =
         ? configuredOrigins
         : fallbackOrigins;
 
+// A build that talks to nothing but a machine's own localhost is one someone is
+// working on, and it has to sit beside the published extension rather than
+// stand in for it. Firefox keys an add-on by its id and refuses a second claim
+// on one, so a development build answers to an id and a name of its own.
+const isDevelopment = appOrigins.every((origin) =>
+    /^https?:\/\/(?:localhost|127\.0\.0\.1)[:/]/.test(origin),
+);
+
+const name = isDevelopment ? `${EXTENSION_NAME} (Dev)` : EXTENSION_NAME;
+const geckoId = isDevelopment
+    ? "job-tracker-importer-dev@job-tracker.app"
+    : "job-tracker-importer@job-tracker.app";
+
 const baseManifest = {
     manifest_version: 3,
-    name: EXTENSION_NAME,
+    name,
     description:
         "Save job postings faster and fill details from more job sites.",
     version: EXTENSION_VERSION,
@@ -52,7 +65,7 @@ const baseManifest = {
         "48": "icon.png",
         "128": "icon.png",
     },
-    action: { default_title: EXTENSION_NAME },
+    action: { default_title: name },
 };
 
 const manifests = {
@@ -64,10 +77,7 @@ const manifests = {
         ...baseManifest,
         background: { scripts: ["background.js"] },
         browser_specific_settings: {
-            gecko: {
-                id: "job-tracker-importer@job-tracker.app",
-                strict_min_version: "128.0",
-            },
+            gecko: { id: geckoId, strict_min_version: "128.0" },
         },
     },
 };
@@ -149,5 +159,5 @@ for (const browser of EXTENSION_BROWSERS) {
 }
 
 process.stdout.write(
-    `Built Chrome and Firefox extensions for ${appOrigins.join(", ")}\n`,
+    `Built ${name} for Chrome and Firefox: ${appOrigins.join(", ")}\n`,
 );
