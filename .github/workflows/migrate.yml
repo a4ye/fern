@@ -1,0 +1,36 @@
+name: Migrate
+
+# Vercel starts the production deployment as soon as main moves, so a manual
+# migration can land after the code that needs it. dbmate only applies pending
+# files, so this is a no-op when the schema is already up to date.
+on:
+    push:
+        branches: [main]
+        paths: [db/migrations/**]
+    workflow_dispatch:
+
+concurrency:
+    group: migrate-production
+    cancel-in-progress: false
+
+permissions:
+    contents: read
+
+jobs:
+    migrate:
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        steps:
+            - uses: actions/checkout@v5
+            - uses: oven-sh/setup-bun@v2
+              with:
+                  bun-version: 1.3.11
+            - uses: actions/cache@v4
+              with:
+                  path: ~/.bun/install/cache
+                  key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+                  restore-keys: bun-${{ runner.os }}-
+            - run: bun install --frozen-lockfile
+            - run: bun run db:migrate
+              env:
+                  POSTGRES_URL: ${{ secrets.POSTGRES_URL }}

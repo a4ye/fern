@@ -1,0 +1,19 @@
+#!/bin/sh
+set -eu
+
+# Checks the working tree, not the staged content, so a partial `git add -p`
+# still reports on the whole file. Tests are left to CI: site.test.ts needs the
+# network and would block every commit.
+
+files=$(git diff --cached --name-only --diff-filter=ACMR)
+if [ -z "$files" ]; then
+    exit 0
+fi
+
+printf '%s\n' "$files" | xargs -d '\n' -r bunx prettier --check --ignore-unknown
+
+sources=$(printf '%s\n' "$files" | grep -E '\.(ts|tsx|mts|mjs)$' || true)
+if [ -n "$sources" ]; then
+    printf '%s\n' "$sources" | xargs -d '\n' -r bunx eslint --
+    bunx tsc --noEmit
+fi

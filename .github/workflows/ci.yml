@@ -1,0 +1,40 @@
+name: CI
+
+on:
+    pull_request:
+    push:
+        branches: [main]
+
+concurrency:
+    group: ci-${{ github.ref }}
+    cancel-in-progress: true
+
+permissions:
+    contents: read
+
+jobs:
+    check:
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        steps:
+            - uses: actions/checkout@v5
+            - uses: oven-sh/setup-bun@v2
+              with:
+                  bun-version: 1.3.11
+            - uses: actions/cache@v4
+              with:
+                  path: ~/.bun/install/cache
+                  key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+                  restore-keys: bun-${{ runner.os }}-
+            - run: bun install --frozen-lockfile
+            # A failed check should not hide the ones after it.
+            - if: ${{ !cancelled() }}
+              run: bun run format:check
+            - if: ${{ !cancelled() }}
+              run: bun run lint
+            - if: ${{ !cancelled() }}
+              run: bun run typecheck
+            # site.test.ts fetches the repository page and fails while the repo
+            # is private. This job stays red until the repo goes public.
+            - if: ${{ !cancelled() }}
+              run: bun test
