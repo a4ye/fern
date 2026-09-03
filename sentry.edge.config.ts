@@ -1,7 +1,8 @@
 import * as Sentry from "@sentry/nextjs";
 
 Sentry.init({
+    enabled: process.env.NODE_ENV !== "development",
     dsn: process.env.SENTRY_DSN,
     environment: process.env.SENTRY_ENVIRONMENT,
-    tracesSampleRate: process.env.NODE_ENV === "development" ? 1.0 : 0.1,
+    tracesSampleRate: 0.1,
 });
