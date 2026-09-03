@@ -1,77 +1,181 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Fern
 
-## Getting Started
+Fern is a job application tracker. When you paste a posting link, the company, role,
+location, and pay automatically fill themselves in. Applications are grouped into lists.
 
-First, run the development server:
+## Features
+
+- **Link import.** Paste a posting URL and Fern reads the fields from it. Installing the browser extension improves the coverage.
+- **Spreadsheet import.** Bring an existing CSV or XLSX file into Fern.
+- **Charts.** Funnel, timeline, and Sankey views of where applications went.
+- **Version history.** Every change can be undone, redone, or restored.
+
+## Stack
+
+Next.js, TypeScript, Tailwind CSS, PostgreSQL,
+Better Auth, and Bun. Queries are written in SQL and generated with sqlc;
+migrations run through dbmate.
+
+## Getting started
+
+[Bun](https://bun.sh) and a PostgreSQL database is required.
+
+### 1. Install
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone https://github.com/a4ye/fern.git
+cd fern
+bun install
+cp .env.example .env
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Put your settings in `.env`, not `.env.local`. The migration tool reads `.env`
+only.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 2. Set up the database
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Any PostgreSQL database works. To use a local one:
 
-## Learn More
+```bash
+createdb fern
+```
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+POSTGRES_URL=postgres://localhost:5432/fern?sslmode=disable
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 3. Create a GitHub OAuth app
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Sign-in uses GitHub OAuth. Go to **GitHub → Settings → Developer settings →
+OAuth Apps → New OAuth App** and set:
 
-## Deploy on Vercel
+- Homepage URL: `http://localhost:3000`
+- Authorization callback URL: `http://localhost:3000/api/auth/callback/github`
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Copy the client ID, generate a client secret, and put both in `.env`:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+GITHUB_CLIENT_ID=...
+GITHUB_CLIENT_SECRET=...
+```
 
-## Browser importer
+### 4. Generate an auth secret
 
-The optional Chrome/Firefox importer reads public job postings from the user's
-browser and shares its field parser with the server fallback. Build unpacked
-extensions with:
+```bash
+openssl rand -base64 32
+```
+
+```bash
+BETTER_AUTH_SECRET=<the generated value>
+BETTER_AUTH_URL=http://localhost:3000
+```
+
+### 5. Get an exchange rate key
+
+Get a free key from [ExchangeRate-API](https://www.exchangerate-api.com):
+
+```bash
+EXCHANGE_RATE_API_KEY=...
+```
+
+### 6. Run the migrations
+
+```bash
+bun run db:migrate
+```
+
+### 7. Start the dev server
+
+```bash
+bun run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) and sign in with GitHub.
+
+Both scripts use the first user in the database. Pass an email as the last
+argument to pick a different one.
+
+`bun run db:test-account` creates a throwaway account and prints a cookie you
+can paste into the browser console to sign in as it. Use it when you want to
+try account deletion without touching your own data.
+
+### Optional: the rest of the settings
+
+The remaining variables in `.env.example` are for optional features.
+
+- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
+  `GOOGLE_GENERATIVE_AI_API_KEY`, and `EMAIL_SYNC_APPROVED_EMAILS` turn on
+  Gmail sync. Read the billing note in `.env.example` before using it with a
+  real inbox.
+- `SENTRY_DSN` and `NEXT_PUBLIC_SENTRY_DSN` turn on error reporting.
+- `JOB_TRACKER_EXTENSION_APP_ORIGINS` lists the deployed URLs the browser
+  extension may connect to. Development builds already accept `localhost`.
+
+### Changing the database schema
+
+Migrations live in `db/migrations` and queries in `db/queries`.
+
+```bash
+bun run db:new add_something     # create a migration file
+bun run db:migrate               # apply it
+bun run db:rollback              # undo the last one
+```
+
+If you edit a file in `db/queries`, regenerate the typed query code:
+
+```bash
+bun run db:generate
+```
+
+That step needs [sqlc](https://sqlc.dev) installed separately.
+
+## Project structure
+
+```
+src/app/            Routes. page.tsx is the landing page, dashboard/ is the app
+src/app/dashboard/  The *-actions.ts files are the server actions the UI calls
+src/components/     UI, one folder per area: dashboard, landing, settings, login
+src/db/             Database access. gen/ comes from sqlc and is not edited
+src/lib/            Shared logic: link and sheet parsing, pay, dates, auth, email
+src/proxy.ts        Next.js request proxy, formerly middleware.ts
+db/migrations/      Schema migrations, applied by dbmate
+db/queries/         SQL that sqlc compiles into src/db/gen
+db/seed.ts          Sample data scripts
+extension/          Browser extension source and its build script
+scripts/            Generators for the city index, flag SVGs, and usage metrics
+public/             Static files, including the built extension downloads
+```
+
+Tests sit next to what they test, as `*.test.ts`.
+
+## Other scripts
+
+The database and seed commands are covered above. The rest:
+
+| Command                  | What it does                                    |
+| ------------------------ | ----------------------------------------------- |
+| `bun run dev`            | Start the dev server                            |
+| `bun run build`          | Build the extension, then the app               |
+| `bun run start`          | Serve the production build                      |
+| `bun test`               | Run the tests                                   |
+| `bun run lint`           | ESLint (`lint:fix` to fix)                      |
+| `bun run format`         | Prettier (`format:check` to check only)         |
+| `bun run metrics [days]` | Print how often imports and suggestions worked  |
+| `bun run cities:build`   | Rebuild the city index from GeoNames            |
+| `bun run flags:sync`     | Rebuild the flag SVGs after changing currencies |
+
+## Browser extension
+
+Some job sites block server-side fetching. The extension reads those postings
+in your own browser and sends back only the parsed fields.
 
 ```bash
 bun run extension:build
 ```
 
-See [`extension/README.md`](extension/README.md) for local installation,
-production-origin configuration, and store-release settings. Deploy the latest
-database migrations before enabling the supported-ATS fallback; they provide
-the shared import cache and distributed provider rate budgets.
+The unpacked builds land in `extension/dist/`. See
+[`extension/README.md`](extension/README.md) for installing them.
 
-## Version history storage
+## Data attribution
 
-Version history stays entirely in PostgreSQL. Recent user actions are stored as
-one sparse row per action, including bulk edits and imports. Older rows move
-into lossless gzip-compressed `bytea` chunks while the newest 100 actions per
-list remain directly queryable.
-
-Recent actions can be undone and redone repeatedly. Ordinary edits reuse their
-sparse before/after patch in both directions. An undo that removes applications
-or status events keeps the deleted snapshots inside that undo row, so redo is
-possible without making every normal history action larger.
-
-Every entry is also a restorable version of the whole list. The restore path
-starts with the current list and reverses the later lossless actions, including
-actions inside compressed archives. It writes one compact before/after delta
-for the restoration itself, which makes the restore undoable and redoable
-without storing a full list snapshot for every action. New imports retain only
-compact company and role summaries for their history details. Full application
-rows are stored only when a delete or an actual undo needs them.
-
-Archiving is self-maintaining and needs no cron job. A small fraction of normal
-history writes checks for one eligible chunk after the user's edit commits.
-Each pass archives up to 500 actions older than 90 days, and row locks make
-concurrent passes safe. Apply database migrations before deploying code that
-writes history.
+The city index is built from GeoNames data. See [`NOTICE.md`](NOTICE.md).
