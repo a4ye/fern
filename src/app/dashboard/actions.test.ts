@@ -212,6 +212,7 @@ describe("resolveImportedLocation", () => {
         expect(await resolveImportedLocation("Canada, Toronto")).toEqual({
             status: "matched",
             location: "Toronto, Ontario, Canada",
+            countryCode: "CA",
         });
     });
 });

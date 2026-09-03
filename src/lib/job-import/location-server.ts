@@ -431,6 +431,12 @@ const isDominant = (candidates: readonly Candidate[]): boolean => {
     );
 };
 
+const matched = (candidate: Candidate): ImportedLocationResolution => ({
+    status: "matched",
+    location: candidate.record.label,
+    countryCode: candidate.record.countryCode,
+});
+
 const resolutionFor = (
     rawCandidates: Candidate[],
     exact: boolean,
@@ -442,11 +448,8 @@ const resolutionFor = (
     );
     if (candidates.length === 0) return { status: "unmatched" };
 
-    if (exact && candidates.length === 1) {
-        return { status: "matched", location: candidates[0].record.label };
-    }
-    if (exact && isDominant(candidates)) {
-        return { status: "matched", location: candidates[0].record.label };
+    if (exact && (candidates.length === 1 || isDominant(candidates))) {
+        return matched(candidates[0]);
     }
     if (!exact && candidates[0].match === "fuzzy") {
         const hasPrefixCompetitor = candidates.some(
@@ -456,7 +459,7 @@ const resolutionFor = (
             candidates[0].contextQuality === 2 ||
             (!hasPrefixCompetitor && isDominant(candidates))
         ) {
-            return { status: "matched", location: candidates[0].record.label };
+            return matched(candidates[0]);
         }
     }
     const significant = candidates.filter(

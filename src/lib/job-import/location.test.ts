@@ -10,6 +10,7 @@ describe("resolvePopularLocation", () => {
         const expected = {
             status: "matched",
             location: "Toronto, Ontario, Canada",
+            countryCode: "CA",
         } as const;
 
         expect(resolvePopularLocation("Toronto, Canada")).toEqual(expected);
@@ -22,38 +23,47 @@ describe("resolvePopularLocation", () => {
         expect(resolvePopularLocation("NYC")).toEqual({
             status: "matched",
             location: "New York, New York, United States",
+            countryCode: "US",
         });
         expect(resolvePopularLocation("SF")).toEqual({
             status: "matched",
             location: "San Francisco, California, United States",
+            countryCode: "US",
         });
         expect(resolvePopularLocation("München, Germany")).toEqual({
             status: "matched",
             location: "Munich, Bavaria, Germany",
+            countryCode: "DE",
         });
         expect(resolvePopularLocation("Kiev")).toEqual({
             status: "matched",
             location: "Kyiv, Kyiv City, Ukraine",
+            countryCode: "UA",
         });
         expect(resolvePopularLocation("Calcutta")).toEqual({
             status: "matched",
             location: "Kolkata, West Bengal, India",
+            countryCode: "IN",
         });
         expect(resolvePopularLocation("Madras")).toEqual({
             status: "matched",
             location: "Chennai, Tamil Nadu, India",
+            countryCode: "IN",
         });
         expect(resolvePopularLocation("Peking")).toEqual({
             status: "matched",
             location: "Beijing, Beijing, China",
+            countryCode: "CN",
         });
         expect(resolvePopularLocation("Saigon")).toEqual({
             status: "matched",
             location: "Ho Chi Minh City, Ho Chi Minh City, Vietnam",
+            countryCode: "VN",
         });
         expect(resolvePopularLocation("Den Haag")).toEqual({
             status: "matched",
             location: "The Hague, South Holland, Netherlands",
+            countryCode: "NL",
         });
     });
 
@@ -71,6 +81,7 @@ describe("resolvePopularLocation", () => {
         expect(resolvePopularLocation("Remote (Toronto, ON)")).toEqual({
             status: "matched",
             location: "Toronto, Ontario, Canada",
+            countryCode: "CA",
         });
         expect(resolvePopularLocation("San Francisco Bay Area")).toEqual({
             status: "unmatched",

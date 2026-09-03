@@ -14,6 +14,7 @@ describe("resolveComprehensiveLocation", () => {
         const expected = {
             status: "matched",
             location: "Guelph, Ontario, Canada",
+            countryCode: "CA",
         } as const;
 
         expect(resolveComprehensiveLocation("Guelph, ON")).toEqual(expected);
@@ -27,10 +28,12 @@ describe("resolveComprehensiveLocation", () => {
         expect(resolveComprehensiveLocation("Canada, London")).toEqual({
             status: "matched",
             location: "London, Ontario, Canada",
+            countryCode: "CA",
         });
         expect(resolveComprehensiveLocation("London UK")).toEqual({
             status: "matched",
             location: "London, England, United Kingdom",
+            countryCode: "GB",
         });
     });
 
@@ -64,10 +67,12 @@ describe("resolveComprehensiveLocation", () => {
         expect(resolveComprehensiveLocation("Tornto")).toEqual({
             status: "matched",
             location: "Toronto, Ontario, Canada",
+            countryCode: "CA",
         });
         expect(resolveComprehensiveLocation("Canada, Tornto")).toEqual({
             status: "matched",
             location: "Toronto, Ontario, Canada",
+            countryCode: "CA",
         });
         for (const input of [
             "otronto",
@@ -113,18 +118,22 @@ describe("resolveComprehensiveLocation", () => {
         expect(resolveComprehensiveLocation("Cambridge MA")).toEqual({
             status: "matched",
             location: "Cambridge, Massachusetts, United States",
+            countryCode: "US",
         });
         expect(resolveComprehensiveLocation("San Jose CA")).toEqual({
             status: "matched",
             location: "San Jose, California, United States",
+            countryCode: "US",
         });
         expect(resolveComprehensiveLocation("Guadalajara JAL")).toEqual({
             status: "matched",
             location: "Guadalajara, Jalisco, Mexico",
+            countryCode: "MX",
         });
         expect(resolveComprehensiveLocation("Monterrey NL")).toEqual({
             status: "matched",
             location: "Monterrey, Nuevo Leon, Mexico",
+            countryCode: "MX",
         });
     });
 
