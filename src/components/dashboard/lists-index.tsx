@@ -8,6 +8,7 @@ import {
     useTransition,
 } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { usePathname, useRouter } from "next/navigation";
 import {
     createList,
@@ -25,7 +26,6 @@ import {
     type ListStatus,
     type ListSummary,
 } from "@/components/dashboard/data";
-import { EmailSyncMenu } from "@/components/dashboard/email-sync";
 import {
     LIST_ROW_ACTION,
     LIST_ROW_MAIN,
@@ -38,14 +38,25 @@ import {
     ghostButtonClass,
     primaryButtonClass,
 } from "@/components/dashboard/table-controls";
-import {
-    firstIssue,
-    LIST_DESCRIPTION_MAX,
-    LIST_NAME_MAX,
-    listCreateSchema,
-    listUpdateSchema,
-    type ActionResult,
-} from "@/lib/validation";
+import { LIST_DESCRIPTION_MAX, LIST_NAME_MAX } from "@/lib/constraints";
+import { parseListInput, parseListUpdate } from "@/lib/list-input";
+import type { ActionResult } from "@/lib/validation";
+
+const EmailSyncMenu = dynamic(
+    () =>
+        import("@/components/dashboard/email-sync").then(
+            (module) => module.EmailSyncMenu,
+        ),
+    {
+        loading: () => (
+            <span
+                role="status"
+                aria-label="Loading inbox sync"
+                className="skeleton block h-8 w-36"
+            />
+        ),
+    },
+);
 
 const STATUS_KEYS: ListStatus[] = ["active", "closed", "archived"];
 
@@ -184,9 +195,9 @@ const ListComposerRow = ({
     const trimmed = name.trim();
     const submit = async () => {
         if (saving) return;
-        const parsed = listCreateSchema.safeParse({ name, description });
-        if (!parsed.success) {
-            setError(firstIssue(parsed.error));
+        const parsed = parseListInput({ name, description });
+        if (!parsed.ok) {
+            setError(parsed.error);
             return;
         }
         setError(null);
@@ -285,13 +296,13 @@ const ListEditorRow = ({
     const trimmed = name.trim();
     const submit = async () => {
         if (saving) return;
-        const parsed = listUpdateSchema.safeParse({
+        const parsed = parseListUpdate({
             name,
             description,
             status,
         });
-        if (!parsed.success) {
-            setError(firstIssue(parsed.error));
+        if (!parsed.ok) {
+            setError(parsed.error);
             return;
         }
         setError(null);

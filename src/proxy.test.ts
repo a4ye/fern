@@ -57,13 +57,8 @@ describe("proxy", () => {
     });
 
     describe("matcher", () => {
-        // These exclusions are load-bearing: if "login" or "api/auth" stopped
-        // being excluded, the proxy would loop the sign-in redirect or break
-        // the OAuth callback.
-        it("excludes auth and internal routes from the middleware", () => {
-            expect(config.matcher).toEqual([
-                "/((?!login|api/auth|_next|icon\\.svg).*)",
-            ]);
+        it("only invokes the proxy for dashboard routes", () => {
+            expect(config.matcher).toEqual(["/dashboard/:path*"]);
         });
     });
 });

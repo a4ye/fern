@@ -6,7 +6,6 @@ import { after } from "next/server";
 import { auth, emailSyncEnabled, GOOGLE_PROVIDER_ID } from "@/lib/auth";
 import { applySuggestion, dismissSuggestion } from "@/db/email";
 import { createGmailProvider } from "@/lib/email/gmail";
-import { syncEmailInbox } from "@/lib/email/sync";
 import { EMAIL_SYNC_COPY } from "@/lib/email/copy";
 import { EmailAuthError } from "@/lib/email/types";
 import { recordMetrics } from "@/db/metrics";
@@ -91,6 +90,7 @@ export const syncInbox = async (): Promise<SyncResult> => {
 
     try {
         const provider = createGmailProvider(accessToken);
+        const { syncEmailInbox } = await import("@/lib/email/sync");
         const outcome = await syncEmailInbox(userId, provider);
         // What the model was given and what it proposed, which together are the
         // only measure of whether it is worth paying for. What becomes of each

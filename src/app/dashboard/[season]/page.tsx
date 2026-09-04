@@ -4,7 +4,6 @@ import { cache } from "react";
 import { notFound, redirect } from "next/navigation";
 import { getRequestSession } from "@/lib/auth";
 import { getListDetail } from "@/db/dashboard";
-import { getListHistory } from "@/db/history";
 import { getExchangeRates } from "@/db/exchange-rates";
 import { getUserSettings } from "@/db/settings";
 import { ApplicationsTable } from "@/components/dashboard/applications-table";
@@ -33,11 +32,10 @@ const SeasonPage = async ({ params, searchParams }: Props) => {
     if (!session) redirect("/login");
     const { season } = await params;
 
-    const [detail, settings, rates, history] = await Promise.all([
+    const [detail, settings, rates] = await Promise.all([
         loadListDetail(session.user.id, season),
         getUserSettings(session.user.id),
         getExchangeRates(),
-        getListHistory(session.user.id, season),
     ]);
     if (!detail) notFound();
 
@@ -59,17 +57,14 @@ const SeasonPage = async ({ params, searchParams }: Props) => {
                 name={detail.name}
                 description={detail.description}
                 status={detail.status}
-                history={history}
                 defaultCurrency={settings.defaultCurrency}
             />
 
             <div className="mt-6">
                 <ListInsights
                     name={detail.name}
+                    listId={detail.id}
                     stats={detail.stats}
-                    funnel={detail.funnel}
-                    flow={detail.flow}
-                    volume={detail.volume}
                 />
             </div>
 

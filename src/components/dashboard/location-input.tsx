@@ -17,7 +17,7 @@ import {
     normalizeLocationPhrase,
     searchPopularLocations,
 } from "@/lib/job-import/location";
-import { LOCATION_MAX } from "@/lib/validation";
+import { LOCATION_MAX } from "@/lib/constraints";
 
 const SEARCH_DELAY_MS = 180;
 const MAX_OPTIONS = 8;

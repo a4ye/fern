@@ -6,6 +6,7 @@ import {
     EXTENSION_BROWSERS,
     type ExtensionBrowser,
 } from "@/lib/site";
+import { useExtensionBrowser } from "@/components/extension/use-extension-browser";
 
 type Step = { text: string; address?: string };
 
@@ -82,12 +83,11 @@ const CopyAddress = ({ address }: { address: string }) => {
     );
 };
 
-export const InstallSteps = ({
-    initialBrowser,
-}: {
-    initialBrowser: ExtensionBrowser;
-}) => {
-    const [selected, setSelected] = useState(initialBrowser);
+export const InstallSteps = () => {
+    const initialBrowser = useExtensionBrowser();
+    const [selectedBrowser, setSelectedBrowser] =
+        useState<ExtensionBrowser | null>(null);
+    const selected = selectedBrowser ?? initialBrowser;
     const browsers = [
         initialBrowser,
         ...EXTENSION_BROWSERS.filter((name) => name !== initialBrowser),
@@ -107,7 +107,7 @@ export const InstallSteps = ({
                             key={name}
                             type="button"
                             aria-pressed={active}
-                            onClick={() => setSelected(name)}
+                            onClick={() => setSelectedBrowser(name)}
                             className={`focus-frame inline-flex h-9 cursor-pointer items-center gap-2 px-4 text-sm font-medium transition-colors not-first:border-l not-first:border-hairline ${
                                 active
                                     ? "bg-accent text-background"

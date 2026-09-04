@@ -56,7 +56,7 @@ import {
 } from "@/lib/job-import/shared";
 import { resolvePopularLocation } from "@/lib/job-import/location";
 import { currencyForCountry, payCurrencyIn } from "@/lib/pay";
-import { URL_MAX } from "@/lib/validation";
+import { URL_MAX } from "@/lib/constraints";
 
 const LINK_INPUT_ID = "add-application-link";
 const LINK_CHOICE_BUTTON_CLASS =

@@ -36,4 +36,10 @@ export default withSentryConfig(nextConfig, {
     authToken: process.env.SENTRY_AUTH_TOKEN,
     widenClientFileUpload: true,
     silent: !process.env.CI,
+    bundleSizeOptimizations: {
+        excludeDebugStatements: true,
+        excludeReplayIframe: true,
+        excludeReplayShadowDom: true,
+        excludeReplayWorker: true,
+    },
 });

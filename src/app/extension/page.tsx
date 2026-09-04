@@ -1,12 +1,6 @@
 import type { Metadata } from "next";
-import { headers } from "next/headers";
-import { auth } from "@/lib/auth";
-import {
-    APP_NAME,
-    EXTENSION_DOWNLOAD_PATHS,
-    EXTENSION_VERSION,
-    type ExtensionBrowser,
-} from "@/lib/site";
+import { APP_NAME, EXTENSION_VERSION } from "@/lib/site";
+import { ExtensionDownloads } from "@/components/extension/extension-downloads";
 import { InstallSteps } from "@/components/extension/install-steps";
 import { SiteFooter } from "@/components/landing/site-footer";
 import { SiteHeader } from "@/components/landing/site-header";
@@ -22,25 +16,10 @@ const BENEFITS = [
     "Imports faster",
 ];
 
-const LABELS: Record<ExtensionBrowser, string> = {
-    chrome: "Chrome",
-    firefox: "Firefox",
-};
-
-const Extension = async () => {
-    const requestHeaders = await headers();
-    const session = await auth.api.getSession({ headers: requestHeaders });
-
-    const yours: ExtensionBrowser = (
-        requestHeaders.get("user-agent") ?? ""
-    ).includes("Firefox")
-        ? "firefox"
-        : "chrome";
-    const other: ExtensionBrowser = yours === "firefox" ? "chrome" : "firefox";
-
+const Extension = () => {
     return (
         <main className="flex flex-1 flex-col">
-            <SiteHeader signedIn={Boolean(session)} framed={false} />
+            <SiteHeader framed={false} />
 
             <div className="mx-auto w-full max-w-2xl flex-1 px-6 py-14">
                 <h1 className="text-3xl font-semibold tracking-tight">
@@ -68,25 +47,8 @@ const Extension = async () => {
 
                 <section className="mt-10 border-t border-hairline pt-8">
                     <h2 className="text-base font-semibold">Download</h2>
-                    <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-3">
-                        <a
-                            href={EXTENSION_DOWNLOAD_PATHS[yours]}
-                            download
-                            className="focus-frame inline-flex h-11 items-center gap-2.5 bg-accent px-6 text-sm font-medium text-background transition-colors hover:bg-accent-deep"
-                        >
-                            <span
-                                aria-hidden="true"
-                                className="icon-[lucide--download] size-4"
-                            />
-                            Download for {LABELS[yours]}
-                        </a>
-                        <a
-                            href={EXTENSION_DOWNLOAD_PATHS[other]}
-                            download
-                            className="text-sm font-medium text-accent-deep underline decoration-hairline underline-offset-4 transition-colors hover:decoration-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                        >
-                            Download for {LABELS[other]}
-                        </a>
+                    <div className="mt-4">
+                        <ExtensionDownloads />
                     </div>
                     <p className="mt-3 text-xs text-muted">
                         Version {EXTENSION_VERSION}, a .zip file. Use the Chrome
@@ -97,7 +59,7 @@ const Extension = async () => {
                 <section className="mt-10 border-t border-hairline pt-8">
                     <h2 className="text-base font-semibold">Install</h2>
                     <div className="mt-4">
-                        <InstallSteps initialBrowser={yours} />
+                        <InstallSteps />
                     </div>
                 </section>
             </div>

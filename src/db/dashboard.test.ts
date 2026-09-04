@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, mock } from "bun:test";
 import { parseListSort } from "@/components/dashboard/data";
-import { MAX_EVENTS_PER_APPLICATION } from "@/lib/limits";
+import {
+    MAX_APPLICATIONS_READ_PER_LIST,
+    MAX_EVENTS_PER_APPLICATION,
+} from "@/lib/limits";
 
 type Row = {
     id: string;
@@ -198,6 +201,7 @@ const {
     applyStatusStepEdits,
     getApplicationExtras,
     getListDetail,
+    getListInsights,
     getListsForUser,
     removeStatusStep,
     saveApplicationDetailAndSteps,
@@ -236,6 +240,8 @@ beforeEach(() => {
     countListsForUser.mockClear();
     listListsForUser.mockClear();
     listsPageForUser.mockClear();
+    listApplicationsForList.mockClear();
+    statusEventsForList.mockClear();
     deleteApplicationEvent.mockClear();
     setApplicationStatus.mockClear();
     updateApplicationDetail.mockClear();
@@ -357,6 +363,12 @@ const detail = async () => {
     return loaded;
 };
 
+const insights = async () => {
+    const loaded = await getListInsights("user-1", "list-1");
+    if (!loaded) throw new Error("expected insights");
+    return loaded;
+};
+
 // The table no longer carries a row's history, so what the list replays is the
 // path the flow chart draws. The steps themselves, which the detail panel takes
 // back one at a time, are read per application and covered below.
@@ -367,7 +379,7 @@ describe("getListDetail", () => {
             event("applied", "interviewing", "first"),
             event("interviewing", "interviewing", "second"),
         ];
-        const { flow } = await detail();
+        const { flow } = await insights();
 
         expect(flow[0].history).toEqual([
             "applied",
@@ -379,7 +391,7 @@ describe("getListDetail", () => {
     it("gives an application that never moved a path of where it sits", async () => {
         applications = [application("not_applied")];
         statusEvents = [];
-        const { flow } = await detail();
+        const { flow } = await insights();
 
         expect(flow[0].history).toEqual(["not_applied"]);
     });
@@ -389,7 +401,7 @@ describe("getListDetail", () => {
         // status that arrived some other way still has to close the trail.
         applications = [application("rejected")];
         statusEvents = [event("applied", "interviewing", "first")];
-        const { flow } = await detail();
+        const { flow } = await insights();
 
         expect(flow[0].history).toEqual([
             "applied",
@@ -404,6 +416,19 @@ describe("getListDetail", () => {
 
         expect(loaded[0]).not.toHaveProperty("notes");
         expect(loaded[0]).not.toHaveProperty("history");
+    });
+
+    it("does not read status events for the collapsed insights panel", async () => {
+        applications = [application("applied")];
+
+        await detail();
+
+        expect(statusEventsForList).not.toHaveBeenCalled();
+        expect(listApplicationsForList.mock.calls.at(-1)?.[1]).toEqual({
+            listId: "list-1",
+            userId: "user-1",
+            maxApplications: MAX_APPLICATIONS_READ_PER_LIST,
+        });
     });
 });
 

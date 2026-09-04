@@ -1,5 +1,5 @@
 import type { IScannerError } from "@yudiel/react-qr-scanner";
-import { URL_MAX } from "@/lib/validation";
+import { URL_MAX } from "@/lib/constraints";
 
 const INVALID_LINK_MESSAGE =
     "That QR code does not contain a valid job posting link.";

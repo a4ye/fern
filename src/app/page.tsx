@@ -1,6 +1,4 @@
 import Link from "next/link";
-import { headers } from "next/headers";
-import { auth } from "@/lib/auth";
 import { APP_NAME } from "@/lib/site";
 import { CARET_PATH, SLASH_PATH } from "@/components/brand/logo";
 import { HeroMock } from "@/components/landing/hero-mock";
@@ -101,15 +99,10 @@ const SectionRule = ({ number, id }: { number: string; id?: string }) => (
     </div>
 );
 
-const Home = async () => {
-    const session = await auth.api.getSession({ headers: await headers() });
-    const signedIn = Boolean(session);
-    const ctaHref = signedIn ? "/dashboard" : "/login";
-    const ctaLabel = signedIn ? "Go to dashboard" : "Start tracking";
-
+const Home = () => {
     return (
         <main className="flex flex-1 flex-col overflow-x-clip">
-            <SiteHeader signedIn={signedIn} />
+            <SiteHeader />
 
             <div className="mx-auto w-full max-w-6xl flex-1 border-x border-hairline">
                 <section className="px-6 pt-16 pb-20 [background:linear-gradient(165deg,var(--color-accent-tint-soft)_0%,var(--color-background)_55%)] sm:px-10 lg:pt-20">
@@ -133,10 +126,10 @@ const Home = async () => {
                             </p>
                             <div className="mt-8 flex items-center gap-6">
                                 <Link
-                                    href={ctaHref}
+                                    href="/dashboard"
                                     className="inline-flex h-10 items-center bg-accent px-5 text-sm font-medium text-background transition-colors hover:bg-accent-deep"
                                 >
-                                    {ctaLabel}
+                                    Start tracking
                                 </Link>
                                 <a
                                     href="#how"
@@ -372,10 +365,10 @@ const Home = async () => {
                         </p>
                         <div className="mt-9">
                             <Link
-                                href={ctaHref}
+                                href="/dashboard"
                                 className="inline-flex h-10 items-center bg-background px-5 text-sm font-medium text-ink transition-colors hover:bg-accent-tint"
                             >
-                                {ctaLabel}
+                                Start tracking
                             </Link>
                         </div>
                     </div>
