@@ -42,6 +42,12 @@ export const GMAIL_READONLY_SCOPE =
 
 export const auth = betterAuth({
     database: getPool(),
+    session: {
+        // Most authenticated routes only need the same session identity that
+        // was read moments ago. A short encrypted cookie cache removes that
+        // repeated database round trip while bounding revocation staleness.
+        cookieCache: { enabled: true, maxAge: 60, strategy: "jwe" },
+    },
     account: {
         // OAuth grants include access to the user's GitHub identity and,
         // optionally, Gmail. Encrypt every provider token before it reaches the

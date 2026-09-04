@@ -15,6 +15,9 @@ export const githubUsername = async (
             {
                 headers: { accept: "application/vnd.github+json" },
                 next: { revalidate: USERNAME_MAX_AGE },
+                // The username is decorative and already has an email fallback,
+                // so a slow GitHub response must not hold the settings page.
+                signal: AbortSignal.timeout(1500),
             },
         );
         // A rate limit or an outage costs the username, not the page, so the

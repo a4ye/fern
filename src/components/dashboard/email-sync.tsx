@@ -4,7 +4,6 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { authClient } from "@/lib/auth-client";
 import { EMAIL_SYNC_COPY, emailSyncSuccessMessage } from "@/lib/email/copy";
 import {
     acceptSuggestion,
@@ -354,6 +353,7 @@ export const EmailSyncMenu = ({ panel }: { panel: EmailSyncPanel }) => {
 
     const connect = () =>
         startConnect(async () => {
+            const { authClient } = await import("@/lib/auth-client");
             await authClient.linkSocial({
                 provider: "google",
                 scopes: [GMAIL_READONLY_SCOPE],

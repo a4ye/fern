@@ -26,6 +26,11 @@ const db = {
     updateApplications: spy(),
     saveApplicationDetailAndSteps: spy(),
     getApplicationExtras: spy(),
+    getListInsights: mock(async (..._args: unknown[]) => ({
+        funnel: { applied: 0, stages: [] },
+        flow: [],
+        volume: { total: 0, through: "", days: [] },
+    })),
     deleteApplication: spy(),
     deleteApplications: spy(),
     setApplicationsStatus: spy(),

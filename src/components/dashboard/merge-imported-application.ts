@@ -1,7 +1,7 @@
 import type { ApplicationFields } from "@/components/dashboard/application-form";
 import type { ScrapedPosting } from "@/lib/job-import/shared";
 import { currencyForCountry, parsePay, payAmountInput } from "@/lib/pay";
-import { PAY_MAX } from "@/lib/validation";
+import { PAY_MAX } from "@/lib/constraints";
 
 // A posting may name equity, a bonus and commission all with ranges of their
 // own, which is longer than the field will take. Whole entries are dropped from

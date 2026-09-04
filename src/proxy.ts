@@ -23,5 +23,5 @@ export const proxy = (request: NextRequest) => {
 };
 
 export const config = {
-    matcher: ["/((?!login|api/auth|_next|icon\\.svg).*)"],
+    matcher: ["/dashboard/:path*"],
 };

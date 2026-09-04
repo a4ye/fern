@@ -17,7 +17,7 @@ import {
     primaryButtonClass,
 } from "@/components/dashboard/table-controls";
 import { APP_NAME } from "@/lib/site";
-import { DISPLAY_NAME_MAX } from "@/lib/validation";
+import { DISPLAY_NAME_MAX } from "@/lib/constraints";
 
 const Section = ({
     title,

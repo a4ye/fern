@@ -26,7 +26,7 @@ import {
     PAY_MAX,
     ROLE_MAX,
     URL_MAX,
-} from "@/lib/validation";
+} from "@/lib/constraints";
 
 // Every column an application carries, held as text so a half-typed amount
 // survives a re-render. The create drawer and the detail panel edit the same

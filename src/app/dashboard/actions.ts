@@ -11,6 +11,7 @@ import {
     deleteApplications as deleteApplicationsDb,
     deleteList as deleteListDb,
     getApplicationExtras,
+    getListInsights,
     saveApplicationDetailAndSteps as saveApplicationDetailDb,
     setApplicationsArrangement as setApplicationsArrangementDb,
     setApplicationsStatus as setApplicationsStatusDb,
@@ -39,6 +40,7 @@ import type {
     Arrangement,
     ListStatus,
     PayPeriod,
+    ListInsightsData,
 } from "@/components/dashboard/data";
 import {
     EMPTY_POSTING,
@@ -79,11 +81,11 @@ import {
     firstIssue,
     listCreateSchema,
     listUpdateSchema,
-    LOCATION_MAX,
     stepEditsSchema,
     timeZoneSchema,
     type ActionResult,
 } from "@/lib/validation";
+import { LOCATION_MAX } from "@/lib/constraints";
 
 const NOT_SIGNED_IN = "You are not signed in." as const;
 
@@ -123,13 +125,21 @@ export const loadApplicationExtras = async (
     return getApplicationExtras(session.user.id, applicationId);
 };
 
+export const loadListInsights = async (
+    listId: string,
+): Promise<ListInsightsData | null> => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session || !applicationIdSchema.safeParse(listId).success) return null;
+    return getListInsights(session.user.id, listId);
+};
+
 export const loadListHistory = async (
     listId: string,
-    beforeId: string,
+    beforeId: string | null = null,
 ): Promise<ListHistoryPage | null> => {
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session || !applicationIdSchema.safeParse(listId).success) return null;
-    if (!validHistoryActionId(beforeId)) return null;
+    if (beforeId !== null && !validHistoryActionId(beforeId)) return null;
     return getListHistory(
         session.user.id,
         listId,

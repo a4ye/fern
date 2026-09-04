@@ -1,33 +1,59 @@
 "use client";
 
-import { useState } from "react";
-import { FunnelSummary } from "@/components/dashboard/funnel-summary";
-import { PipelineFlow } from "@/components/dashboard/pipeline-flow";
+import { useState, useTransition } from "react";
+import dynamic from "next/dynamic";
+import { loadListInsights } from "@/app/dashboard/actions";
+import { InsightsPlaceholder } from "@/components/dashboard/insights-placeholder";
 import { StatStrip } from "@/components/dashboard/stat-strip";
-import { VolumeChart } from "@/components/dashboard/volume-chart";
-import type {
-    FlowEntry,
-    Funnel,
-    Stat,
-    Volume,
-} from "@/components/dashboard/data";
+import type { ListInsightsData, Stat } from "@/components/dashboard/data";
+
+const InsightsContent = dynamic(
+    () =>
+        import("@/components/dashboard/list-insights-content").then(
+            (module) => module.ListInsightsContent,
+        ),
+    { loading: () => <InsightsPlaceholder /> },
+);
 
 // Sits above the applications table, so the charts and panels stay one click
 // away without pushing the table below a list that can run to hundreds of rows.
 export const ListInsights = ({
     name,
+    listId,
     stats,
-    funnel,
-    flow,
-    volume,
 }: {
     name: string;
+    listId: string;
     stats: Stat[];
-    funnel: Funnel;
-    flow: FlowEntry[];
-    volume: Volume;
 }) => {
     const [open, setOpen] = useState(false);
+    const [insights, setInsights] = useState<ListInsightsData | null>(null);
+    const [error, setError] = useState<string | null>(null);
+    const [isPending, startLoading] = useTransition();
+
+    const toggle = () => {
+        if (open) {
+            setOpen(false);
+            return;
+        }
+
+        setOpen(true);
+        if (insights || isPending) return;
+        setError(null);
+        startLoading(async () => {
+            try {
+                const loaded = await loadListInsights(listId);
+                if (loaded) {
+                    setInsights(loaded);
+                    return;
+                }
+            } catch {
+                // A rejected action request reads the same as an unavailable
+                // list here. Either way the table remains usable.
+            }
+            setError("Insights could not be loaded.");
+        });
+    };
 
     return (
         <div>
@@ -40,7 +66,7 @@ export const ListInsights = ({
                 </div>
                 <button
                     type="button"
-                    onClick={() => setOpen((previous) => !previous)}
+                    onClick={toggle}
                     aria-expanded={open}
                     className="flex h-11 w-full cursor-pointer items-center justify-between border-t border-faint px-4 text-sm text-sub transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:h-8 sm:w-auto sm:shrink-0 sm:justify-start sm:gap-1.5 sm:border-t-0 sm:px-0"
                 >
@@ -53,13 +79,11 @@ export const ListInsights = ({
             </div>
             {open && (
                 <div className="mt-4 flex flex-col gap-4">
-                    {/* The flow takes the full width: it can run to six columns
-                        of labelled nodes, which crowd badly in half a row. */}
-                    <PipelineFlow flow={flow} name={name} />
-                    <div className="grid items-stretch gap-4 lg:grid-cols-[2fr_3fr]">
-                        <FunnelSummary funnel={funnel} />
-                        <VolumeChart volume={volume} />
-                    </div>
+                    <InsightsContent
+                        name={name}
+                        insights={insights}
+                        error={error}
+                    />
                 </div>
             )}
         </div>

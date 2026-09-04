@@ -8,6 +8,7 @@ import {
     useState,
     useTransition,
 } from "react";
+import dynamic from "next/dynamic";
 import { toast } from "sonner";
 import type { ActionResult } from "@/lib/validation";
 import {
@@ -20,8 +21,6 @@ import {
     updateApplicationsBulk,
     type ApplicationDraft,
 } from "@/app/dashboard/actions";
-import { AddApplicationForm } from "@/components/dashboard/add-application-form";
-import { ApplicationPanel } from "@/components/dashboard/application-panel";
 import { LocalDateTime } from "@/components/dashboard/local-date-time";
 import {
     APPLICATION_COLUMNS as COLUMNS,
@@ -32,15 +31,11 @@ import {
 } from "@/components/dashboard/applications-columns";
 import { useRowWindow } from "@/components/dashboard/use-row-window";
 import { ApplicationsFilterMenu } from "@/components/dashboard/applications-filter";
-import {
-    applicationsFile,
-    type ExportFormat,
-} from "@/components/dashboard/applications-export";
+import type { ExportFormat } from "@/components/dashboard/applications-export";
 import {
     DownloadMenu,
     type DownloadFormat,
 } from "@/components/dashboard/download-menu";
-import { ImportDialog } from "@/components/dashboard/import-dialog";
 import {
     NO_FILTERS,
     applicationsView,
@@ -68,6 +63,10 @@ import {
 import { ConfirmDialog } from "@/components/dashboard/confirm-dialog";
 import { CURRENCY_MARK_CLASS } from "@/components/dashboard/currency-flag";
 import {
+    DeferredDialogLoading,
+    DeferredDrawerLoading,
+} from "@/components/dashboard/deferred-overlay-loading";
+import {
     STATUS_META,
     arrangementLabel,
     browserTimeZone,
@@ -80,7 +79,58 @@ import {
 } from "@/components/dashboard/data";
 import { fileSlug, saveBlob } from "@/lib/download";
 import type { ExchangeRates } from "@/lib/exchange";
-import { COMPANY_MAX, LOCATION_MAX, PAY_MAX, ROLE_MAX } from "@/lib/validation";
+import {
+    COMPANY_MAX,
+    LOCATION_MAX,
+    PAY_MAX,
+    ROLE_MAX,
+} from "@/lib/constraints";
+
+const AddApplicationForm = dynamic(
+    () =>
+        import("@/components/dashboard/add-application-form").then(
+            (module) => module.AddApplicationForm,
+        ),
+    {
+        loading: () => (
+            <DeferredDrawerLoading
+                title="New application"
+                subtitle="Start with the posting link."
+                label="Opening application form..."
+            />
+        ),
+    },
+);
+
+const ApplicationPanel = dynamic(
+    () =>
+        import("@/components/dashboard/application-panel").then(
+            (module) => module.ApplicationPanel,
+        ),
+    {
+        loading: () => (
+            <DeferredDrawerLoading
+                title="Application"
+                label="Opening application..."
+            />
+        ),
+    },
+);
+
+const ImportDialog = dynamic(
+    () =>
+        import("@/components/dashboard/import-dialog").then(
+            (module) => module.ImportDialog,
+        ),
+    {
+        loading: () => (
+            <DeferredDialogLoading
+                title="Import applications"
+                label="Opening importer..."
+            />
+        ),
+    },
+);
 
 type Draft = {
     company: string;
@@ -788,11 +838,18 @@ export const ApplicationsTable = ({
 
     // What is on screen is what leaves, so a filtered table writes a file of the
     // rows it is showing, in the order it is showing them. The menu says which.
-    const exportRows = (format: ExportFormat) =>
-        saveBlob(
-            applicationsFile(view.rows, format, name),
-            `${fileSlug(name)}-applications.${format}`,
-        );
+    const exportRows = async (format: ExportFormat) => {
+        try {
+            const { applicationsFile } =
+                await import("@/components/dashboard/applications-export");
+            saveBlob(
+                applicationsFile(view.rows, format, name),
+                `${fileSlug(name)}-applications.${format}`,
+            );
+        } catch {
+            toast.error("Could not export these applications.");
+        }
+    };
 
     const setDraftField = <K extends keyof Draft>(
         id: string,

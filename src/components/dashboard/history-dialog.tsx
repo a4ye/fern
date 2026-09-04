@@ -1055,15 +1055,15 @@ export const HistoryDialog = ({
     onClose,
 }: {
     listId: string;
-    initialPage: ListHistoryPage;
+    initialPage: ListHistoryPage | null;
     defaultCurrency: string;
     onClose: () => void;
 }) => {
     const router = useRouter();
     const { ref: dialogRef, close } = useModalDialog();
-    const [items, setItems] = useState(initialPage.items);
-    const [cursor, setCursor] = useState(initialPage.nextCursor);
-    const [hasMore, setHasMore] = useState(initialPage.hasMore);
+    const [items, setItems] = useState(initialPage?.items ?? []);
+    const [cursor, setCursor] = useState(initialPage?.nextCursor ?? null);
+    const [hasMore, setHasMore] = useState(initialPage?.hasMore ?? false);
     const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
     const [expandedChanges, setExpandedChanges] = useState<Set<string>>(
         () => new Set(),
@@ -1086,6 +1086,7 @@ export const HistoryDialog = ({
     const formatLocalTime = useLocalDateTimeFormatter();
 
     useEffect(() => {
+        if (!initialPage) return;
         setItems((current) => {
             if (!loadedOlder.current) return initialPage.items;
 
@@ -1331,7 +1332,22 @@ export const HistoryDialog = ({
                     </div>
                 </header>
 
-                {items.length === 0 ? (
+                {initialPage === null ? (
+                    <div
+                        aria-live="polite"
+                        className="grid min-h-0 flex-1 place-items-center px-6 py-12 text-center"
+                    >
+                        <div>
+                            <span
+                                aria-hidden="true"
+                                className="icon-[lucide--loader-circle] mx-auto block size-5 animate-spin text-muted"
+                            />
+                            <p className="mt-3 text-sm text-sub">
+                                Loading history...
+                            </p>
+                        </div>
+                    </div>
+                ) : items.length === 0 ? (
                     <div className="grid min-h-0 flex-1 place-items-center px-6 py-12 text-center">
                         <div>
                             <span

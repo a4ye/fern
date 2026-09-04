@@ -107,24 +107,25 @@ returning id;
 -- list's worth of them outweighs every other column put together.
 -- name: ListApplicationsForList :many
 select
-    id,
-    company_name,
-    role_title,
-    status,
-    url,
-    location,
-    arrangement,
-    pay_min,
-    pay_max,
-    pay_currency,
-    pay_period,
-    bonus_amount,
-    pay_note,
-    applied_at,
-    updated_at
-from applications
-where list_id = sqlc.arg(list_id)
-order by created_at desc, position desc
+    a.id,
+    a.company_name,
+    a.role_title,
+    a.status,
+    a.url,
+    a.location,
+    a.arrangement,
+    a.pay_min,
+    a.pay_max,
+    a.pay_currency,
+    a.pay_period,
+    a.bonus_amount,
+    a.pay_note,
+    a.applied_at,
+    a.updated_at
+from applications a
+join lists l on l.id = a.list_id
+where a.list_id = sqlc.arg(list_id) and l.user_id = sqlc.arg(user_id)
+order by a.created_at desc, a.position desc
 -- A roof on what one page load reads, sitting above the number a list is
 -- allowed to hold so it trims nothing anyone could have added.
 limit sqlc.arg(max_applications)::int;

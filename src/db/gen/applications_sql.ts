@@ -160,28 +160,30 @@ export async function createApplications(client: Client, args: CreateApplication
 
 export const listApplicationsForListQuery = `-- name: ListApplicationsForList :many
 select
-    id,
-    company_name,
-    role_title,
-    status,
-    url,
-    location,
-    arrangement,
-    pay_min,
-    pay_max,
-    pay_currency,
-    pay_period,
-    bonus_amount,
-    pay_note,
-    applied_at,
-    updated_at
-from applications
-where list_id = $1
-order by created_at desc, position desc
-limit $2::int`;
+    a.id,
+    a.company_name,
+    a.role_title,
+    a.status,
+    a.url,
+    a.location,
+    a.arrangement,
+    a.pay_min,
+    a.pay_max,
+    a.pay_currency,
+    a.pay_period,
+    a.bonus_amount,
+    a.pay_note,
+    a.applied_at,
+    a.updated_at
+from applications a
+join lists l on l.id = a.list_id
+where a.list_id = $1 and l.user_id = $2
+order by a.created_at desc, a.position desc
+limit $3::int`;
 
 export interface ListApplicationsForListArgs {
     listId: string;
+    userId: string;
     maxApplications: number;
 }
 
@@ -206,7 +208,7 @@ export interface ListApplicationsForListRow {
 export async function listApplicationsForList(client: Client, args: ListApplicationsForListArgs): Promise<ListApplicationsForListRow[]> {
     const result = await client.query({
         text: listApplicationsForListQuery,
-        values: [args.listId, args.maxApplications],
+        values: [args.listId, args.userId, args.maxApplications],
         rowMode: "array"
     });
     return result.rows.map(row => {

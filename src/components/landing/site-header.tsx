@@ -1,14 +1,9 @@
 import Link from "next/link";
 import { Logo } from "@/components/brand/logo";
+import { SiteAccountLink } from "@/components/landing/site-account-link";
 import { APP_NAME, GITHUB_URL } from "@/lib/site";
 
-export const SiteHeader = ({
-    signedIn,
-    framed = true,
-}: {
-    signedIn: boolean;
-    framed?: boolean;
-}) => (
+export const SiteHeader = ({ framed = true }: { framed?: boolean }) => (
     <header className="sticky top-0 z-50 border-b border-hairline bg-background/90 backdrop-blur-sm">
         <div className="h-0.75 bg-accent" />
         <div
@@ -36,12 +31,7 @@ export const SiteHeader = ({
                         className="icon-[simple-icons--github] size-5"
                     />
                 </a>
-                <Link
-                    href={signedIn ? "/dashboard" : "/login"}
-                    className="inline-flex h-8 items-center bg-accent px-3.5 text-xs font-medium text-background transition-colors hover:bg-accent-deep"
-                >
-                    {signedIn ? "Dashboard" : "Sign in"}
-                </Link>
+                <SiteAccountLink />
             </div>
         </div>
     </header>
