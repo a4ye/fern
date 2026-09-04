@@ -56,7 +56,7 @@ export const ListInsights = ({
                     {/* The flow takes the full width: it can run to six columns
                         of labelled nodes, which crowd badly in half a row. */}
                     <PipelineFlow flow={flow} name={name} />
-                    <div className="grid items-start gap-4 lg:grid-cols-2">
+                    <div className="grid items-stretch gap-4 lg:grid-cols-[2fr_3fr]">
                         <FunnelSummary funnel={funnel} />
                         <VolumeChart volume={volume} />
                     </div>

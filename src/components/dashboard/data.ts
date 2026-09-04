@@ -527,25 +527,15 @@ export type FlowEntry = {
     history: ApplicationStatus[];
 };
 
-// A day inside a bucketed period that had applications on it.
-export type VolumeDay = { label: string; count: number };
-
-// One period of the applications-sent chart. Periods with nothing in them are
-// kept, so a month off reads as a dip rather than closing up. `start` is the
-// first day of the period as yyyy-mm-dd, which is what the time axis plots on;
-// `label` is only ever printed in the hover plate. `days` breaks a week back
-// down for that plate, and is empty when the chart already counts by day.
-export type VolumeBar = {
-    label: string;
-    start: string;
-    count: number;
-    days: VolumeDay[];
-};
+// One active day in the application grid. Empty calendar days are filled in by
+// the graph, keeping this payload proportional to applications rather than to a
+// list's entire date span.
+export type VolumeDay = { date: string; count: number };
 
 export type Volume = {
     total: number;
-    unit: "day" | "week" | "month";
-    bars: VolumeBar[];
+    through: string;
+    days: VolumeDay[];
 };
 
 export type ListDetail = {

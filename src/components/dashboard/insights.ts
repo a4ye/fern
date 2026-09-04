@@ -10,8 +10,6 @@ import {
     type Funnel,
     type FunnelStageKey,
     type Volume,
-    type VolumeBar,
-    type VolumeDay,
 } from "@/components/dashboard/data";
 
 // A rejection is still a reply. Being ghosted is the absence of one, so it
@@ -74,100 +72,24 @@ export const funnelFrom = (flow: FlowEntry[]): Funnel => {
     };
 };
 
-const DAY = 24 * 60 * 60 * 1000;
-
-// Applications go out in bursts, so counting a long run day by day draws a comb
-// of single-day spikes rather than a shape. Past a few weeks the run is counted
-// in weeks, and each week carries the days behind it for the hover to name.
-const DAILY_SPAN_DAYS = 45;
-const WEEKLY_SPAN_DAYS = 300;
-
 const startOfDay = (date: Date) =>
     new Date(date.getFullYear(), date.getMonth(), date.getDate());
 
-const startOfWeek = (date: Date) => {
-    const start = startOfDay(date);
-    start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
-    return start;
-};
-
-const startOfMonth = (date: Date) =>
-    new Date(date.getFullYear(), date.getMonth(), 1);
-
-const START_OF: Record<Volume["unit"], (date: Date) => Date> = {
-    day: startOfDay,
-    week: startOfWeek,
-    month: startOfMonth,
-};
-
-// Read on its own in a hover hint, with no axis around it for context, so a
-// month carries its year to tell one January from another.
-const LABEL_FORMAT: Record<Volume["unit"], Intl.DateTimeFormatOptions> = {
-    day: { month: "short", day: "numeric" },
-    week: { month: "short", day: "numeric" },
-    month: { month: "short", year: "numeric" },
-};
-
-const labelFor = (start: Date, unit: Volume["unit"]) =>
-    start.toLocaleDateString("en-US", LABEL_FORMAT[unit]);
-
-// When applications went out, counted into even periods across the whole span
-// they cover.
-export const volumeFrom = (dates: Date[]): Volume => {
-    if (dates.length === 0) return { total: 0, unit: "week", bars: [] };
-
-    const times = dates.map((date) => date.getTime()).sort((a, b) => a - b);
-    const first = new Date(times[0]);
-    const last = new Date(times[times.length - 1]);
-    const span = (last.getTime() - first.getTime()) / DAY;
-    const unit: Volume["unit"] =
-        span <= DAILY_SPAN_DAYS
-            ? "day"
-            : span <= WEEKLY_SPAN_DAYS
-              ? "week"
-              : "month";
-    const startOf = START_OF[unit];
-
-    const counts = new Map<number, number>();
-    for (const time of times) {
-        const key = startOf(new Date(time)).getTime();
+// The activity graph needs exact calendar days at every timescale. Empty days
+// are derived in the renderer, so only dates with an application travel to the
+// client.
+export const volumeFrom = (dates: Date[], today = new Date()): Volume => {
+    const counts = new Map<string, number>();
+    for (const date of dates) {
+        const key = toDateInput(startOfDay(date));
         counts.set(key, (counts.get(key) ?? 0) + 1);
     }
 
-    // A week is drawn as one point but was lived as seven, so each one carries
-    // the days that actually had applications on them. Only the days that did:
-    // the empty ones are the gaps between, and naming them says nothing.
-    const byDay = new Map<number, number>();
-    if (unit === "week")
-        for (const time of times) {
-            const key = startOfDay(new Date(time)).getTime();
-            byDay.set(key, (byDay.get(key) ?? 0) + 1);
-        }
-
-    const daysIn = (start: Date): VolumeDay[] => {
-        const days: VolumeDay[] = [];
-        const cursor = new Date(start);
-        for (let step = 0; step < 7; step++) {
-            const count = byDay.get(cursor.getTime()) ?? 0;
-            if (count > 0) days.push({ label: labelFor(cursor, "day"), count });
-            cursor.setDate(cursor.getDate() + 1);
-        }
-        return days;
+    return {
+        total: dates.length,
+        through: toDateInput(startOfDay(today)),
+        days: Array.from(counts, ([date, count]) => ({ date, count })).sort(
+            (first, second) => first.date.localeCompare(second.date),
+        ),
     };
-
-    const bars: VolumeBar[] = [];
-    const cursor = startOf(first);
-    const end = startOf(last).getTime();
-    while (cursor.getTime() <= end) {
-        bars.push({
-            label: labelFor(cursor, unit),
-            start: toDateInput(cursor),
-            count: counts.get(cursor.getTime()) ?? 0,
-            days: unit === "week" ? daysIn(cursor) : [],
-        });
-        if (unit === "month") cursor.setMonth(cursor.getMonth() + 1);
-        else cursor.setDate(cursor.getDate() + (unit === "week" ? 7 : 1));
-    }
-
-    return { total: times.length, unit, bars };
 };
