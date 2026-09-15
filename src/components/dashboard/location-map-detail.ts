@@ -372,10 +372,7 @@ const edgesOfRing = (ring: Position[], bounds: Bounds): Position[][] => {
 };
 
 // A lake shore is an outline just as a coastline is, so both are drawn.
-export const detailEdges = (
-    shapes: CellShapes,
-    bounds: Bounds,
-): Position[][] =>
+export const detailEdges = (shapes: CellShapes, bounds: Bounds): Position[][] =>
     [...shapes.land, ...shapes.water].flatMap((rings) =>
         rings.flatMap((ring) => edgesOfRing(ring, bounds)),
     );

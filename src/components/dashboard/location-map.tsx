@@ -137,51 +137,49 @@ const markersAt = (
     projection: GeoProjection,
     zoom: number,
 ): Marker[] =>
-    index
-        .getClusters([-180, -85, 180, 85], zoom)
-        .flatMap<Marker>((entry) => {
-            const [longitude, latitude] = entry.geometry.coordinates;
-            const point = projection([longitude, latitude]);
-            if (!point) return [];
+    index.getClusters([-180, -85, 180, 85], zoom).flatMap<Marker>((entry) => {
+        const [longitude, latitude] = entry.geometry.coordinates;
+        const point = projection([longitude, latitude]);
+        if (!point) return [];
 
-            const at = {
-                x: point[0],
-                y: point[1],
-                longitude,
-                latitude,
-            };
-            const properties = entry.properties;
+        const at = {
+            x: point[0],
+            y: point[1],
+            longitude,
+            latitude,
+        };
+        const properties = entry.properties;
 
-            if ("cluster" in properties) {
-                const ground = regionNameFrom(
-                    properties.region,
-                    properties.country,
-                );
-                const cities = `${properties.point_count} cities`;
-                return [
-                    {
-                        key: `cluster-${properties.cluster_id}`,
-                        clusterId: properties.cluster_id,
-                        title:
-                            ground ||
-                            countriesNamed(countNames(properties.countries)),
-                        detail: `${cities}, ${applicationsIn(properties.applications)}`,
-                        count: properties.applications,
-                        ...at,
-                    },
-                ];
-            }
+        if ("cluster" in properties) {
+            const ground = regionNameFrom(
+                properties.region,
+                properties.country,
+            );
+            const cities = `${properties.point_count} cities`;
             return [
                 {
-                    key: properties.label,
-                    clusterId: null,
-                    title: properties.label,
-                    detail: applicationsIn(properties.count),
-                    count: properties.count,
+                    key: `cluster-${properties.cluster_id}`,
+                    clusterId: properties.cluster_id,
+                    title:
+                        ground ||
+                        countriesNamed(countNames(properties.countries)),
+                    detail: `${cities}, ${applicationsIn(properties.applications)}`,
+                    count: properties.applications,
                     ...at,
                 },
             ];
-        });
+        }
+        return [
+            {
+                key: properties.label,
+                clusterId: null,
+                title: properties.label,
+                detail: applicationsIn(properties.count),
+                count: properties.count,
+                ...at,
+            },
+        ];
+    });
 
 // Clustering keeps its groups a radius apart in its own coordinates, but a
 // group sits at the mean of everything it holds, and absorbing one more member
@@ -229,13 +227,7 @@ const clamp = (value: number, low: number, high: number): number =>
 // number: where two rings ran opposite ways they cancelled and punched a hole in
 // the land, a bare band along the shared edge tens of pixels wide at close zoom.
 // Separate paths simply paint the same colour twice.
-const DetailLayer = ({
-    cells,
-    at,
-}: {
-    cells: DetailCell[];
-    at: Placement;
-}) => (
+const DetailLayer = ({ cells, at }: { cells: DetailCell[]; at: Placement }) => (
     <>
         {cells.map((cell) => (
             <path
