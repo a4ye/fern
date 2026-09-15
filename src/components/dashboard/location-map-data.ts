@@ -4,8 +4,6 @@ import type { Place } from "@/components/dashboard/data";
 
 export type MapView = { x: number; y: number; k: number };
 
-export const MIN_SCALE = 1;
-
 // Deep enough that no two cities are stuck together. Clustering merges what is
 // within CLUSTER_RADIUS pixels, and that distance shrinks as the map is zoomed:
 // stopping at 64 held the merge distance at about 78 km, so neighbours like
@@ -67,6 +65,28 @@ export const projectionFor = (width: number, height: number): GeoProjection =>
         ],
         FRAME,
     );
+
+// Where the frame lands on the panel, and the lowest zoom that still covers the
+// panel with it. Fitting the frame inside instead left a band across a phone
+// panel, which is much taller than the frame's shape: the map filled the width
+// exactly and fell short of the height, so neither side had anywhere to go and
+// every drag died on the spot while the outlines ran visibly past the edge.
+const frameOn = (width: number, height: number) => {
+    const [[left, top], [right, bottom]] = geoPath(
+        projectionFor(width, height),
+    ).bounds(FRAME);
+
+    return {
+        left,
+        top,
+        right,
+        bottom,
+        minimum: Math.max(width / (right - left), height / (bottom - top)),
+    };
+};
+
+export const minScaleFor = (width: number, height: number): number =>
+    frameOn(width, height).minimum;
 
 // Circle area, not radius, carries the count, so two cities read as twice one.
 // The floor keeps a single application from shrinking out of sight next to a
@@ -141,28 +161,23 @@ export const clusterZoomFor = (projectionScale: number): number => {
 export const scaleForClusterZoom = (
     projectionScale: number,
     zoom: number,
+    minimum: number,
 ): number =>
     clamp(
         (TILE_SIZE * 2 ** zoom) / (2 * Math.PI * projectionScale),
-        MIN_SCALE,
+        minimum,
         MAX_SCALE,
     );
 
 // Keeps the map covering the panel, so it cannot be thrown off into empty space
-// and lost. Whichever side is wider than the panel is stopped at its edge, and
-// whichever is narrower, which is what letterboxing leaves at the lowest zooms,
-// is centred instead: it has no travel to give.
+// and lost. Either side is stopped once its edge reaches the panel border.
 const alongAxis = (
     translate: number,
     k: number,
     low: number,
     high: number,
     panel: number,
-): number => {
-    const span = (high - low) * k;
-    if (span < panel) return (panel - span) / 2 - low * k;
-    return clamp(translate, panel - high * k, -low * k);
-};
+): number => clamp(translate, panel - high * k, -low * k);
 
 // A zoom past the limits is refused outright rather than trimmed to fit. The
 // translation that comes with it was worked out for the scale that was asked
@@ -174,7 +189,7 @@ export const heldView = (
     width: number,
     height: number,
 ): MapView =>
-    requested.k < MIN_SCALE || requested.k > MAX_SCALE
+    requested.k < minScaleFor(width, height) || requested.k > MAX_SCALE
         ? previous
         : constrainView(requested, width, height);
 
@@ -185,10 +200,8 @@ export const constrainView = (
 ): MapView => {
     if (width <= 0 || height <= 0) return view;
 
-    const k = clamp(view.k, MIN_SCALE, MAX_SCALE);
-    const [[left, top], [right, bottom]] = geoPath(
-        projectionFor(width, height),
-    ).bounds(FRAME);
+    const { left, top, right, bottom, minimum } = frameOn(width, height);
+    const k = clamp(view.k, minimum, MAX_SCALE);
 
     return {
         k,
@@ -226,7 +239,7 @@ export const fitViewFor = (
             (width - FIT_PADDING * 2) / (right - left),
             (height - FIT_PADDING * 2) / (bottom - top),
         ),
-        MIN_SCALE,
+        minScaleFor(width, height),
         MAX_FIT_SCALE,
     );
 

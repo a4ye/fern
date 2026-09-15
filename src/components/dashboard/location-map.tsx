@@ -40,8 +40,7 @@ import {
     heldView,
     fitViewFor,
     MAX_CLUSTER_ZOOM,
-    MAX_SCALE,
-    MIN_SCALE,
+    minScaleFor,
     projectionFor,
     radiusFor,
     scaleForClusterZoom,
@@ -273,6 +272,7 @@ export const LocationMap = ({ places }: { places: Place[] }) => {
     const [ready, setReady] = useState<ReadonlySet<string>>(new Set());
 
     const projection = useMemo(() => projectionFor(width, MAP_HEIGHT), [width]);
+    const minimum = useMemo(() => minScaleFor(width, MAP_HEIGHT), [width]);
     const initial = useMemo(
         () => fitViewFor(places, width, MAP_HEIGHT),
         [places, width],
@@ -338,10 +338,6 @@ export const LocationMap = ({ places }: { places: Place[] }) => {
                         <Zoom<SVGSVGElement>
                             width={width}
                             height={MAP_HEIGHT}
-                            scaleXMin={MIN_SCALE}
-                            scaleXMax={MAX_SCALE}
-                            scaleYMin={MIN_SCALE}
-                            scaleYMax={MAX_SCALE}
                             constrain={(matrix, previous) => {
                                 const held = heldView(
                                     {
@@ -448,6 +444,7 @@ export const LocationMap = ({ places }: { places: Place[] }) => {
                                         index.getClusterExpansionZoom(
                                             marker.clusterId,
                                         ),
+                                        minimum,
                                     );
                                     const point = projection([
                                         marker.longitude,
@@ -483,12 +480,9 @@ export const LocationMap = ({ places }: { places: Place[] }) => {
                                                 )
                                                 .join(". ")}.`}
                                             onWheel={() => setHovered(null)}
-                                            onPointerDown={(event) => {
-                                                setHovered(null);
-                                                zoom.dragStart(event);
-                                            }}
-                                            onPointerMove={zoom.dragMove}
-                                            onPointerUp={zoom.dragEnd}
+                                            onPointerDown={() =>
+                                                setHovered(null)
+                                            }
                                             className={`touch-none block bg-surface ${zoom.isDragging ? "cursor-grabbing" : "cursor-grab"}`}
                                         >
                                             {/* One layer at a time, faded in

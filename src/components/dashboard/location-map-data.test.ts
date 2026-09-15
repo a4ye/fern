@@ -9,6 +9,7 @@ import {
     heldView,
     MAX_CLUSTER_ZOOM,
     MAX_SCALE,
+    minScaleFor,
     projectionFor,
     radiusFor,
     scaleForClusterZoom,
@@ -102,7 +103,9 @@ describe("fitViewFor", () => {
     });
 
     test("falls back to the whole world when there is nothing to fit", () => {
-        expect(fitViewFor([], WIDTH, HEIGHT).k).toBe(1);
+        expect(fitViewFor([], WIDTH, HEIGHT).k).toBe(
+            minScaleFor(WIDTH, HEIGHT),
+        );
         expect(fitViewFor([TORONTO], 0, 0)).toEqual({ x: 0, y: 0, k: 1 });
     });
 
@@ -114,23 +117,28 @@ describe("fitViewFor", () => {
     });
 });
 
-describe("constrainView", () => {
-    // Clamping lands the edge exactly on the panel border, where the arithmetic
-    // can miss by a billionth of a pixel either way.
-    const TOUCHING = 1e-6;
+// Clamping lands the edge exactly on the panel border, where the arithmetic can
+// miss by a billionth of a pixel either way.
+const TOUCHING = 1e-6;
 
-    const boundsOf = (view: ReturnType<typeof fitViewFor>) => {
-        const projection = projectionFor(WIDTH, HEIGHT);
-        const corner = (longitude: number, latitude: number) => {
-            const point = projection([longitude, latitude]);
-            if (!point) throw new Error("corner did not project.");
-            return [point[0] * view.k + view.x, point[1] * view.k + view.y];
-        };
-        const [left, top] = corner(-180, 80);
-        const [right, bottom] = corner(180, -58);
-        return { left, right, top, bottom };
+// Where the frame's corners land on the panel once the view is applied.
+const boundsOf = (
+    view: ReturnType<typeof fitViewFor>,
+    width = WIDTH,
+    height = HEIGHT,
+) => {
+    const projection = projectionFor(width, height);
+    const corner = (longitude: number, latitude: number) => {
+        const point = projection([longitude, latitude]);
+        if (!point) throw new Error("corner did not project.");
+        return [point[0] * view.k + view.x, point[1] * view.k + view.y];
     };
+    const [left, top] = corner(-180, 80);
+    const [right, bottom] = corner(180, -58);
+    return { left, right, top, bottom };
+};
 
+describe("constrainView", () => {
     test("refuses to let the map be dragged off to one side", () => {
         const thrown = constrainView(
             { k: 4, x: 90_000, y: 60_000 },
@@ -167,18 +175,55 @@ describe("constrainView", () => {
         expect(constrainView(inside, WIDTH, HEIGHT)).toEqual(inside);
     });
 
-    test("centres the side that is too short to fill the panel", () => {
-        const view = constrainView({ k: 1, x: 5_000, y: 5_000 }, WIDTH, HEIGHT);
-        const { top, bottom } = boundsOf(view);
-
-        expect(top).toBeCloseTo(HEIGHT - bottom, 6);
-    });
-
     test("keeps the scale within the zoom the map is built for", () => {
         expect(constrainView({ k: 9_999, x: 0, y: 0 }, WIDTH, HEIGHT).k).toBe(
             MAX_SCALE,
         );
-        expect(constrainView({ k: 0.01, x: 0, y: 0 }, WIDTH, HEIGHT).k).toBe(1);
+        expect(constrainView({ k: 0.01, x: 0, y: 0 }, WIDTH, HEIGHT).k).toBe(
+            minScaleFor(WIDTH, HEIGHT),
+        );
+    });
+});
+
+describe("minScaleFor", () => {
+    // A phone panel is far taller than the frame's shape.
+    const PHONE_WIDTH = 372;
+    const PHONE_HEIGHT = 380;
+
+    test("covers the panel whatever shape the panel is", () => {
+        for (const [width, height] of [
+            [PHONE_WIDTH, PHONE_HEIGHT],
+            [WIDTH, HEIGHT],
+        ]) {
+            const k = minScaleFor(width, height);
+            const { left, right, top, bottom } = boundsOf(
+                constrainView({ k, x: 0, y: 0 }, width, height),
+                width,
+                height,
+            );
+
+            expect(right - left).toBeGreaterThanOrEqual(width - TOUCHING);
+            expect(bottom - top).toBeGreaterThanOrEqual(height - TOUCHING);
+        }
+    });
+
+    // Fitting the frame inside a phone panel pinned the map: it filled the
+    // width exactly and fell short of the height, so neither side had anywhere
+    // to go and every drag died on the spot.
+    test("leaves the lowest zoom somewhere to be dragged to", () => {
+        const k = minScaleFor(PHONE_WIDTH, PHONE_HEIGHT);
+        const opened = constrainView(
+            { k, x: 0, y: 0 },
+            PHONE_WIDTH,
+            PHONE_HEIGHT,
+        );
+        const dragged = constrainView(
+            { ...opened, x: opened.x - 50 },
+            PHONE_WIDTH,
+            PHONE_HEIGHT,
+        );
+
+        expect(dragged.x).toBeLessThan(opened.x);
     });
 });
 
@@ -234,7 +279,14 @@ describe("clusterZoomFor", () => {
 
         for (const zoom of [2, 3, 4, 5]) {
             expect(
-                clusterZoomFor(scale * scaleForClusterZoom(scale, zoom)),
+                clusterZoomFor(
+                    scale *
+                        scaleForClusterZoom(
+                            scale,
+                            zoom,
+                            minScaleFor(WIDTH, HEIGHT),
+                        ),
+                ),
             ).toBe(zoom);
         }
     });
