@@ -380,11 +380,27 @@ const titleCase = (slug: string): string =>
         .map((word) => word[0].toUpperCase() + word.slice(1))
         .join(" ");
 
+const GREENHOUSE_HOST = /(^|\.)greenhouse\.io$/;
+
+// The board a Greenhouse link belongs to. An embedded application form states it
+// in `for`, because the first path segment there is the word "embed" rather than
+// anyone's company.
+const greenhouseBoard = (url: URL): string | null => {
+    const parts = url.pathname.split("/").filter(Boolean);
+    return parts[0] === "embed"
+        ? url.searchParams.get("for")
+        : (parts[0] ?? null);
+};
+
 export const companyFromUrl = (url: URL): string | null => {
     if (url.hostname.endsWith("myworkdayjobs.com")) {
         return titleCase(url.hostname.split(".")[0]);
     }
-    if (/(^|\.)(greenhouse\.io|lever\.co|ashbyhq\.com)$/.test(url.hostname)) {
+    if (GREENHOUSE_HOST.test(url.hostname)) {
+        const board = greenhouseBoard(url);
+        return board ? titleCase(board) : null;
+    }
+    if (/(^|\.)(lever\.co|ashbyhq\.com)$/.test(url.hostname)) {
         const slug = url.pathname.split("/").filter(Boolean)[0];
         return slug ? titleCase(slug) : null;
     }
@@ -394,9 +410,17 @@ export const companyFromUrl = (url: URL): string | null => {
 export const greenhouseIds = (
     url: URL,
 ): { slug: string; id: string } | null => {
-    if (!/(^|\.)greenhouse\.io$/.test(url.hostname)) return null;
+    if (!GREENHOUSE_HOST.test(url.hostname)) return null;
     const parts = url.pathname.split("/").filter(Boolean);
-    const slug = parts[0];
+    const slug = greenhouseBoard(url);
+
+    // An embedded form states the job in `token`. The `jr_id` beside it is a
+    // different id, and the board API answers 404 to it.
+    if (parts[0] === "embed") {
+        const id = url.searchParams.get("token");
+        return slug && id ? { slug, id } : null;
+    }
+
     const jobsIndex = parts.indexOf("jobs");
     const id =
         jobsIndex >= 0 ? parts[jobsIndex + 1] : url.searchParams.get("gh_jid");

@@ -167,6 +167,14 @@ describe("isDirectlyReadable", () => {
         ).toBeTrue();
     });
 
+    it("claims a Greenhouse application form embedded on another site", () => {
+        expect(
+            isDirectlyReadable(
+                "https://job-boards.greenhouse.io/embed/job_app?for=anthropic&token=5101378008&jr_id=6aa204852f936e4a53daf36d",
+            ),
+        ).toBeTrue();
+    });
+
     it("claims Ashby, which answers with a board rather than a posting", () => {
         expect(
             isDirectlyReadable("https://jobs.ashbyhq.com/ramp/abc123"),
@@ -208,6 +216,24 @@ describe("importDirect", () => {
             role: "Software Engineer, Infrastructure",
             location: "San Francisco, CA",
             pay: "USD 222800-290000/yr",
+            source: "greenhouse",
+        });
+    });
+
+    it("reads an embedded Greenhouse form, which names the board and job in the query", async () => {
+        const asked = answerWith(GREENHOUSE_JOB);
+
+        const posting = await importDirect(
+            "https://job-boards.greenhouse.io/embed/job_app?for=anthropic&token=7788990011&jr_id=6aa204852f936e4a53daf36d",
+        );
+
+        // `token` is the job the board API answers to. `jr_id` is not.
+        expect(asked[0]).toBe(
+            "https://boards-api.greenhouse.io/v1/boards/anthropic/jobs/7788990011?pay_transparency=true",
+        );
+        expect(posting).toMatchObject({
+            company: "Anthropic",
+            role: "Software Engineer, Infrastructure",
             source: "greenhouse",
         });
     });

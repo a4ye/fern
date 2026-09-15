@@ -272,6 +272,25 @@ describe("scrapePosting", () => {
         expect(posting.role).toBe("Platform Engineer");
     });
 
+    it("never offers the word in an embed path as the company", async () => {
+        // The embedded form's first path segment is "embed", and reading the
+        // company out of it once offered every such posting as a job at "Embed".
+        const asked: string[] = [];
+        globalThis.fetch = (async (input: string | URL | Request) => {
+            asked.push(String(input));
+            return new Response("", { status: 404 });
+        }) as typeof fetch;
+
+        const posting = await scrapePosting(
+            "https://job-boards.greenhouse.io/embed/job_app?for=acme&token=5678",
+        );
+
+        expect(asked[0]).toContain(
+            "boards-api.greenhouse.io/v1/boards/acme/jobs/5678",
+        );
+        expect(posting.company).toBe("Acme");
+    });
+
     it("leaves the board page unread when the provider cannot spare it", async () => {
         // The API answered with nothing, so the page behind it would be a
         // second read. It is charged for at that point, and refused here.
