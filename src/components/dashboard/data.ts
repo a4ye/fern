@@ -538,6 +538,19 @@ export type Volume = {
     days: VolumeDay[];
 };
 
+// One city on the map, holding every application that named it. Locations are
+// free text, so only what resolves to a real city arrives here: "Remote" and
+// anything unrecognised names no point, and is left out.
+export type Place = {
+    label: string;
+    city: string;
+    region: string;
+    country: string;
+    latitude: number;
+    longitude: number;
+    count: number;
+};
+
 export type ListDetail = {
     id: string;
     name: string;
@@ -551,6 +564,7 @@ export type ListInsightsData = {
     funnel: Funnel;
     flow: FlowEntry[];
     volume: Volume;
+    places: Place[];
 };
 
 // A proposed status change detected from a connected inbox, shown for review.

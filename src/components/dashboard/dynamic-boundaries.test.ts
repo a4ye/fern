@@ -23,7 +23,7 @@ describe("deferred component boundaries", () => {
             }
         }
 
-        expect(dynamicImportCount).toBe(7);
+        expect(dynamicImportCount).toBe(8);
         expect(uncovered).toEqual([]);
     });
 });

@@ -26,7 +26,7 @@ export type LocationRecord = {
     bareCityAliases?: readonly string[];
 };
 
-const POPULAR_LOCATIONS: readonly LocationRecord[] = [
+export const POPULAR_LOCATIONS: readonly LocationRecord[] = [
     {
         city: "Toronto",
         region: "Ontario",

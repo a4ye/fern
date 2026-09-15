@@ -1,4 +1,8 @@
 import { unzipSync } from "fflate";
+import {
+    canonicalLocation,
+    POPULAR_LOCATIONS,
+} from "../src/lib/job-import/location";
 
 const SOURCE_ROOT = "https://download.geonames.org/export/dump";
 const CITY_ARCHIVE = "cities5000.zip";
@@ -22,6 +26,8 @@ type SourceCityRow = readonly [
     countryCode: string,
     countryCode3: string,
     population: number,
+    latitude: number,
+    longitude: number,
 ];
 
 type CityRow = readonly [
@@ -32,6 +38,8 @@ type CityRow = readonly [
     countryCode: string,
     countryCode3: string,
     population: number,
+    latitude: number,
+    longitude: number,
 ];
 
 type AliasRow = readonly [alias: string, cityIndexes: number[]];
@@ -105,8 +113,11 @@ for (const line of decoded.split("\n")) {
     const countryCode = fields[8]?.trim();
     const adminCode = fields[10]?.trim() ?? "";
     const population = Number(fields[14] ?? 0);
+    const latitude = Number(fields[4] ?? "");
+    const longitude = Number(fields[5] ?? "");
     const country = countryCode ? countries.get(countryCode) : undefined;
     if (!city || !country || !Number.isFinite(population)) continue;
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) continue;
 
     const region = regions.get(`${countryCode}.${adminCode}`) ?? "";
     const row: SourceCityRow = [
@@ -118,6 +129,8 @@ for (const line of decoded.split("\n")) {
         countryCode,
         country.iso3,
         population,
+        latitude,
+        longitude,
     ];
     const key = `${city}\u0000${region}\u0000${country.name}`;
     const previous = deduplicated.get(key);
@@ -138,6 +151,8 @@ const rows: CityRow[] = sourceRows.map((row) => [
     row[5],
     row[6],
     row[7],
+    row[8],
+    row[9],
 ]);
 
 // Standalone country and region names are not cities. Shipping this compact
@@ -201,6 +216,34 @@ const buckets = Object.fromEntries(
                 ] as const,
         ),
 );
+// The popular list names places its own way, and the world index disagrees:
+// New York is filed under "new york city", Berlin sits in "State of Berlin".
+// A popular name therefore cannot find its own row, so each one is paired with
+// its point here, by city and country, taking the largest match.
+const labelPoints: Record<string, [latitude: number, longitude: number]> = {};
+const missingPoints: string[] = [];
+for (const record of POPULAR_LOCATIONS) {
+    const names = new Set(
+        [
+            record.city,
+            ...(record.cityAliases ?? []),
+            ...(record.bareCityAliases ?? []),
+        ].map(normalizeAlias),
+    );
+    let best: SourceCityRow | null = null;
+    for (const row of sourceRows) {
+        if (row[5] !== record.countryCode) continue;
+        if (!names.has(normalizeAlias(row[0]))) continue;
+        if (!best || row[7] > best[7]) best = row;
+    }
+    const label = canonicalLocation(record);
+    if (!best) {
+        missingPoints.push(label);
+        continue;
+    }
+    labelPoints[label] = [best[8], best[9]];
+}
+
 const lastModified = archiveResponse.headers.get("last-modified");
 const output = {
     source: `${SOURCE_ROOT}/${CITY_ARCHIVE}`,
@@ -210,6 +253,7 @@ const output = {
     maxCityWords,
     entities,
     rows,
+    labelPoints,
     buckets,
 };
 
@@ -217,3 +261,8 @@ await Bun.write(OUTPUT, `${JSON.stringify(output)}\n`);
 process.stdout.write(
     `Wrote ${rows.length.toLocaleString()} GeoNames cities to ${OUTPUT.pathname}\n`,
 );
+if (missingPoints.length > 0) {
+    process.stdout.write(
+        `No point found for ${missingPoints.length} popular locations, which will not appear on a map: ${missingPoints.join("; ")}\n`,
+    );
+}

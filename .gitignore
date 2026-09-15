@@ -37,3 +37,10 @@ docs/superpowers
 .playwright-mcp
 TODO.md
 PUBLIC_RELEASE_CHECKLIST.md
+.codex
+.focus-browser-tmp
+
+# Generated from world-atlas by `bun run map:build`, rebuilt on install and build.
+public/map-detail/
+# Natural Earth sources fetched by `bun run map:build`, kept so a rebuild needs no network.
+.cache/

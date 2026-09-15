@@ -34,6 +34,7 @@ import {
     volumeFrom,
     wasSent,
 } from "@/components/dashboard/insights";
+import { placesFrom } from "@/lib/application-places";
 import { parsePay } from "@/lib/pay";
 import {
     MAX_APPLICATIONS_READ_PER_LIST,
@@ -718,6 +719,7 @@ export const getListInsights = async (
         funnel: funnelFrom(flow),
         flow,
         volume: volumeFrom(sentAt),
+        places: placesFrom(applicationRows.map((row) => row.location)),
     };
 };
 
