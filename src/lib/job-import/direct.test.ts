@@ -238,6 +238,45 @@ describe("importDirect", () => {
         });
     });
 
+    it("takes the workplace type a Greenhouse board states in a field of its own", async () => {
+        // Greenhouse has no workplace field, so a board that wants one adds it
+        // to the posting itself. The employer saying "Hybrid" outranks a
+        // location that says nothing about how the week is split.
+        answerWith({
+            ...GREENHOUSE_JOB,
+            metadata: [
+                { name: "Employment Type", value: "Regular" },
+                { name: "Workplace Type", value: "Hybrid" },
+                // A board names its own fields, and most of them say nothing
+                // about where the work happens.
+                { name: "Location Cost Tier", value: "High" },
+            ],
+        });
+
+        const posting = await importDirect(
+            "https://job-boards.greenhouse.io/anthropic/jobs/2244668800",
+        );
+
+        expect(posting).toMatchObject({
+            location: "San Francisco, CA",
+            arrangement: "hybrid",
+        });
+    });
+
+    it("ignores a Greenhouse field whose value is not an arrangement", async () => {
+        answerWith({
+            ...GREENHOUSE_JOB,
+            location: { name: "Austin, TX (Remote)" },
+            metadata: [{ name: "Location Type", value: "Warehouse" }],
+        });
+
+        const posting = await importDirect(
+            "https://job-boards.greenhouse.io/anthropic/jobs/3355779911",
+        );
+
+        expect(posting?.arrangement).toBe("remote");
+    });
+
     it("reads a Lever posting, taking the arrangement it states outright", async () => {
         const asked = answerWith(LEVER_POSTING);
 

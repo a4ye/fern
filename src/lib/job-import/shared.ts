@@ -170,13 +170,19 @@ export const arrangementFromText = (
     return null;
 };
 
+// A title that says "(Fully Remote)" is the posting stating the arrangement in
+// the one place a page is certain to carry, and it is the only word here on a
+// posting whose block gives a plain city. Against 5,220 postings whose board
+// states the arrangement outright, a title that speaks was never wrong, and
+// never disagreed with the location text either.
 const readArrangement = (
     posting: JsonObject,
+    role: string | null,
     location: string | null,
 ): JobArrangement | null => {
     const type = asString(posting["jobLocationType"]);
     if (type?.toUpperCase() === "TELECOMMUTE") return "remote";
-    return arrangementFromText(location);
+    return arrangementFromText(role) ?? arrangementFromText(location);
 };
 
 const readPay = (posting: JsonObject): string | null => {
@@ -209,11 +215,12 @@ const fromJsonLd = (html: string): ScrapedPosting | null => {
 
         const org = posting["hiringOrganization"];
         const location = readLocation(posting);
+        const role = asString(posting["title"]);
         return {
-            role: asString(posting["title"]),
+            role,
             company: isObject(org) ? asString(org["name"]) : null,
             location,
-            arrangement: readArrangement(posting, location),
+            arrangement: readArrangement(posting, role, location),
             pay: readPay(posting),
             payNote: null,
             source: "json-ld",
@@ -366,11 +373,34 @@ const fromOpenGraph = (html: string): ScrapedPosting => {
     };
 };
 
-export const parsePosting = (html: string): ScrapedPosting =>
-    fromSimplify(html) ??
-    fromRippling(html) ??
-    fromJsonLd(html) ??
-    fromOpenGraph(html);
+// Lever and Ashby both name the arrangement on the page itself: Lever prints it
+// in a labelled tag beside the location, Ashby ships it in the data the page is
+// built from. It overrides what the readers above found rather than only
+// filling a blank, because schema.org has one word for working away from an
+// office and none for splitting the week. Ashby marks a hybrid posting
+// TELECOMMUTE all the same, and the block alone calls that job remote.
+const PAGE_WORKPLACE = [
+    /class="[^"]*\bworkplaceTypes\b[^"]*"[^>]*>([^<]*)</i,
+    /"workplaceType"\s*:\s*"([^"]*)"/i,
+];
+
+const arrangementFromPage = (html: string): JobArrangement | null => {
+    for (const pattern of PAGE_WORKPLACE) {
+        const stated = arrangementFromText(html.match(pattern)?.[1] ?? null);
+        if (stated) return stated;
+    }
+    return null;
+};
+
+export const parsePosting = (html: string): ScrapedPosting => {
+    const posting =
+        fromSimplify(html) ??
+        fromRippling(html) ??
+        fromJsonLd(html) ??
+        fromOpenGraph(html);
+    const stated = arrangementFromPage(html);
+    return stated ? { ...posting, arrangement: stated } : posting;
+};
 
 const titleCase = (slug: string): string =>
     slug
@@ -496,6 +526,26 @@ const greenhousePay = (job: JsonObject): string | null => {
     );
 };
 
+// Greenhouse has no workplace field of its own, so a board that wants one adds
+// it to the posting under a name of its choosing, "Workplace Type" or "Location
+// Type". A field is only followed where its value reads as an arrangement,
+// which leaves a "Location Type" of "Warehouse" as the nothing it is.
+const GREENHOUSE_WORKPLACE_FIELD =
+    /\b(?:workplace|(?:work\s*)?location)\s*type\b/i;
+
+const greenhouseArrangement = (job: JsonObject): JobArrangement | null => {
+    const fields = job["metadata"];
+    if (!Array.isArray(fields)) return null;
+    for (const field of fields) {
+        if (!isObject(field)) continue;
+        const name = asString(field["name"]);
+        if (!name || !GREENHOUSE_WORKPLACE_FIELD.test(name)) continue;
+        const stated = arrangementFromText(asString(field["value"]));
+        if (stated) return stated;
+    }
+    return null;
+};
+
 export const parseGreenhouseJob = (value: unknown): ScrapedPosting | null => {
     if (!isObject(value)) return null;
     const node = value["location"];
@@ -507,7 +557,8 @@ export const parseGreenhouseJob = (value: unknown): ScrapedPosting | null => {
         role,
         company,
         location,
-        arrangement: arrangementFromText(location),
+        arrangement:
+            greenhouseArrangement(value) ?? arrangementFromText(location),
         pay: greenhousePay(value),
         payNote: null,
         source: "greenhouse",

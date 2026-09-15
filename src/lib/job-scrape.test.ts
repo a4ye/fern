@@ -53,6 +53,15 @@ describe("parsePosting", () => {
         expect(parsePosting(html).arrangement).toBe("hybrid");
     });
 
+    it("reads the arrangement a title states, where the block gives a plain city", () => {
+        const html = jsonLd({
+            "@type": "JobPosting",
+            title: "DevOps Engineer, Blockchain Infra (Fully Remote)",
+            jobLocation: { address: { addressLocality: "Warsaw" } },
+        });
+        expect(parsePosting(html).arrangement).toBe("remote");
+    });
+
     it("keeps every structured address level for location matching", () => {
         const html = jsonLd({
             "@type": "JobPosting",
@@ -203,6 +212,50 @@ describe("parsePosting", () => {
             pay: "USD 185000-215000/yr",
             payNote: null,
             source: "rippling",
+        });
+    });
+
+    it("believes the Ashby page over a schema.org block that calls hybrid remote", () => {
+        // Ashby counts a hybrid posting as working away from an office, so its
+        // page carries TELECOMMUTE for a job that is in the office half the
+        // week. The board states the split itself, and that is the truer word.
+        const html = `<html><head>
+            <script type="application/ld+json">${JSON.stringify({
+                "@type": "JobPosting",
+                title: "Security Engineer, Cloud",
+                hiringOrganization: { "@type": "Organization", name: "Ramp" },
+                jobLocationType: "TELECOMMUTE",
+            })}</script>
+        </head><body>
+            <script>window.__appData = {"posting":{"workplaceType":"Hybrid"}}</script>
+        </body></html>`;
+
+        expect(parsePosting(html)).toMatchObject({
+            role: "Security Engineer, Cloud",
+            company: "Ramp",
+            arrangement: "hybrid",
+        });
+    });
+
+    it("reads the arrangement Lever prints beside the location", () => {
+        const html = `<html><head>
+            <script type="application/ld+json">${JSON.stringify({
+                "@type": "JobPosting",
+                title: "Artist & Label Partnerships Manager",
+                hiringOrganization: {
+                    "@type": "Organization",
+                    name: "Spotify",
+                },
+                jobLocation: { address: { addressLocality: "Dubai" } },
+            })}</script>
+        </head><body>
+            <div class="sort-by-time posting-category capitalize-labels location">Dubai</div>
+            <div class="sort-by-time posting-category capitalize-labels workplaceTypes">On-site</div>
+        </body></html>`;
+
+        expect(parsePosting(html)).toMatchObject({
+            location: "Dubai",
+            arrangement: "onsite",
         });
     });
 });
