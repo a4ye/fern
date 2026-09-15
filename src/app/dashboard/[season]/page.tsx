@@ -70,6 +70,7 @@ const SeasonPage = async ({ params, searchParams }: Props) => {
                     funnel={detail.funnel}
                     flow={detail.flow}
                     volume={detail.volume}
+                    places={detail.places}
                 />
             </div>
 

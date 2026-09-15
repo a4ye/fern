@@ -1,16 +1,33 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useState } from "react";
 import { FunnelSummary } from "@/components/dashboard/funnel-summary";
+import {
+    LocationMapPanel,
+    MAP_HEIGHT,
+} from "@/components/dashboard/location-map-panel";
 import { PipelineFlow } from "@/components/dashboard/pipeline-flow";
 import { StatStrip } from "@/components/dashboard/stat-strip";
 import { VolumeChart } from "@/components/dashboard/volume-chart";
 import type {
     FlowEntry,
     Funnel,
+    Place,
     Stat,
     Volume,
 } from "@/components/dashboard/data";
+
+const LocationMap = dynamic(
+    () =>
+        import("@/components/dashboard/location-map").then(
+            (module) => module.LocationMap,
+        ),
+    {
+        ssr: false,
+        loading: () => <div style={{ height: MAP_HEIGHT }} />,
+    },
+);
 
 // Sits above the applications table, so the charts and panels stay one click
 // away without pushing the table below a list that can run to hundreds of rows.
@@ -20,12 +37,14 @@ export const ListInsights = ({
     funnel,
     flow,
     volume,
+    places,
 }: {
     name: string;
     stats: Stat[];
     funnel: Funnel;
     flow: FlowEntry[];
     volume: Volume;
+    places: Place[];
 }) => {
     const [open, setOpen] = useState(false);
 
@@ -60,6 +79,11 @@ export const ListInsights = ({
                         <FunnelSummary funnel={funnel} />
                         <VolumeChart volume={volume} />
                     </div>
+                    {/* Full width as well: a map squeezed into half a row leaves
+                        the cities on top of each other before it is zoomed. */}
+                    <LocationMapPanel places={places}>
+                        <LocationMap places={places} />
+                    </LocationMapPanel>
                 </div>
             )}
         </div>

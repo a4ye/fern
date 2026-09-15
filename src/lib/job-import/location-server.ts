@@ -9,6 +9,7 @@ import {
     locationFingerprint,
     locationWords,
     normalizeLocationPhrase,
+    POPULAR_LOCATIONS,
     popularLocationPriority,
     regionAliasesFor,
     resolvePopularLocation,
@@ -25,6 +26,8 @@ type CityRow = readonly [
     countryCode: string,
     countryCode3: string,
     population: number,
+    latitude: number,
+    longitude: number,
 ];
 
 type AliasRow = readonly [alias: string, cityIndexes: number[]];
@@ -37,6 +40,7 @@ type GeneratedCityData = {
     maxCityWords: number;
     entities: string[];
     rows: CityRow[];
+    labelPoints: Record<string, readonly [latitude: number, longitude: number]>;
     buckets: Record<string, AliasRow[]>;
 };
 
@@ -656,3 +660,55 @@ export const searchComprehensiveLocations = (
 };
 
 export const comprehensiveCityCount = (): number => CITY_DATA.rows.length;
+
+export type PlacedLocation = {
+    latitude: number;
+    longitude: number;
+    region: string;
+    country: string;
+    countryCode: string;
+};
+
+// The popular list names places its own way, so a label it produced is read
+// back from the record that produced it. Its own region reads better than the
+// world index's: "Berlin" rather than "State of Berlin".
+const popularByLabel = new Map(
+    POPULAR_LOCATIONS.map((record) => [canonicalLocation(record), record]),
+);
+
+// A map needs a point, not a name. Resolution hands back a canonical label, so
+// this walks back into the bucket that produced it instead of building a
+// label-to-point index over all seventy thousand rows to answer a few lookups.
+export const placeForLocation = (label: string): PlacedLocation | null => {
+    const pinned = CITY_DATA.labelPoints[label];
+    const popular = popularByLabel.get(label);
+    if (pinned && popular) {
+        return {
+            latitude: pinned[0],
+            longitude: pinned[1],
+            region: popular.region,
+            country: popular.country,
+            countryCode: popular.countryCode,
+        };
+    }
+
+    const city = normalizeLocationPhrase(label.split(",")[0] ?? "");
+    if (!city) return null;
+    const bucket = CITY_DATA.buckets[`${city[0]}:${city.length}`];
+    if (!bucket) return null;
+
+    const at = prefixStart(bucket, city);
+    if (bucket[at]?.[0] !== city) return null;
+    for (const index of bucket[at][1]) {
+        if (recordAt(index)?.label !== label) continue;
+        const row = CITY_DATA.rows[index];
+        return {
+            latitude: row[7],
+            longitude: row[8],
+            region: row[1],
+            country: row[3],
+            countryCode: row[4],
+        };
+    }
+    return null;
+};

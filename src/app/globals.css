@@ -225,3 +225,14 @@ input[type="checkbox"]:checked {
 input[type="checkbox"]:indeterminate {
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23fbfbf9' stroke-width='2.5'><path d='M4 8h8'/></svg>");
 }
+
+/* The map swaps between levels of detail as it is zoomed. Only one is ever
+   drawn, and it fades up as a whole, so the change lands while the map is at
+   its faintest. Drawing the old one underneath instead does not work: a fill at
+   part opacity cannot cover the fill below it, which left one level's outline
+   sitting over another level's land. */
+@keyframes map-detail-in {
+    from {
+        opacity: 0.35;
+    }
+}

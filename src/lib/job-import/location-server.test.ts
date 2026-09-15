@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import {
+    canonicalLocation,
+    POPULAR_LOCATIONS,
+} from "@/lib/job-import/location";
+import {
     comprehensiveCityCount,
+    placeForLocation,
     resolveComprehensiveLocation,
     searchComprehensiveLocations,
 } from "@/lib/job-import/location-server";
@@ -246,5 +251,42 @@ describe("searchComprehensiveLocations", () => {
 
     test("does not search on one-character input", () => {
         expect(searchComprehensiveLocations("L")).toEqual([]);
+    });
+});
+
+describe("placeForLocation", () => {
+    test("places matched cities within a degree of their real point", () => {
+        const cases = [
+            ["Toronto, ON", 43.65, -79.38],
+            ["San Francisco, CA", 37.77, -122.42],
+            // The popular list and the world index disagree on how to name
+            // these two, so they only resolve through the generated pairing.
+            ["NYC", 40.71, -74.01],
+            ["Berlin, DE", 52.52, 13.41],
+        ] as const;
+
+        for (const [raw, latitude, longitude] of cases) {
+            const resolution = resolveComprehensiveLocation(raw);
+            expect(resolution.status).toBe("matched");
+            if (resolution.status !== "matched") continue;
+
+            const point = placeForLocation(resolution.location);
+            expect(point).not.toBeNull();
+            expect(point?.latitude).toBeCloseTo(latitude, 0);
+            expect(point?.longitude).toBeCloseTo(longitude, 0);
+        }
+    });
+
+    test("gives every popular location a point", () => {
+        const missing = POPULAR_LOCATIONS.map(canonicalLocation).filter(
+            (label) => placeForLocation(label) === null,
+        );
+
+        expect(missing).toEqual([]);
+    });
+
+    test("has no point for a name that is not a place", () => {
+        expect(placeForLocation("Remote")).toBeNull();
+        expect(placeForLocation("")).toBeNull();
     });
 });
