@@ -1036,24 +1036,37 @@ export const ApplicationsTable = ({
                     </div>
                 ) : (
                     <>
-                        <h2 className="flex items-baseline gap-2 text-xs font-medium text-muted">
-                            {drafts
-                                ? `Editing ${countLabel(drafts.size)}`
-                                : "Applications"}
-                            {!bulkMode && (
-                                <span className="text-sub tabular-nums">
-                                    {filtered
-                                        ? `${view.rows.length} of ${optimisticApplications.length}`
-                                        : optimisticApplications.length}
-                                </span>
-                            )}
-                        </h2>
-                        <div className="flex flex-wrap items-center gap-2 max-sm:w-full">
+                        {/* A message reads with the heading rather than from
+                            among the controls, where it used to shove every
+                            button along the moment it appeared. Here it takes
+                            width the toolbar was not using, and keeps a floor
+                            wide enough to be worth reading: a window too narrow
+                            to spare that much wraps the controls under it
+                            instead, since an error nobody can read is worse
+                            than a toolbar that takes two lines to say it. */}
+                        <div className="flex flex-1 items-baseline gap-3">
+                            <h2 className="flex shrink-0 items-baseline gap-2 text-xs font-medium text-muted">
+                                {drafts
+                                    ? `Editing ${countLabel(drafts.size)}`
+                                    : "Applications"}
+                                {!bulkMode && (
+                                    <span className="text-sub tabular-nums">
+                                        {filtered
+                                            ? `${view.rows.length} of ${optimisticApplications.length}`
+                                            : optimisticApplications.length}
+                                    </span>
+                                )}
+                            </h2>
                             {bulkError && (
-                                <p className="mr-1 text-xs text-rose">
+                                <p
+                                    title={bulkError}
+                                    className="min-w-32 truncate text-xs text-rose"
+                                >
                                     {bulkError}
                                 </p>
                             )}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 max-sm:w-full">
                             {bulkMode ? (
                                 <>
                                     <button

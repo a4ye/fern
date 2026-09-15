@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { NextRequest } from "next/server";
+import { getSessionCookie } from "better-auth/cookies";
 import { config, proxy } from "@/proxy";
 
 // The exact cookie better-auth sets for an authenticated session over https.
@@ -53,6 +54,49 @@ describe("proxy", () => {
 
         it("admits requests carrying the session cookie", () => {
             expectPassThrough(proxy(requestFor(GATED_PATH, SIGNED_IN)));
+        });
+    });
+
+    describe("session lifetime", () => {
+        // A session token is the token, a dot, and a base64 signature, so the
+        // value holds characters that a serializer can escape or drop. Writing
+        // the cookie back is only safe if the bytes that arrive are the bytes
+        // that leave, and better-auth is the judge of that: a signature it
+        // cannot read is a session the user no longer has.
+        const SIGNED = "8Kq2vWxNpL.hK3+f/9Zq8w4TmN1xGdR2sVbY6cA0eJk=";
+        const sentBack = (res: Response) =>
+            (res.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
+
+        it("returns a session cookie better-auth can still read", () => {
+            const res = proxy(
+                requestFor(GATED_PATH, `${SESSION_COOKIE}=${SIGNED}`),
+            );
+            expect(
+                getSessionCookie(new Headers({ cookie: sentBack(res) })),
+            ).toBe(SIGNED);
+        });
+
+        it("gives the cookie a fresh seven days on every visit", () => {
+            const res = proxy(requestFor(GATED_PATH, SIGNED_IN));
+            expect(res.headers.get("set-cookie")).toContain(
+                `Max-Age=${60 * 60 * 24 * 7}`,
+            );
+        });
+
+        it("keeps the protections the cookie was signed in with", () => {
+            const header = proxy(requestFor(GATED_PATH, SIGNED_IN)).headers.get(
+                "set-cookie",
+            );
+            expect(header).toContain("HttpOnly");
+            expect(header).toContain("Secure");
+            expect(header).toContain("SameSite=lax");
+            expect(header).toContain("Path=/");
+        });
+
+        it("writes nothing on a path it does not guard", () => {
+            expect(
+                proxy(requestFor("/", SIGNED_IN)).headers.get("set-cookie"),
+            ).toBeNull();
         });
     });
 
