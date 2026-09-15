@@ -2,22 +2,40 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { deleteList, updateList } from "@/app/dashboard/actions";
+import { toast } from "sonner";
+import {
+    deleteList,
+    loadListHistory,
+    updateList,
+} from "@/app/dashboard/actions";
 import { ConfirmDialog } from "@/components/dashboard/confirm-dialog";
 import type { ListStatus } from "@/components/dashboard/data";
-import { HistoryDialog } from "@/components/dashboard/history-dialog";
+import { DeferredDialogLoading } from "@/components/dashboard/deferred-overlay-loading";
 import {
     ghostButtonClass,
     primaryButtonClass,
 } from "@/components/dashboard/table-controls";
 import type { ListHistoryPage } from "@/db/history";
-import {
-    firstIssue,
-    LIST_DESCRIPTION_MAX,
-    LIST_NAME_MAX,
-    listUpdateSchema,
-} from "@/lib/validation";
+import { LIST_DESCRIPTION_MAX, LIST_NAME_MAX } from "@/lib/constraints";
+import { parseListUpdate } from "@/lib/list-input";
+
+const HistoryDialog = dynamic(
+    () =>
+        import("@/components/dashboard/history-dialog").then(
+            (module) => module.HistoryDialog,
+        ),
+    {
+        loading: () => (
+            <DeferredDialogLoading
+                title="History"
+                label="Loading history..."
+                tall
+            />
+        ),
+    },
+);
 
 const STATUS_OPTIONS: {
     value: ListStatus;
@@ -46,19 +64,18 @@ export const ListHeader = ({
     name: initialName,
     description: initialDescription,
     status: initialStatus,
-    history,
     defaultCurrency,
 }: {
     listId: string;
     name: string;
     description: string | null;
     status: ListStatus;
-    history: ListHistoryPage;
     defaultCurrency: string;
 }) => {
     const router = useRouter();
     const [isEditing, setIsEditing] = useState(false);
     const [showingHistory, setShowingHistory] = useState(false);
+    const [history, setHistory] = useState<ListHistoryPage | null>(null);
     const [confirmingDelete, setConfirmingDelete] = useState(false);
     const [name, setName] = useState(initialName);
     const [description, setDescription] = useState(initialDescription ?? "");
@@ -82,13 +99,13 @@ export const ListHeader = ({
     const cancel = () => setIsEditing(false);
 
     const save = () => {
-        const parsed = listUpdateSchema.safeParse({
+        const parsed = parseListUpdate({
             name,
             description,
             status,
         });
-        if (!parsed.success) {
-            setError(firstIssue(parsed.error));
+        if (!parsed.ok) {
+            setError(parsed.error);
             return;
         }
         setError(null);
@@ -110,6 +127,27 @@ export const ListHeader = ({
         startTransition(async () => {
             await deleteList(listId);
             router.push("/dashboard");
+        });
+    };
+
+    const openHistory = () => {
+        setShowingHistory(true);
+        if (history || isPending) return;
+        startTransition(async () => {
+            try {
+                const loaded = await loadListHistory(listId);
+                if (loaded) {
+                    setHistory(loaded);
+                    return;
+                }
+            } catch {
+                // The same message covers a failed action request and a list
+                // that disappeared between rendering and opening History.
+            }
+            if (!history) {
+                setShowingHistory(false);
+                toast.error("Could not load list history.");
+            }
         });
     };
 
@@ -171,7 +209,7 @@ export const ListHeader = ({
                         <>
                             <button
                                 type="button"
-                                onClick={() => setShowingHistory(true)}
+                                onClick={openHistory}
                                 aria-haspopup="dialog"
                                 aria-expanded={showingHistory}
                                 aria-label="Open list history"

@@ -8,7 +8,6 @@ import {
     type EmailSuggestionInput,
     type UserApplication,
 } from "@/db/email";
-import { classifyEmails } from "@/lib/email/classify";
 import {
     EmailHistoryExpiredError,
     type EmailDiscovery,
@@ -81,6 +80,7 @@ export const syncEmailInbox = async (
             applications ?? (await getApplicationsForUser(userId));
         applications = applicationsForBatch;
         const emails = await emailsPromise;
+        const { classifyEmails } = await import("@/lib/email/classify");
         const matches = await classifyEmails(
             applicationsForBatch.map((application) => ({
                 company: application.company,

@@ -26,7 +26,7 @@ import {
 import { CurrencyFlag } from "@/components/dashboard/currency-flag";
 import { searchScore } from "@/lib/fuzzy";
 import { CURRENCIES, currencyName } from "@/lib/pay";
-import { APPLIED_MIN, APPLIED_MIN_YEAR } from "@/lib/validation";
+import { APPLIED_MIN, APPLIED_MIN_YEAR } from "@/lib/constraints";
 
 // Bulk mode turns every cell of every row into a field, so borders on all of
 // them would be noise; cells read as plain text until hovered or focused. Rows

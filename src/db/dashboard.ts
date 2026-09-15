@@ -21,6 +21,7 @@ import {
     type Arrangement,
     type FlowEntry,
     type ListDetail,
+    type ListInsightsData,
     type ListSort,
     type ListStatus,
     type ListSummary,
@@ -578,55 +579,15 @@ export const getListDetail = async (
     listId: string,
 ): Promise<ListDetail | null> => {
     const pool = getPool();
-    const list = await gen.getListForUser(pool, { id: listId, userId });
-    if (!list) return null;
-
-    const [applicationRows, statusEventRows] = await Promise.all([
+    const [list, applicationRows] = await Promise.all([
+        gen.getListForUser(pool, { id: listId, userId }),
         gen.listApplicationsForList(pool, {
             listId,
+            userId,
             maxApplications: MAX_APPLICATIONS_READ_PER_LIST,
         }),
-        gen.statusEventsForList(pool, {
-            listId,
-            maxEvents: MAX_EVENTS_READ_PER_APPLICATION,
-        }),
     ]);
-
-    // Rows arrive ordered by application and time, so appending each event's
-    // target status replays the trail. The first event also contributes where it
-    // started from, which is the only record of the status on creation and so
-    // the one step with no event of its own to take back.
-    const trails = new Map<string, StatusStep[]>();
-    for (const row of statusEventRows) {
-        let trail = trails.get(row.applicationId);
-        if (!trail) {
-            trail = [];
-            trails.set(row.applicationId, trail);
-            if (row.fromStatus) {
-                trail.push({
-                    id: null,
-                    status: row.fromStatus as ApplicationStatus,
-                    at: null,
-                });
-            }
-        }
-        if (row.toStatus) {
-            trail.push({
-                id: row.id,
-                status: row.toStatus as ApplicationStatus,
-                at: row.occurredAt.toISOString(),
-            });
-        }
-    }
-
-    // Where the application sits now always ends the trail, even when it got
-    // there without a step being recorded, which is how one that never moved
-    // still has a history of one.
-    const historyOf = (id: string, status: ApplicationStatus): StatusStep[] => {
-        const trail = trails.get(id) ?? [];
-        if (trail[trail.length - 1]?.status === status) return trail;
-        return [...trail, { id: null, status, at: null }];
-    };
+    if (!list) return null;
 
     const applications: ApplicationRow[] = applicationRows.map((row) => {
         const status = row.status as ApplicationStatus;
@@ -668,9 +629,75 @@ export const getListDetail = async (
             0,
         );
 
-    // Read from the trails rather than from the rows, which no longer carry
-    // their history: the chart wants the path each application took, and only
-    // the statuses along it, not the steps that recorded them.
+    const stats: Stat[] = [
+        { label: "Total", value: String(applications.length) },
+        { label: "Active", value: String(sumOf(ACTIVE_STATUSES)) },
+        { label: "Interviewing", value: String(sumOf(INTERVIEWING_STATUSES)) },
+        { label: "Offers", value: String(sumOf(OFFER_STATUSES)) },
+    ];
+
+    return {
+        id: list.id,
+        name: list.name,
+        description: list.description,
+        status: list.status as ListStatus,
+        stats,
+        applications,
+    };
+};
+
+// The status trail is only needed by the collapsed Insights panel. Keeping it
+// out of the main detail read avoids scanning and serializing every event when
+// the user came to work in the table.
+export const getListInsights = async (
+    userId: string,
+    listId: string,
+): Promise<ListInsightsData | null> => {
+    const pool = getPool();
+    const list = await gen.getListForUser(pool, { id: listId, userId });
+    if (!list) return null;
+
+    const [applicationRows, statusEventRows] = await Promise.all([
+        gen.listApplicationsForList(pool, {
+            listId,
+            userId,
+            maxApplications: MAX_APPLICATIONS_READ_PER_LIST,
+        }),
+        gen.statusEventsForList(pool, {
+            listId,
+            maxEvents: MAX_EVENTS_READ_PER_APPLICATION,
+        }),
+    ]);
+
+    const trails = new Map<string, StatusStep[]>();
+    for (const row of statusEventRows) {
+        let trail = trails.get(row.applicationId);
+        if (!trail) {
+            trail = [];
+            trails.set(row.applicationId, trail);
+            if (row.fromStatus) {
+                trail.push({
+                    id: null,
+                    status: row.fromStatus as ApplicationStatus,
+                    at: null,
+                });
+            }
+        }
+        if (row.toStatus) {
+            trail.push({
+                id: row.id,
+                status: row.toStatus as ApplicationStatus,
+                at: row.occurredAt.toISOString(),
+            });
+        }
+    }
+
+    const historyOf = (id: string, status: ApplicationStatus): StatusStep[] => {
+        const trail = trails.get(id) ?? [];
+        if (trail[trail.length - 1]?.status === status) return trail;
+        return [...trail, { id: null, status, at: null }];
+    };
+
     const flow: FlowEntry[] = applicationRows.map((row) => {
         const status = row.status as ApplicationStatus;
         return {
@@ -679,16 +706,6 @@ export const getListDetail = async (
         };
     });
 
-    const stats: Stat[] = [
-        { label: "Total", value: String(applications.length) },
-        { label: "Active", value: String(sumOf(ACTIVE_STATUSES)) },
-        { label: "Interviewing", value: String(sumOf(INTERVIEWING_STATUSES)) },
-        { label: "Offers", value: String(sumOf(OFFER_STATUSES)) },
-    ];
-
-    // When an application went out. The date the user gave is the real answer;
-    // the first recorded step stands in for a row that never got one, and only
-    // then the row's own timestamp, which a later edit will have moved.
     const sentAt = applicationRows.flatMap((row) => {
         const trail = historyOf(row.id, row.status as ApplicationStatus);
         if (!wasSent(trail.map((step) => step.status))) return [];
@@ -699,12 +716,6 @@ export const getListDetail = async (
     });
 
     return {
-        id: list.id,
-        name: list.name,
-        description: list.description,
-        status: list.status as ListStatus,
-        stats,
-        applications,
         funnel: funnelFrom(flow),
         flow,
         volume: volumeFrom(sentAt),

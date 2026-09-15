@@ -15,14 +15,39 @@ import {
     toDateInput,
     type ListStatus,
 } from "@/components/dashboard/data";
+import {
+    APPLIED_MIN,
+    APPLIED_MIN_YEAR,
+    COMPANY_MAX,
+    DISPLAY_NAME_MAX,
+    LIST_DESCRIPTION_MAX,
+    LIST_NAME_MAX,
+    LOCATION_MAX,
+    NOTES_MAX,
+    PAY_MAX,
+    ROLE_MAX,
+    URL_MAX,
+} from "@/lib/constraints";
+
+export {
+    AMOUNT_INPUT_MAX,
+    APPLIED_MIN,
+    APPLIED_MIN_YEAR,
+    COMPANY_MAX,
+    DISPLAY_NAME_MAX,
+    LIST_DESCRIPTION_MAX,
+    LIST_NAME_MAX,
+    LOCATION_MAX,
+    NOTES_MAX,
+    PAY_MAX,
+    ROLE_MAX,
+    URL_MAX,
+} from "@/lib/constraints";
 
 // Result shape returned by mutating server actions so callers can distinguish a
 // successful write from a rejected one and show the reason, rather than the
 // action silently returning on invalid input.
 export type ActionResult = { ok: true } | { ok: false; error: string };
-
-export const LIST_NAME_MAX = 80;
-export const LIST_DESCRIPTION_MAX = 280;
 
 export const applicationIdSchema = z
     .string()
@@ -78,12 +103,6 @@ export const timeZoneSchema = z
         }
     }, "Choose a valid time zone.");
 
-export const COMPANY_MAX = 120;
-export const ROLE_MAX = 160;
-export const LOCATION_MAX = 120;
-export const PAY_MAX = 80;
-export const URL_MAX = 2048;
-
 // Links are rendered as hrefs, so anything but http(s) is rejected rather than
 // stored: a `javascript:` address would run on click.
 const isHttpUrl = (value: string): boolean => {
@@ -117,9 +136,6 @@ const isRealDay = (value: string): boolean => {
 // An applied date records something that already happened, so the future is out.
 // The floor is what keeps a calendar paged far enough back, or an import that
 // misread a year, from landing in one nobody was applying in.
-export const APPLIED_MIN_YEAR = 1990;
-export const APPLIED_MIN = `${APPLIED_MIN_YEAR}-01-01`;
-
 // yyyy-mm-dd compares as text the way it does as a date. The ceiling is tomorrow
 // rather than today because the day is picked against the browser's clock, which
 // can be a day ahead of the server's.
@@ -160,8 +176,6 @@ export const applicationSchema = z.object({
     url: urlSchema,
 });
 
-export const NOTES_MAX = 4000;
-
 // One row read out of a spreadsheet: the columns the quick-edit grid holds,
 // where pay is still the single line of text the sheet wrote, plus the notes
 // only an import carries in alongside them.
@@ -172,8 +186,6 @@ export const importRowSchema = applicationSchema.extend({
 // What an amount field accepts before it stops taking keys: ten digits and two
 // decimals, plus room for the grouping commas people type, which the schema
 // strips back out.
-export const AMOUNT_INPUT_MAX = 16;
-
 // Amounts land in numeric(12, 2) columns, so they are kept as decimal strings
 // end to end rather than rounded through a float, and anything that is not a
 // plain number is rejected instead of being silently stored as nothing. Ten
@@ -257,8 +269,6 @@ export const stepEditsSchema = z.object({
         .array(z.enum(APPLICATION_STATUSES, "Choose a valid status."))
         .max(MAX_STATUS_STEP_EDITS),
 });
-
-export const DISPLAY_NAME_MAX = 80;
 
 // The settings page saves its fields together, so one parse covers the form.
 export const accountSettingsSchema = z.object({

@@ -558,6 +558,9 @@ export type ListDetail = {
     status: ListStatus;
     stats: Stat[];
     applications: ApplicationRow[];
+};
+
+export type ListInsightsData = {
     funnel: Funnel;
     flow: FlowEntry[];
     volume: Volume;
