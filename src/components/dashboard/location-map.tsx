@@ -271,6 +271,12 @@ export const LocationMap = ({ places }: { places: Place[] }) => {
     const [hovered, setHovered] = useState<string | null>(null);
     const [ready, setReady] = useState<ReadonlySet<string>>(new Set());
 
+    // The zoom the pinch started from, and the zoom on screen right now. A
+    // pinch aims at a scale worked out from the first of these rather than
+    // nudging the second along, which is what keeps it honest: see pinchDelta.
+    const opening = useRef(1);
+    const showing = useRef(1);
+
     const projection = useMemo(() => projectionFor(width, MAP_HEIGHT), [width]);
     const minimum = useMemo(() => minScaleFor(width, MAP_HEIGHT), [width]);
     const initial = useMemo(
@@ -338,6 +344,33 @@ export const LocationMap = ({ places }: { places: Place[] }) => {
                         <Zoom<SVGSVGElement>
                             width={width}
                             height={MAP_HEIGHT}
+                            // The stock delta steps the scale a tenth either way
+                            // per event, however little the fingers moved, and
+                            // counts standing still as opening out: two fingers
+                            // dragged along together zoomed a third per event,
+                            // and a thumb brushing the glass mid drag threw the
+                            // map somewhere else. Zooming by as much as the
+                            // fingers actually opened leaves a held pair alone.
+                            //
+                            // Aimed at a scale rather than nudged towards one.
+                            // Two pointer moves land per frame, one per finger,
+                            // and a nudge works from the scale last painted, so
+                            // the second of the pair overwrote the first and
+                            // half of every pinch was thrown away. A step
+                            // worked out against that same painted scale lands
+                            // on the same answer whichever of them gets there.
+                            pinchDelta={({
+                                offset: [now],
+                                lastOffset: [was],
+                                first,
+                            }) => {
+                                if (first) opening.current = showing.current;
+                                const step =
+                                    (opening.current * now) /
+                                    was /
+                                    showing.current;
+                                return { scaleX: step, scaleY: step };
+                            }}
                             constrain={(matrix, previous) => {
                                 const held = heldView(
                                     {
@@ -376,6 +409,7 @@ export const LocationMap = ({ places }: { places: Place[] }) => {
                                     translateX,
                                     translateY,
                                 } = zoom.transformMatrix;
+                                showing.current = k;
                                 const drawn = viewProjectionFor(
                                     width,
                                     MAP_HEIGHT,
