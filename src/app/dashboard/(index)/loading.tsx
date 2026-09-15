@@ -1,13 +1,16 @@
 import { ListsPageSkeleton } from "@/components/dashboard/lists-skeleton";
-import { getRequestSession } from "@/lib/auth";
+import { getRequestSession, getViewAs } from "@/lib/auth";
 import { isEmailSyncApproved } from "@/lib/email/access";
 
 const DashboardLoading = async () => {
-    const session = await getRequestSession();
+    const [session, viewAs] = await Promise.all([
+        getRequestSession(),
+        getViewAs(),
+    ]);
 
     return (
         <ListsPageSkeleton
-            hasInboxSync={isEmailSyncApproved(session?.user.email)}
+            hasInboxSync={!viewAs && isEmailSyncApproved(session?.user.email)}
         />
     );
 };

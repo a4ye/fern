@@ -1,9 +1,9 @@
 "use server";
 
-import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
-import { auth } from "@/lib/auth";
+import { getRequestSession, getViewAs } from "@/lib/auth";
+import { VIEW_ONLY } from "@/lib/view-as";
 import { importApplications } from "@/db/dashboard";
 import { getUserSettings } from "@/db/settings";
 import { recordMetrics } from "@/db/metrics";
@@ -26,8 +26,9 @@ const NOT_SIGNED_IN = "You are not signed in." as const;
 // the file is stored, and the rows travel back to the browser, where the mapping
 // steps run, rather than being held between calls.
 export const readImportFile = async (file: File): Promise<SheetResult> => {
-    const session = await auth.api.getSession({ headers: await headers() });
+    const session = await getRequestSession();
     if (!session) return { ok: false, error: NOT_SIGNED_IN };
+    if (await getViewAs()) return { ok: false, error: VIEW_ONLY };
 
     // The size the upload declares, before `arrayBuffer` copies it. The browser
     // checks this too, and a caller that skipped the browser is exactly who this
@@ -65,8 +66,9 @@ export const commitImport = async (
     drafts: ImportDraft[],
     timeZone: string,
 ): Promise<ImportResult> => {
-    const session = await auth.api.getSession({ headers: await headers() });
+    const session = await getRequestSession();
     if (!session) return { ok: false, error: NOT_SIGNED_IN };
+    if (await getViewAs()) return { ok: false, error: VIEW_ONLY };
 
     if (drafts.length === 0) {
         return { ok: false, error: "There is nothing to import." };

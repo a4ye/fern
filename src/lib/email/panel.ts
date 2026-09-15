@@ -1,4 +1,9 @@
-import { auth, emailSyncEnabled, GOOGLE_PROVIDER_ID } from "@/lib/auth";
+import {
+    auth,
+    emailSyncEnabled,
+    getViewAs,
+    GOOGLE_PROVIDER_ID,
+} from "@/lib/auth";
 import { getLastSyncedAt, listPendingSuggestions } from "@/db/email";
 import type { EmailSyncPanel } from "@/components/dashboard/data";
 import { isEmailSyncApproved } from "@/lib/email/access";
@@ -12,6 +17,11 @@ export const loadEmailPanel = async (
     headers: Headers,
 ): Promise<EmailSyncPanel | null> => {
     if (!isEmailSyncApproved(userEmail)) return null;
+
+    // Whether Google is linked is read from the browser's own session below,
+    // which while viewing another account is the admin's rather than theirs.
+    // Their inbox is not on offer either way, so the panel is left out.
+    if (await getViewAs()) return null;
 
     if (!emailSyncEnabled) {
         return {

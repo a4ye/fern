@@ -1,9 +1,13 @@
 import { beforeEach, describe, expect, it, mock } from "bun:test";
 import { TOO_MANY_REQUESTS } from "@/lib/limits";
+import { VIEW_ONLY } from "@/lib/view-as";
 
 const spy = () => mock(async (..._args: unknown[]) => {});
 
 let session: { user: { id: string } } | null = null;
+// Set while an admin is looking at somebody else's account, which every write
+// below has to refuse.
+let viewAs: { admin: { id: string } } | null = null;
 let cachedImport: Record<string, unknown> | null = null;
 let importBudget = true;
 // Whether the provider has budget left for the second read a miss would need.
@@ -66,11 +70,15 @@ const getListHistoryChangesPage = mock(async (..._args: unknown[]) => ({
     total: 30,
 }));
 
-mock.module("next/headers", () => ({ headers: async () => new Headers() }));
+mock.module("next/headers", () => ({
+    headers: async () => new Headers(),
+    cookies: async () => new Map(),
+}));
 mock.module("next/cache", () => ({ revalidatePath }));
 mock.module("next/server", () => ({ after: () => {} }));
 mock.module("@/lib/auth", () => ({
-    auth: { api: { getSession: async () => session } },
+    getRequestSession: async () => session,
+    getViewAs: async () => viewAs,
 }));
 mock.module("@/db/dashboard", () => db);
 mock.module("@/db/settings", () => ({
@@ -134,6 +142,7 @@ const revalidated = () => revalidatePath.mock.calls.flat();
 
 beforeEach(() => {
     session = { user: { id: "user-1" } };
+    viewAs = null;
     cachedImport = null;
     importBudget = true;
     providerRead = true;
@@ -582,6 +591,56 @@ describe("setApplicationsStatus", () => {
             ),
         ).toEqual({ ok: false, error: TOO_MANY_REQUESTS });
         expect(db.setApplicationsStatus).not.toHaveBeenCalled();
+    });
+});
+
+describe("viewing another account", () => {
+    beforeEach(() => {
+        viewAs = { admin: { id: "admin-1" } };
+    });
+
+    it("refuses a write and leaves the account untouched", async () => {
+        const refusal = { ok: false, error: VIEW_ONLY };
+        expect(await createList("Fall 2026", null)).toEqual(refusal);
+        expect(await clearListHistory(APPLICATION_ID)).toEqual(refusal);
+        await togglePin("list-1", true);
+        await deleteList("list-1");
+
+        expect(db.createList).not.toHaveBeenCalled();
+        expect(clearListHistoryDb).not.toHaveBeenCalled();
+        expect(db.setListPinned).not.toHaveBeenCalled();
+        expect(db.deleteList).not.toHaveBeenCalled();
+        expect(revalidatePath).not.toHaveBeenCalled();
+    });
+
+    it("does not spend the account's budget on a job board read", async () => {
+        expect(
+            await suggestFromUrl("https://jobs.lever.co/acme/engineer"),
+        ).toEqual({
+            status: "missed",
+            posting: {
+                company: null,
+                role: null,
+                location: null,
+                arrangement: null,
+                pay: null,
+                payNote: null,
+                source: "none",
+                employerUrl: null,
+            },
+        });
+        expect(getCachedJobImport).not.toHaveBeenCalled();
+        expect(acquireJobImportBudget).not.toHaveBeenCalled();
+    });
+
+    // The point of looking is to see what they see, so reads answer for the
+    // account on screen rather than for the admin behind it.
+    it("still reads for the account being looked at", async () => {
+        expect(await loadListHistoryChanges(APPLICATION_ID, "123", 8)).toEqual({
+            changes: [],
+            offset: 8,
+            total: 30,
+        });
     });
 });
 

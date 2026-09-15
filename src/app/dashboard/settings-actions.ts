@@ -2,7 +2,8 @@
 
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
-import { auth } from "@/lib/auth";
+import { auth, getRequestSession, getViewAs } from "@/lib/auth";
+import { VIEW_ONLY } from "@/lib/view-as";
 import { deleteAccount as deleteAccountDb } from "@/db/account";
 import { markOnboarded, saveUserSettings } from "@/db/settings";
 import { withinBudget } from "@/db/rate-limit";
@@ -23,8 +24,9 @@ export const saveAccountSettings = async (input: {
     tidyTitles: boolean;
 }): Promise<ActionResult> => {
     const requestHeaders = await headers();
-    const session = await auth.api.getSession({ headers: requestHeaders });
+    const session = await getRequestSession();
     if (!session) return { ok: false, error: NOT_SIGNED_IN };
+    if (await getViewAs()) return { ok: false, error: VIEW_ONLY };
     if (!(await withinBudget(session.user.id, "write"))) {
         return { ok: false, error: TOO_MANY_REQUESTS };
     }
@@ -61,9 +63,9 @@ export const saveAccountSettings = async (input: {
 // here costs one more sighting on the next visit, which is why it is not raised
 // to the user: there is nothing for them to do about it and nothing is lost.
 export const completeOnboarding = async (): Promise<ActionResult> => {
-    const requestHeaders = await headers();
-    const session = await auth.api.getSession({ headers: requestHeaders });
+    const session = await getRequestSession();
     if (!session) return { ok: false, error: NOT_SIGNED_IN };
+    if (await getViewAs()) return { ok: false, error: VIEW_ONLY };
     if (!(await withinBudget(session.user.id, "write"))) {
         return { ok: false, error: TOO_MANY_REQUESTS };
     }
@@ -75,8 +77,9 @@ export const completeOnboarding = async (): Promise<ActionResult> => {
 
 export const deleteAccount = async (): Promise<ActionResult> => {
     const requestHeaders = await headers();
-    const session = await auth.api.getSession({ headers: requestHeaders });
+    const session = await getRequestSession();
     if (!session) return { ok: false, error: NOT_SIGNED_IN };
+    if (await getViewAs()) return { ok: false, error: VIEW_ONLY };
     if (!(await withinBudget(session.user.id, "write"))) {
         return { ok: false, error: TOO_MANY_REQUESTS };
     }

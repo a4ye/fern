@@ -101,6 +101,12 @@ const Privacy = () => (
                 <li>comply with applicable law.</li>
             </LegalList>
             <p>
+                We may access the information in your account when that is
+                needed to run the service, such as to look into a problem or to
+                respond to a request from you. We do not access it for any other
+                reason.
+            </p>
+            <p>
                 We do not sell personal information, use it for advertising, or
                 share private application records with employers.
             </p>

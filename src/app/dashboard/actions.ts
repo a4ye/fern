@@ -1,9 +1,9 @@
 "use server";
 
-import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
-import { auth } from "@/lib/auth";
+import { getRequestSession, getViewAs } from "@/lib/auth";
+import { VIEW_ONLY } from "@/lib/view-as";
 import {
     createApplication as insertApplication,
     createList as insertList,
@@ -97,11 +97,14 @@ const INVALID_SELECTION = "Those applications are no longer there." as const;
 // is counted against that account's budget. The two go together, so they are
 // asked for together, before anything is read or parsed. The refusal is already
 // an ActionResult, so an action that reports one can hand it straight back.
+// Every write in this file passes through here, which is what makes an admin
+// viewing another account unable to change it.
 type Writer = { ok: true; userId: string } | { ok: false; error: string };
 
 const writingUser = async (): Promise<Writer> => {
-    const session = await auth.api.getSession({ headers: await headers() });
+    const session = await getRequestSession();
     if (!session) return { ok: false, error: NOT_SIGNED_IN };
+    if (await getViewAs()) return { ok: false, error: VIEW_ONLY };
     if (!(await withinBudget(session.user.id, "write"))) {
         return { ok: false, error: TOO_MANY_REQUESTS };
     }
@@ -120,7 +123,7 @@ const validHistoryActionId = (id: string): boolean => /^\d{1,19}$/.test(id);
 export const loadApplicationExtras = async (
     applicationId: string,
 ): Promise<ApplicationExtras | null> => {
-    const session = await auth.api.getSession({ headers: await headers() });
+    const session = await getRequestSession();
     if (!session) return null;
     return getApplicationExtras(session.user.id, applicationId);
 };
@@ -128,7 +131,7 @@ export const loadApplicationExtras = async (
 export const loadListInsights = async (
     listId: string,
 ): Promise<ListInsightsData | null> => {
-    const session = await auth.api.getSession({ headers: await headers() });
+    const session = await getRequestSession();
     if (!session || !applicationIdSchema.safeParse(listId).success) return null;
     return getListInsights(session.user.id, listId);
 };
@@ -137,7 +140,7 @@ export const loadListHistory = async (
     listId: string,
     beforeId: string | null = null,
 ): Promise<ListHistoryPage | null> => {
-    const session = await auth.api.getSession({ headers: await headers() });
+    const session = await getRequestSession();
     if (!session || !applicationIdSchema.safeParse(listId).success) return null;
     if (beforeId !== null && !validHistoryActionId(beforeId)) return null;
     return getListHistory(
@@ -154,7 +157,7 @@ export const loadListHistoryApplications = async (
     changeIndex: number,
     page: number,
 ): Promise<HistoryApplicationsPage | null> => {
-    const session = await auth.api.getSession({ headers: await headers() });
+    const session = await getRequestSession();
     if (!session || !applicationIdSchema.safeParse(listId).success) return null;
     if (!validHistoryActionId(actionId)) return null;
     if (
@@ -181,7 +184,7 @@ export const loadListHistoryChanges = async (
     actionId: string,
     offset: number,
 ): Promise<HistoryChangesPage | null> => {
-    const session = await auth.api.getSession({ headers: await headers() });
+    const session = await getRequestSession();
     if (!session || !applicationIdSchema.safeParse(listId).success) return null;
     if (!validHistoryActionId(actionId)) return null;
     if (!Number.isSafeInteger(offset) || offset < 0 || offset > 100_000) {
@@ -327,8 +330,14 @@ export type JobImportFallbackResult = {
 export const suggestFromUrl = async (
     url: string,
 ): Promise<JobImportFallbackResult> => {
-    const session = await auth.api.getSession({ headers: await headers() });
+    const session = await getRequestSession();
     if (!session) return { status: "missed", posting: EMPTY_POSTING };
+
+    // The only read in this file that spends something: a fetch to a job board,
+    // rationed per account. Viewing must not spend an allowance that belongs to
+    // the account being looked at, and the import drawer treats this as a
+    // provider that had nothing to offer.
+    if (await getViewAs()) return { status: "missed", posting: EMPTY_POSTING };
 
     const normalizedUrl = normalizeImportUrl(url.trim());
     const providerHost = serverImportHost(url.trim());
@@ -384,7 +393,7 @@ export type { ImportedLocationResolution } from "@/lib/job-import/location";
 export const resolveImportedLocation = async (
     raw: string,
 ): Promise<import("@/lib/job-import/location").ImportedLocationResolution> => {
-    const session = await auth.api.getSession({ headers: await headers() });
+    const session = await getRequestSession();
     const location = raw.trim();
     if (!session || !location || location.length > LOCATION_MAX * 2) {
         return { status: "unmatched" };
@@ -410,7 +419,7 @@ export const resolveImportedLocation = async (
 export const searchImportedLocations = async (
     raw: string,
 ): Promise<string[]> => {
-    const session = await auth.api.getSession({ headers: await headers() });
+    const session = await getRequestSession();
     const location = raw.trim();
     if (!session || location.length < 2 || location.length > LOCATION_MAX) {
         return [];

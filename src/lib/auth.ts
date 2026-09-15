@@ -4,7 +4,10 @@ import { nextCookies } from "better-auth/next-js";
 import { cache } from "react";
 import { headers } from "next/headers";
 import { getPool } from "@/db/client";
+import { getUserById } from "@/db/admin";
+import { isAdmin } from "@/lib/admin";
 import { isEmailSyncApproved } from "@/lib/email/access";
+import { viewAsTarget } from "@/lib/view-as";
 
 const requiredEnv = (name: string): string => {
     const value = process.env[name];
@@ -137,8 +140,67 @@ export const auth = betterAuth({
     plugins: [nextCookies()],
 });
 
+type Session = NonNullable<Awaited<ReturnType<typeof auth.api.getSession>>>;
+
+// Who the request is for, and who is really making it. The two differ only
+// while an admin is viewing another account, and the identity every page and
+// action works from is the first of them, so a view-as is invisible to
+// everything downstream of here and cannot be half applied.
+//
 // Layouts, pages, and metadata are rendered as separate Server Components. Keep
 // their authentication check to one database read for the lifetime of a request.
-export const getRequestSession = cache(async () =>
-    auth.api.getSession({ headers: await headers() }),
+const resolveRequest = cache(
+    async (): Promise<{
+        session: Session | null;
+        viewedBy: Session | null;
+    }> => {
+        const real = await auth.api.getSession({ headers: await headers() });
+        if (!real) return { session: null, viewedBy: null };
+
+        // The cookie is checked against the allowlist on every request rather
+        // than when the viewing started, so removing an address from
+        // ADMIN_EMAILS ends any viewing it was doing on the next page load.
+        const targetId = await viewAsTarget(real.user.id);
+        if (
+            !targetId ||
+            targetId === real.user.id ||
+            !isAdmin(real.user.email)
+        ) {
+            return { session: real, viewedBy: null };
+        }
+
+        const target = await getUserById(targetId);
+        if (!target) return { session: real, viewedBy: null };
+
+        return {
+            session: { ...real, user: { ...real.user, ...target } },
+            viewedBy: real,
+        };
+    },
 );
+
+export const getRequestSession = async (): Promise<Session | null> =>
+    (await resolveRequest()).session;
+
+// The account the browser actually signed in to. Anything that answers for the
+// person at the keyboard rather than for the data on screen asks for this:
+// starting or ending a view-as, and the provider accounts better-auth holds.
+export const getRealSession = async (): Promise<Session | null> => {
+    const { session, viewedBy } = await resolveRequest();
+    return viewedBy ?? session;
+};
+
+export const isAdminRequest = async (): Promise<boolean> =>
+    isAdmin((await getRealSession())?.user.email);
+
+// The admin and the account they are looking at, or null when the request is
+// somebody working on their own data. Writes refuse while this is set, and the
+// dashboard says so, so neither account is changed by a look at one of them.
+export const getViewAs = async (): Promise<{
+    admin: Session["user"];
+    user: Session["user"];
+} | null> => {
+    const { session, viewedBy } = await resolveRequest();
+    if (!session || !viewedBy) return null;
+    return { admin: viewedBy.user, user: session.user };
+};

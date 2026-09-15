@@ -2,7 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { auth, getRequestSession, GITHUB_PROVIDER_ID } from "@/lib/auth";
+import {
+    auth,
+    getRequestSession,
+    getViewAs,
+    GITHUB_PROVIDER_ID,
+} from "@/lib/auth";
 import { getUserSettings } from "@/db/settings";
 import { githubUsername } from "@/lib/github";
 import { settingsBackHref } from "@/components/dashboard/data";
@@ -20,6 +25,13 @@ const SettingsPage = async ({
     const requestHeaders = await headers();
     const session = await getRequestSession();
     if (!session) redirect("/login");
+
+    // This page is the one place that shows the sign-in behind an account, and
+    // that is read from the browser's own session rather than from the account
+    // on screen. The two are the same person everywhere except here, so rather
+    // than show an admin their own GitHub under somebody else's name, the page
+    // is not offered while viewing.
+    if (await getViewAs()) redirect("/dashboard");
 
     const [settings, accounts] = await Promise.all([
         getUserSettings(session.user.id),

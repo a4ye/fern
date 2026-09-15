@@ -2,14 +2,19 @@ import Link from "next/link";
 import { Logo } from "@/components/brand/logo";
 import { SignOutButton } from "@/components/auth/sign-out-button";
 import { SettingsLink } from "@/components/dashboard/settings-link";
+import { ViewAsBar } from "@/components/dashboard/view-as-bar";
 import { APP_NAME } from "@/lib/site";
 
 export const DashboardTopBar = ({
     name,
     image,
+    isAdmin = false,
+    viewingAs = null,
 }: {
     name: string;
     image?: string | null;
+    isAdmin?: boolean;
+    viewingAs?: { name: string; email: string } | null;
 }) => (
     <header className="sticky top-0 z-50 border-b border-hairline bg-background/90 backdrop-blur-sm">
         <div className="h-0.75 bg-accent" />
@@ -24,9 +29,25 @@ export const DashboardTopBar = ({
                 </span>
             </Link>
             <div className="flex items-center gap-4">
+                {isAdmin ? (
+                    <Link
+                        href="/dashboard/admin"
+                        aria-label="Accounts"
+                        title="Accounts"
+                        className="focus-frame flex items-center text-muted transition-colors hover:text-ink"
+                    >
+                        <span
+                            aria-hidden="true"
+                            className="icon-[lucide--users] size-4"
+                        />
+                    </Link>
+                ) : null}
                 <SettingsLink name={name} image={image} />
                 <SignOutButton />
             </div>
         </div>
+        {viewingAs ? (
+            <ViewAsBar name={viewingAs.name} email={viewingAs.email} />
+        ) : null}
     </header>
 );

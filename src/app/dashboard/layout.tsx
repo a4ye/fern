@@ -1,16 +1,30 @@
 import type { ReactNode } from "react";
 import { Toaster } from "sonner";
-import { getRequestSession } from "@/lib/auth";
+import { getRequestSession, getViewAs, isAdminRequest } from "@/lib/auth";
 import { DashboardTopBar } from "@/components/dashboard/top-bar";
 
 const DashboardLayout = async ({ children }: { children: ReactNode }) => {
-    const session = await getRequestSession();
+    const [session, viewAs, admin] = await Promise.all([
+        getRequestSession(),
+        getViewAs(),
+        isAdminRequest(),
+    ]);
     const name = session?.user.name ?? "there";
     const image = session?.user.image ?? null;
 
     return (
         <main className="flex flex-1 flex-col bg-surface">
-            <DashboardTopBar name={name} image={image} />
+            <DashboardTopBar
+                name={name}
+                image={image}
+                isAdmin={admin}
+                viewingAs={
+                    viewAs && {
+                        name: viewAs.user.name,
+                        email: viewAs.user.email,
+                    }
+                }
+            />
             {children}
             <Toaster
                 position="bottom-right"

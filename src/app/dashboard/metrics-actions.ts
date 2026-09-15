@@ -1,8 +1,7 @@
 "use server";
 
-import { headers } from "next/headers";
 import { after } from "next/server";
-import { auth } from "@/lib/auth";
+import { getRequestSession, getViewAs } from "@/lib/auth";
 import { recordMetrics } from "@/db/metrics";
 import { withinBudget } from "@/db/rate-limit";
 import {
@@ -27,8 +26,8 @@ import { postingReadSchema } from "@/lib/validation";
 export const recordPostingRead = async (
     report: PostingReadReport,
 ): Promise<void> => {
-    const session = await auth.api.getSession({ headers: await headers() });
-    if (!session) return;
+    const session = await getRequestSession();
+    if (!session || (await getViewAs())) return;
     if (!(await withinBudget(session.user.id, "metrics"))) return;
 
     const parsed = postingReadSchema.safeParse(report);

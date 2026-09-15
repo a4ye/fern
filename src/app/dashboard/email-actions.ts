@@ -3,7 +3,14 @@
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
-import { auth, emailSyncEnabled, GOOGLE_PROVIDER_ID } from "@/lib/auth";
+import {
+    auth,
+    emailSyncEnabled,
+    getRequestSession,
+    getViewAs,
+    GOOGLE_PROVIDER_ID,
+} from "@/lib/auth";
+import { VIEW_ONLY } from "@/lib/view-as";
 import { applySuggestion, dismissSuggestion } from "@/db/email";
 import { createGmailProvider } from "@/lib/email/gmail";
 import { EMAIL_SYNC_COPY } from "@/lib/email/copy";
@@ -38,13 +45,20 @@ export type SyncResult =
 
 export const syncInbox = async (): Promise<SyncResult> => {
     const requestHeaders = await headers();
-    const session = await auth.api.getSession({ headers: requestHeaders });
+    const session = await getRequestSession();
     if (!session) {
         return {
             ok: false,
             reason: "unauthenticated",
             message: EMAIL_SYNC_COPY.signIn,
         };
+    }
+
+    // A sync reads the inbox of whoever is really signed in, so running one
+    // while looking at somebody else would file an admin's mail under their
+    // account.
+    if (await getViewAs()) {
+        return { ok: false, reason: "error", message: VIEW_ONLY };
     }
 
     if (!isEmailSyncApproved(session.user.email)) {
@@ -128,8 +142,8 @@ export const acceptSuggestion = async (
     suggestionId: string,
     timeZone: string,
 ): Promise<void> => {
-    const session = await auth.api.getSession({ headers: await headers() });
-    if (!session) return;
+    const session = await getRequestSession();
+    if (!session || (await getViewAs())) return;
     if (!isEmailSyncApproved(session.user.email)) return;
     if (!(await withinBudget(session.user.id, "write"))) return;
 
@@ -144,8 +158,8 @@ export const acceptSuggestion = async (
 export const dismissSuggestionAction = async (
     suggestionId: string,
 ): Promise<void> => {
-    const session = await auth.api.getSession({ headers: await headers() });
-    if (!session) return;
+    const session = await getRequestSession();
+    if (!session || (await getViewAs())) return;
     if (!isEmailSyncApproved(session.user.email)) return;
     if (!(await withinBudget(session.user.id, "write"))) return;
 
