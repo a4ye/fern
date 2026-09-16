@@ -2,7 +2,8 @@
 // parsed here into the structured columns, so it can be sorted and formatted
 // consistently. Anything that carries no amount is kept verbatim as a note.
 
-import type { PayPeriod } from "@/components/dashboard/data";
+import { PAY_PERIODS, type PayPeriod } from "@/components/dashboard/data";
+import { RATE_BASE, inBaseCurrency, type ExchangeRates } from "@/lib/exchange";
 
 export type PayFields = {
     payMin: string | null;
@@ -340,12 +341,95 @@ const overflows = (amount: number): boolean =>
 export const payAmountInput = (amount: string | null): string =>
     amount === null ? "" : String(Number(amount));
 
+// Every figure here but the first is calendar arithmetic. The hourly one is a
+// judgement: a rate is read as a 40-hour week of a 52-week year, which is right
+// for full-time work and overstates part-time work by whatever fraction of
+// those hours it actually runs. An application has nowhere to record its hours,
+// so this stands in for asking.
+export const PER_YEAR: Record<PayPeriod, number> = {
+    hourly: 40 * 52,
+    weekly: 52,
+    biweekly: 26,
+    monthly: 12,
+    yearly: 1,
+    one_time: 1,
+};
+
+// A posting that writes "60 USD" and stops has still said which period it meant,
+// because nobody is paid 60 dollars a year and nobody is paid 120,000 an hour.
+// So an amount is read back through the clock: a period is possible when it
+// turns that amount into a year's pay somebody could actually be offered, and
+// these are the two ends of what this app is willing to believe. The floor is a
+// full-time year at under six dollars an hour, beneath every national minimum
+// wage; the ceiling is a base salary at the top of the market.
+const YEAR_FLOOR = 12_000;
+const YEAR_CEILING = 480_000;
+
+// A one-off is not a rate, so carrying it up to a year says nothing about it,
+// and a payment of any size at all could be one. It is left out of the reckoning
+// rather than guessed at.
+const RATE_PERIODS = PAY_PERIODS.filter((period) => period !== "one_time");
+
+// Weekly, fortnightly and monthly pay lie within a factor of five of one
+// another, and no honest span of salaries is that narrow: an amount believable
+// as one of the three is believable as its neighbours too, so none of them can
+// ever be told from the others. They are reasons to say nothing rather than
+// answers. Hourly stands forty times clear of the nearest of them and yearly
+// twelve, which is what makes those two the ones a bare figure can name.
+const NAMEABLE = new Set<PayPeriod>(["hourly", "yearly"]);
+
+// The period an amount must have been quoted in, where exactly one would do.
+const periodOfAmount = (amount: number): PayPeriod | null => {
+    const believable = RATE_PERIODS.filter((period) => {
+        const annual = amount * PER_YEAR[period];
+        return annual >= YEAR_FLOOR && annual <= YEAR_CEILING;
+    });
+    if (believable.length !== 1) return null;
+    return NAMEABLE.has(believable[0]) ? believable[0] : null;
+};
+
+// The period a pay figure was quoted in, for a text that named none. Amounts are
+// weighed in the currency every rate is quoted against, since 60,000 is a year's
+// pay in dollars and about a week's in rupees; a currency the rates cannot cover
+// is left alone rather than held against the wrong yardstick.
+//
+// Both ends of a range are asked, and an end that cannot tell abstains rather
+// than refuses: one end deciding while the other says nothing is what lets a
+// range say more than either end alone. 40,000 on its own could be a month's pay
+// or a year's, but "40,000-60,000" is yearly, because 60,000 a month is past
+// believing. Two ends that name different periods are a text nobody can read,
+// and answer nothing.
+const inferPayPeriod = (
+    figures: Pick<PayFields, "payMin" | "payMax" | "payCurrency">,
+    rates: ExchangeRates,
+): PayPeriod | null => {
+    const found = new Set<PayPeriod>();
+    for (const written of [figures.payMin, figures.payMax]) {
+        if (written === null) continue;
+        const amount = inBaseCurrency(
+            Number(written),
+            figures.payCurrency || RATE_BASE,
+            rates,
+        );
+        if (amount === null) return null;
+        const period = periodOfAmount(amount);
+        if (period) found.add(period);
+    }
+    return found.size === 1 ? [...found][0] : null;
+};
+
 // `fallbackCurrency` is the user's own default, which stands in wherever the
 // text names no currency of its own. A pay line that does name one still wins:
 // the preference answers "120000/yr", not "CAD 120000/yr".
+//
+// `rates` are what size an amount against the money it is written in, and so are
+// what lets a period be read back out of a text that never gave one. Callers
+// that have none are answered from the amounts alone, which only the base
+// currency can be measured in.
 export const parsePay = (
     input: string | null,
     fallbackCurrency: string = DEFAULT_CURRENCY,
+    rates: ExchangeRates = {},
 ): PayFields => {
     const raw = input?.trim() ?? "";
     if (!raw) {
@@ -377,11 +461,17 @@ export const parsePay = (
     const min = Math.min(first, second ?? first);
     const max = Math.max(first, second ?? first);
 
-    return {
+    const figures = {
         payMin: asNumeric(min),
         payMax: second === undefined || max === min ? null : asNumeric(max),
         payCurrency: payCurrencyIn(raw) ?? fallbackCurrency,
-        payPeriod: period,
+    };
+
+    return {
+        ...figures,
+        // What the text said it was, and only then what its own figures say it
+        // must have been. A stated period is never second-guessed.
+        payPeriod: period ?? inferPayPeriod(figures, rates),
         payNote: null,
     };
 };

@@ -12,7 +12,6 @@ import {
     type ApplicationRow,
     type ApplicationStatus,
     type Arrangement,
-    type PayPeriod,
 } from "@/components/dashboard/data";
 import { containsMatch } from "@/lib/fuzzy";
 import {
@@ -21,6 +20,7 @@ import {
     inBaseCurrency,
     type ExchangeRates,
 } from "@/lib/exchange";
+import { PER_YEAR } from "@/lib/pay";
 
 export type SortKey =
     | "company"
@@ -58,22 +58,10 @@ const ARRANGEMENT_RANK = new Map(
 
 // A rate compares against another only once both are on the same clock, so
 // everything is carried up to a year first. An amount with no period, and a
-// one-off, are taken as written: a bare number in this field is almost always
-// a yearly one.
-// Every figure here but the first is calendar arithmetic. The hourly one is a
-// judgement: a rate is read as a 40-hour week of a 52-week year, which is right
-// for full-time work and overstates part-time work by whatever fraction of
-// those hours it actually runs. An application has nowhere to record its hours,
-// so this stands in for asking.
-const PER_YEAR: Record<PayPeriod, number> = {
-    hourly: 40 * 52,
-    weekly: 52,
-    biweekly: 26,
-    monthly: 12,
-    yearly: 1,
-    one_time: 1,
-};
-
+// one-off, are taken as written. A figure whose period could be read from its
+// size carries one by the time it is stored, so what is left here is a figure
+// nothing could settle, and a year is where it sorts least oddly.
+//
 // The low end is the figure the cell leads with, so it is what the column reads
 // by. Once on a yearly clock it is carried into one currency as well, since a
 // number and a number are only ever comparable in the same money. A row the

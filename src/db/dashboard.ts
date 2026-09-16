@@ -1,6 +1,7 @@
 import type { PoolClient } from "@neondatabase/serverless";
 import { getPool } from "@/db/client";
 import * as gen from "@/db/queries";
+import { getExchangeRates } from "@/db/exchange-rates";
 import {
     HISTORY_KIND,
     recordApplicationChange,
@@ -187,8 +188,9 @@ export const importApplications = async (
 ): Promise<number> => {
     if (rows.length === 0) return 0;
 
+    const rates = await getExchangeRates();
     const payload = rows.map((row, offset) => {
-        const pay = parsePay(row.pay, defaultCurrency);
+        const pay = parsePay(row.pay, defaultCurrency, rates);
         return {
             offset,
             company_name: row.company,
@@ -235,9 +237,14 @@ export const updateApplications = async (
 ): Promise<void> => {
     if (rows.length === 0) return;
 
+    // Only a typed pay line is parsed, so a bulk edit that never touched one is
+    // not worth a read of the rates.
+    const rates = rows.some((row) => row.payTyped)
+        ? await getExchangeRates()
+        : {};
     const payload = rows.map((row) => {
         const pay = row.payTyped
-            ? parsePay(row.input.pay, defaultCurrency)
+            ? parsePay(row.input.pay, defaultCurrency, rates)
             : null;
         return {
             id: row.id,

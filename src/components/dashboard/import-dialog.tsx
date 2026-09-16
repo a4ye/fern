@@ -39,6 +39,7 @@ import {
     type RowOutcome,
     type Sheet,
 } from "@/lib/import/rows";
+import type { ExchangeRates } from "@/lib/exchange";
 
 type Step = "file" | "map" | "review";
 
@@ -768,10 +769,12 @@ export const ImportDialog = ({
     listId,
     applications,
     defaultCurrency,
+    rates,
 }: {
     listId: string;
     applications: ApplicationRow[];
     defaultCurrency: string;
+    rates: ExchangeRates;
 }) => {
     const dismiss = useOverlayDismiss();
     const [step, setStep] = useState<Step>("file");
@@ -807,6 +810,7 @@ export const ImportDialog = ({
                       fallbackStatus,
                       listKeys,
                       defaultCurrency,
+                      rates,
                   )
                 : [],
         [
@@ -817,6 +821,7 @@ export const ImportDialog = ({
             fallbackStatus,
             listKeys,
             defaultCurrency,
+            rates,
         ],
     );
 

@@ -24,6 +24,7 @@ describe("mergeImportedApplication", () => {
             POSTING,
             new Set(),
             "USD",
+            {},
         );
 
         expect(merged).toMatchObject({
@@ -51,6 +52,7 @@ describe("mergeImportedApplication", () => {
             POSTING,
             new Set(["company", "location", "payCurrency"]),
             "USD",
+            {},
         );
 
         expect(merged.company).toBe("My company name");
@@ -66,6 +68,7 @@ describe("mergeImportedApplication", () => {
             { ...POSTING, pay: "90,000 to 110,000 yearly" },
             new Set(),
             "USD",
+            {},
             "CA",
         );
 
@@ -79,6 +82,7 @@ describe("mergeImportedApplication", () => {
             { ...POSTING, pay: null },
             new Set(),
             "USD",
+            {},
             "DE",
         );
 
@@ -92,6 +96,7 @@ describe("mergeImportedApplication", () => {
             POSTING,
             new Set(),
             "GBP",
+            {},
             "JP",
         );
         const unknownCountry = mergeImportedApplication(
@@ -99,6 +104,7 @@ describe("mergeImportedApplication", () => {
             { ...POSTING, pay: "90,000 yearly" },
             new Set(),
             "GBP",
+            {},
             null,
         );
 
@@ -125,6 +131,7 @@ describe("mergeImportedApplication", () => {
             },
             new Set(),
             "USD",
+            {},
         );
 
         expect(merged.company).toBe("");

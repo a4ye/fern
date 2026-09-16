@@ -1214,6 +1214,7 @@ export const ApplicationsTable = ({
                         cleanLinks={cleanLinks}
                         employerLinks={employerLinks}
                         tidyTitles={tidyTitles}
+                        rates={rates}
                     />
                 </OverlayDrawer>
             )}
@@ -1228,6 +1229,7 @@ export const ApplicationsTable = ({
                         listId={listId}
                         applications={optimisticApplications}
                         defaultCurrency={defaultCurrency}
+                        rates={rates}
                     />
                 </OverlayDialog>
             )}

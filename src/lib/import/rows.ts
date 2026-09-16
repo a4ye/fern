@@ -8,6 +8,7 @@ import type {
     PayPeriod,
 } from "@/components/dashboard/data";
 import { parsePay } from "@/lib/pay";
+import type { ExchangeRates } from "@/lib/exchange";
 import { firstIssue, importRowSchema } from "@/lib/validation";
 import type { ColumnMapping, ImportField } from "@/lib/import/fields";
 import {
@@ -131,8 +132,12 @@ const dedupeKey = (fields: {
     ].join("\u0000");
 };
 
-const draftKey = (draft: ImportDraft, defaultCurrency: string): string => {
-    const pay = parsePay(draft.pay, defaultCurrency);
+const draftKey = (
+    draft: ImportDraft,
+    defaultCurrency: string,
+    rates: ExchangeRates,
+): string => {
+    const pay = parsePay(draft.pay, defaultCurrency, rates);
     return dedupeKey({ ...draft, ...pay });
 };
 
@@ -244,8 +249,10 @@ export const buildRows = (
     alreadyInList: ReadonlyMap<string, ApplicationRow>,
     // The currency a row's pay is read as when its own text names none, which
     // has to be the one the write will use or an import would count a row it is
-    // about to duplicate as new.
+    // about to duplicate as new. The rates go along for the same reason: they
+    // are what a pay figure with no period is read against.
     defaultCurrency: string,
+    rates: ExchangeRates,
 ): RowOutcome[] => {
     // The whole column decides how its dates read, so a value that would work
     // either way is settled by its neighbours rather than guessed at.
@@ -301,7 +308,7 @@ export const buildRows = (
         }
 
         const { draft, dropped } = read;
-        const key = draftKey(draft, defaultCurrency);
+        const key = draftKey(draft, defaultCurrency, rates);
 
         const existing = alreadyInList.get(key);
         if (existing) {

@@ -1,5 +1,6 @@
 import type { ApplicationFields } from "@/components/dashboard/application-form";
 import type { ScrapedPosting } from "@/lib/job-import/shared";
+import type { ExchangeRates } from "@/lib/exchange";
 import { currencyForCountry, parsePay, payAmountInput } from "@/lib/pay";
 import { PAY_MAX } from "@/lib/constraints";
 
@@ -26,11 +27,13 @@ export const mergeImportedApplication = (
     posting: ScrapedPosting,
     edited: ReadonlySet<keyof ApplicationFields>,
     defaultCurrency: string,
+    rates: ExchangeRates,
     countryCode: string | null = null,
 ): ApplicationFields => {
     const pay = parsePay(
         posting.pay,
         currencyForCountry(countryCode) ?? defaultCurrency,
+        rates,
     );
 
     return {

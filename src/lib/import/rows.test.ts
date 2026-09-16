@@ -8,6 +8,7 @@ import {
     type Sheet,
     type ValueChoices,
 } from "@/lib/import/rows";
+import type { ExchangeRates } from "@/lib/exchange";
 
 const HEADERS = ["Company", "Role", "Status", "Applied", "Pay"];
 
@@ -29,6 +30,7 @@ const build = (
         existing?: ReadonlyMap<string, ApplicationRow>;
         statuses?: Record<string, "applied" | "rejected">;
         defaultCurrency?: string;
+        rates?: ExchangeRates;
     } = {},
 ): RowOutcome[] =>
     buildRows(
@@ -38,6 +40,7 @@ const build = (
         "applied",
         options.existing ?? new Map(),
         options.defaultCurrency ?? "USD",
+        options.rates ?? {},
     );
 
 const kinds = (outcomes: RowOutcome[]) =>
@@ -124,6 +127,7 @@ describe("building rows", () => {
             "applied",
             new Map(),
             "USD",
+            {},
         );
         expect(outcomes[0]).toMatchObject({
             kind: "ready",
@@ -143,6 +147,7 @@ describe("building rows", () => {
             "applied",
             new Map(),
             "USD",
+            {},
         );
         expect(outcomes[0]).toMatchObject({ kind: "ready" });
         const outcome = outcomes[0];
@@ -256,7 +261,13 @@ describe("duplicates", () => {
 
     test("compares pay by what it parses to, not by how it was typed", () => {
         const existing = existingIndex([
-            existingRow({ payMin: "120000", payCurrency: "USD" }),
+            existingRow({
+                payMin: "120000",
+                payCurrency: "USD",
+                // Read out of the figure on the way in, the same as the draft
+                // below has it read out on the way through the preview.
+                payPeriod: "yearly",
+            }),
         ]);
         const outcomes = build(
             [["Anthropic", "Engineer", "Applied", "", "$120,000"]],

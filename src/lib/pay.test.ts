@@ -285,6 +285,90 @@ describe("parsePay", () => {
     });
 });
 
+// What a pay text leaves unsaid, read back out of the figures themselves.
+describe("the period a bare amount implies", () => {
+    // Roughly what a dollar bought when these were written. Only the size of
+    // each currency matters here, so a rate being a month out of date cannot
+    // change which period an amount reads as.
+    const RATES = { USD: 1, CAD: 1.37, EUR: 0.92, INR: 87, JPY: 155 };
+
+    const periodOf = (input: string, fallbackCurrency = "USD") =>
+        parsePay(input, fallbackCurrency, RATES).payPeriod;
+
+    // Nobody is paid 60 dollars a year, and nobody is paid 120,000 an hour, so
+    // the amount names the period on its own.
+    it.each([
+        ["60 usd", "hourly"],
+        ["$45", "hourly"],
+        ["$17.50", "hourly"],
+        ["$200", "hourly"],
+        ["$120,000", "yearly"],
+        ["$85,000", "yearly"],
+        ["$450,000", "yearly"],
+        ["CAD 95,000", "yearly"],
+        ["€70,000", "yearly"],
+    ])("reads %p as %p", (input, period) => {
+        expect(periodOf(input)).toBe(period as PayPeriod);
+    });
+
+    // A range says more than either end alone: 40,000 on its own could be a
+    // month's pay or a year's, but 60,000 a month is past believing.
+    it.each([
+        ["$100-$200", "hourly"],
+        ["$40,000 - $60,000", "yearly"],
+        ["$120,000-$500,000", "yearly"],
+    ])("reads the range %p as %p", (input, period) => {
+        expect(periodOf(input)).toBe(period as PayPeriod);
+    });
+
+    // Weekly, fortnightly and monthly pay lie too close together to be told
+    // apart, so an amount that could be any of them is left alone. So is one
+    // too large or too small to be a year's pay under any reading.
+    it.each(["$3,000", "$7,000", "$25,000", "$500", "$2", "$3,000,000"])(
+        "leaves %p unread",
+        (input) => {
+            expect(periodOf(input)).toBeNull();
+        },
+    );
+
+    // A stated period is a fact about the posting and outranks anything the
+    // figures suggest, however odd the pair look together.
+    it("never overrules a period the text states", () => {
+        expect(periodOf("$120,000/hr")).toBe("hourly");
+        expect(periodOf("$60 per year")).toBe("yearly");
+        expect(periodOf("$5,000 lump sum")).toBe("one_time");
+    });
+
+    // The same digits are a year's pay in one country and a fortnight's in
+    // another, so a figure is weighed in the money it was written in.
+    it("weighs an amount in its own currency", () => {
+        expect(periodOf("$60,000")).toBe("yearly");
+        expect(periodOf("₹60,000")).toBeNull();
+        expect(periodOf("¥8,000,000")).toBe("yearly");
+        expect(periodOf("¥3,000")).toBe("hourly");
+    });
+
+    // The user's own default is what an amount is weighed in when the text
+    // names no currency, the same as it is for the currency column.
+    it("weighs a bare amount in the currency that stands in for it", () => {
+        expect(periodOf("60,000", "USD")).toBe("yearly");
+        expect(periodOf("60,000", "INR")).toBeNull();
+    });
+
+    // A currency the rates cannot cover has no knowable size, and a figure of
+    // unknown size is no evidence at all.
+    it("says nothing about a currency the rates do not quote", () => {
+        expect(parsePay("60 usd").payPeriod).toBe("hourly");
+        expect(parsePay("ZAR 60").payPeriod).toBeNull();
+        expect(parsePay("60 usd", "USD", {}).payPeriod).toBe("hourly");
+    });
+
+    it("has nothing to read where there is no amount", () => {
+        expect(periodOf("Competitive")).toBeNull();
+        expect(periodOf("  ")).toBeNull();
+    });
+});
+
 describe("currencyForCountry", () => {
     it("reads a currency code back to the country that spends it", () => {
         expect(currencyForCountry("CA")).toBe("CAD");

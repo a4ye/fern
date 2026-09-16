@@ -58,6 +58,7 @@ import {
 } from "@/lib/job-import/shared";
 import { resolvePopularLocation } from "@/lib/job-import/location";
 import { currencyForCountry, payCurrencyIn } from "@/lib/pay";
+import type { ExchangeRates } from "@/lib/exchange";
 import { URL_MAX } from "@/lib/constraints";
 
 const LINK_INPUT_ID = "add-application-link";
@@ -104,12 +105,14 @@ export const AddApplicationForm = ({
     cleanLinks,
     employerLinks,
     tidyTitles,
+    rates,
 }: {
     listId: string;
     defaultCurrency: string;
     cleanLinks: boolean;
     employerLinks: boolean;
     tidyTitles: boolean;
+    rates: ExchangeRates;
 }) => {
     const dismiss = useOverlayDismiss();
     const [draft, setDraft] = useState<ApplicationFields>({
@@ -196,6 +199,7 @@ export const AddApplicationForm = ({
                 posting,
                 editedFields.current,
                 defaultCurrency,
+                rates,
                 popularLocation.status === "matched"
                     ? popularLocation.countryCode
                     : null,
