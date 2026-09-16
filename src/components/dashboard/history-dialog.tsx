@@ -31,7 +31,10 @@ import {
     type ListStatus,
     type PayPeriod,
 } from "@/components/dashboard/data";
-import { useModalDialog } from "@/components/dashboard/use-modal-dialog";
+import {
+    DIALOG_TITLE_ID,
+    useOverlayDismiss,
+} from "@/components/dashboard/overlay-shell";
 import { ConfirmDialog } from "@/components/dashboard/confirm-dialog";
 import { useLocalDateTimeFormatter } from "@/components/dashboard/local-date-time";
 import { CurrencyFlag } from "@/components/dashboard/currency-flag";
@@ -57,7 +60,6 @@ import type {
     ListHistoryPage,
 } from "@/db/history";
 
-const TITLE_ID = "list-history-title";
 const HISTORY_VALUE_CLASS =
     "inline-flex max-w-full items-center px-1.5 py-0.5 text-xs leading-4 font-medium";
 
@@ -1052,15 +1054,13 @@ export const HistoryDialog = ({
     listId,
     initialPage,
     defaultCurrency,
-    onClose,
 }: {
     listId: string;
     initialPage: ListHistoryPage | null;
     defaultCurrency: string;
-    onClose: () => void;
 }) => {
     const router = useRouter();
-    const { ref: dialogRef, close } = useModalDialog();
+    const dismiss = useOverlayDismiss();
     const [items, setItems] = useState(initialPage?.items ?? []);
     const [cursor, setCursor] = useState(initialPage?.nextCursor ?? null);
     const [hasMore, setHasMore] = useState(initialPage?.hasMore ?? false);
@@ -1102,8 +1102,6 @@ export const HistoryDialog = ({
             setHasMore(initialPage.hasMore);
         }
     }, [initialPage]);
-
-    const dismiss = () => close(onClose);
 
     const keepTriggerInPlace = (trigger: HTMLElement) => {
         const scroller = historyScrollRef.current;
@@ -1278,351 +1276,359 @@ export const HistoryDialog = ({
         null;
 
     return (
-        <dialog
-            ref={dialogRef}
-            aria-labelledby={TITLE_ID}
-            onCancel={(event) => {
-                event.preventDefault();
-                dismiss();
-            }}
-            onClick={(event) => {
-                if (event.target === dialogRef.current) dismiss();
-            }}
-            className="m-auto h-[min(45rem,calc(100dvh-2rem))] w-[calc(100dvw-2rem)] max-w-3xl overflow-hidden border-0 bg-background p-0 shadow-lg backdrop:bg-ink/25 sm:h-[min(45rem,calc(100dvh-3rem))] sm:w-[calc(100dvw-3rem)]"
-        >
-            {/* Keep flex on an inner element so the browser can restore
-                dialog:not([open]) to display:none during the closing fade. */}
-            <div className="flex h-full min-h-0 flex-col border border-hairline">
-                <header className="flex h-14 shrink-0 items-center justify-between gap-5 border-b border-hairline px-5 sm:px-6">
-                    <h2
-                        id={TITLE_ID}
-                        className="text-base font-semibold text-balance text-ink"
-                    >
-                        History
-                    </h2>
-                    <div className="flex items-center gap-0.5">
-                        {items.length > 0 && (
-                            <button
-                                type="button"
-                                onClick={() => setConfirmingClear(true)}
-                                disabled={isLoading}
-                                aria-label="Clear history"
-                                title="Clear history"
-                                className="flex h-10 shrink-0 cursor-pointer items-center gap-2 px-3 text-xs font-medium text-muted transition-[background-color,color,scale] duration-150 ease-out hover:bg-rose-tint hover:text-rose active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose disabled:cursor-wait disabled:opacity-50"
-                            >
-                                <span
-                                    aria-hidden="true"
-                                    className="icon-[lucide--trash-2] block size-4"
-                                />
-                                Clear history
-                            </button>
-                        )}
+        <>
+            <header className="flex h-14 shrink-0 items-center justify-between gap-5 border-b border-hairline px-5 sm:px-6">
+                <h2
+                    id={DIALOG_TITLE_ID}
+                    className="text-base font-semibold text-balance text-ink"
+                >
+                    History
+                </h2>
+                <div className="flex items-center gap-0.5">
+                    {items.length > 0 && (
                         <button
                             type="button"
-                            onClick={dismiss}
-                            aria-label="Close history"
-                            title="Close"
-                            className="flex size-10 shrink-0 cursor-pointer items-center justify-center text-muted transition-[color,scale] duration-150 ease-out hover:text-ink active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                            onClick={() => setConfirmingClear(true)}
+                            disabled={isLoading}
+                            aria-label="Clear history"
+                            title="Clear history"
+                            className="flex h-10 shrink-0 cursor-pointer items-center gap-2 px-3 text-xs font-medium text-muted transition-[background-color,color,scale] duration-150 ease-out hover:bg-rose-tint hover:text-rose active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose disabled:cursor-wait disabled:opacity-50"
                         >
                             <span
                                 aria-hidden="true"
-                                className="icon-[lucide--x] block size-4"
+                                className="icon-[lucide--trash-2] block size-4"
                             />
+                            Clear history
                         </button>
-                    </div>
-                </header>
-
-                {initialPage === null ? (
-                    <div
-                        aria-live="polite"
-                        className="grid min-h-0 flex-1 place-items-center px-6 py-12 text-center"
+                    )}
+                    <button
+                        type="button"
+                        onClick={dismiss}
+                        aria-label="Close history"
+                        title="Close"
+                        className="flex size-10 shrink-0 cursor-pointer items-center justify-center text-muted transition-[color,scale] duration-150 ease-out hover:text-ink active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                     >
-                        <div>
-                            <span
-                                aria-hidden="true"
-                                className="icon-[lucide--loader-circle] mx-auto block size-5 animate-spin text-muted"
-                            />
-                            <p className="mt-3 text-sm text-sub">
-                                Loading history...
-                            </p>
-                        </div>
-                    </div>
-                ) : items.length === 0 ? (
-                    <div className="grid min-h-0 flex-1 place-items-center px-6 py-12 text-center">
-                        <div>
-                            <span
-                                aria-hidden="true"
-                                className="icon-[lucide--history] mx-auto block size-5 text-muted"
-                            />
-                            <p className="mt-3 text-sm text-sub">
-                                Changes will appear here.
-                            </p>
-                        </div>
-                    </div>
-                ) : (
-                    <div
-                        ref={historyScrollRef}
-                        className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-5 [overflow-anchor:none] sm:px-5 sm:py-6"
-                    >
-                        <div className="space-y-7">
-                            {groups.map((group) => (
-                                <section key={group.key}>
-                                    <div className="flex items-center gap-3 px-3">
-                                        <h3 className="shrink-0 text-xs font-medium text-sub tabular-nums">
-                                            {group.day}
-                                        </h3>
-                                        <span
-                                            aria-hidden="true"
-                                            className="h-px flex-1 bg-faint"
-                                        />
-                                    </div>
-                                    <ol className="mt-2 space-y-1">
-                                        {group.items.map(
-                                            ({ item, dateTime }) => {
-                                                const isExpanded = expanded.has(
-                                                    item.id,
-                                                );
-                                                const showsAllChanges =
-                                                    expandedChanges.has(
-                                                        item.id,
-                                                    );
-                                                const visibleChanges =
-                                                    item.changes.length >
-                                                        HISTORY_CHANGES_PREVIEW_SIZE &&
-                                                    !showsAllChanges
-                                                        ? item.changes.slice(
-                                                              0,
-                                                              HISTORY_CHANGES_PREVIEW_SIZE,
-                                                          )
-                                                        : item.changes;
-                                                const remainingChangeCount =
-                                                    item.changeCount -
-                                                    item.changes.length;
-                                                const nextChangeCount =
-                                                    Math.min(
-                                                        showsAllChanges
-                                                            ? remainingChangeCount
-                                                            : item.changeCount -
-                                                                  HISTORY_CHANGES_PREVIEW_SIZE,
-                                                        HISTORY_CHANGES_PAGE_SIZE,
-                                                    );
-                                                const primaryShowsFewer =
-                                                    showsAllChanges &&
-                                                    remainingChangeCount === 0;
-                                                const changeSections =
-                                                    historyChangeSections(
-                                                        visibleChanges,
-                                                        item.restoreTarget !==
-                                                            null,
-                                                    );
-                                                const detailsId = `history-details-${item.id}`;
-                                                const hasDetails =
-                                                    item.changeCount > 0 ||
-                                                    item.undone ||
-                                                    item.canUndo ||
-                                                    item.canRestore ||
-                                                    item.canPermanentlyDelete ||
-                                                    item.restoreTarget !== null;
-                                                const isConfirming =
-                                                    confirmingRestore ===
-                                                    item.id;
-                                                const exactDateTime =
-                                                    dateTime?.exact ??
-                                                    `${item.day} at ${item.time}`;
-                                                const compactDateTime = `${item.when}, ${dateTime?.time ?? item.time}`;
+                        <span
+                            aria-hidden="true"
+                            className="icon-[lucide--x] block size-4"
+                        />
+                    </button>
+                </div>
+            </header>
 
-                                                return (
-                                                    <li
-                                                        key={item.id}
-                                                        className={
-                                                            isExpanded
-                                                                ? "bg-surface"
-                                                                : ""
-                                                        }
+            {initialPage === null ? (
+                <div
+                    aria-live="polite"
+                    className="grid min-h-0 flex-1 place-items-center px-6 py-12 text-center"
+                >
+                    <div>
+                        <span
+                            aria-hidden="true"
+                            className="icon-[lucide--loader-circle] mx-auto block size-5 animate-spin text-muted"
+                        />
+                        <p className="mt-3 text-sm text-sub">
+                            Loading history...
+                        </p>
+                    </div>
+                </div>
+            ) : items.length === 0 ? (
+                <div className="grid min-h-0 flex-1 place-items-center px-6 py-12 text-center">
+                    <div>
+                        <span
+                            aria-hidden="true"
+                            className="icon-[lucide--history] mx-auto block size-5 text-muted"
+                        />
+                        <p className="mt-3 text-sm text-sub">
+                            Changes will appear here.
+                        </p>
+                    </div>
+                </div>
+            ) : (
+                <div
+                    ref={historyScrollRef}
+                    className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-5 [overflow-anchor:none] sm:px-5 sm:py-6"
+                >
+                    <div className="space-y-7">
+                        {groups.map((group) => (
+                            <section key={group.key}>
+                                <div className="flex items-center gap-3 px-3">
+                                    <h3 className="shrink-0 text-xs font-medium text-sub tabular-nums">
+                                        {group.day}
+                                    </h3>
+                                    <span
+                                        aria-hidden="true"
+                                        className="h-px flex-1 bg-faint"
+                                    />
+                                </div>
+                                <ol className="mt-2 space-y-1">
+                                    {group.items.map(({ item, dateTime }) => {
+                                        const isExpanded = expanded.has(
+                                            item.id,
+                                        );
+                                        const showsAllChanges =
+                                            expandedChanges.has(item.id);
+                                        const visibleChanges =
+                                            item.changes.length >
+                                                HISTORY_CHANGES_PREVIEW_SIZE &&
+                                            !showsAllChanges
+                                                ? item.changes.slice(
+                                                      0,
+                                                      HISTORY_CHANGES_PREVIEW_SIZE,
+                                                  )
+                                                : item.changes;
+                                        const remainingChangeCount =
+                                            item.changeCount -
+                                            item.changes.length;
+                                        const nextChangeCount = Math.min(
+                                            showsAllChanges
+                                                ? remainingChangeCount
+                                                : item.changeCount -
+                                                      HISTORY_CHANGES_PREVIEW_SIZE,
+                                            HISTORY_CHANGES_PAGE_SIZE,
+                                        );
+                                        const primaryShowsFewer =
+                                            showsAllChanges &&
+                                            remainingChangeCount === 0;
+                                        const changeSections =
+                                            historyChangeSections(
+                                                visibleChanges,
+                                                item.restoreTarget !== null,
+                                            );
+                                        const detailsId = `history-details-${item.id}`;
+                                        const hasDetails =
+                                            item.changeCount > 0 ||
+                                            item.undone ||
+                                            item.canUndo ||
+                                            item.canRestore ||
+                                            item.canPermanentlyDelete ||
+                                            item.restoreTarget !== null;
+                                        const isConfirming =
+                                            confirmingRestore === item.id;
+                                        const exactDateTime =
+                                            dateTime?.exact ??
+                                            `${item.day} at ${item.time}`;
+                                        const compactDateTime = `${item.when}, ${dateTime?.time ?? item.time}`;
+
+                                        return (
+                                            <li
+                                                key={item.id}
+                                                className={
+                                                    isExpanded
+                                                        ? "bg-surface"
+                                                        : ""
+                                                }
+                                            >
+                                                <button
+                                                    type="button"
+                                                    disabled={!hasDetails}
+                                                    onClick={(event) =>
+                                                        hasDetails &&
+                                                        toggle(
+                                                            item.id,
+                                                            event.currentTarget,
+                                                        )
+                                                    }
+                                                    aria-expanded={
+                                                        hasDetails
+                                                            ? isExpanded
+                                                            : undefined
+                                                    }
+                                                    aria-controls={
+                                                        hasDetails
+                                                            ? detailsId
+                                                            : undefined
+                                                    }
+                                                    className="flex min-h-16 w-full cursor-pointer items-center gap-3 px-3 py-3 text-left transition-[background-color] duration-150 ease-out hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-default disabled:hover:bg-transparent"
+                                                >
+                                                    <span
+                                                        aria-hidden="true"
+                                                        className={`flex size-8 shrink-0 items-center justify-center ${CATEGORY_PLATES[item.category]}`}
                                                     >
-                                                        <button
-                                                            type="button"
-                                                            disabled={
-                                                                !hasDetails
-                                                            }
-                                                            onClick={(event) =>
-                                                                hasDetails &&
-                                                                toggle(
-                                                                    item.id,
-                                                                    event.currentTarget,
-                                                                )
-                                                            }
-                                                            aria-expanded={
-                                                                hasDetails
-                                                                    ? isExpanded
-                                                                    : undefined
-                                                            }
-                                                            aria-controls={
-                                                                hasDetails
-                                                                    ? detailsId
-                                                                    : undefined
-                                                            }
-                                                            className="flex min-h-16 w-full cursor-pointer items-center gap-3 px-3 py-3 text-left transition-[background-color] duration-150 ease-out hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-default disabled:hover:bg-transparent"
+                                                        <span
+                                                            className={`${CATEGORY_ICONS[item.category]} block size-4`}
+                                                        />
+                                                    </span>
+                                                    <span className="min-w-0 flex-1">
+                                                        <span
+                                                            className={`block text-pretty text-sm leading-5 font-medium ${item.undone ? "text-sub" : "text-ink"}`}
                                                         >
-                                                            <span
-                                                                aria-hidden="true"
-                                                                className={`flex size-8 shrink-0 items-center justify-center ${CATEGORY_PLATES[item.category]}`}
+                                                            <HistoryTitle
+                                                                item={item}
+                                                            />
+                                                        </span>
+                                                        <span className="mt-0.5 block text-xs text-muted tabular-nums">
+                                                            {item.undone
+                                                                ? "Undone, "
+                                                                : ""}
+                                                            <time
+                                                                dateTime={
+                                                                    item.occurredAt
+                                                                }
+                                                                title={
+                                                                    exactDateTime
+                                                                }
+                                                                aria-label={
+                                                                    exactDateTime
+                                                                }
                                                             >
-                                                                <span
-                                                                    className={`${CATEGORY_ICONS[item.category]} block size-4`}
-                                                                />
-                                                            </span>
-                                                            <span className="min-w-0 flex-1">
-                                                                <span
-                                                                    className={`block text-pretty text-sm leading-5 font-medium ${item.undone ? "text-sub" : "text-ink"}`}
-                                                                >
-                                                                    <HistoryTitle
-                                                                        item={
-                                                                            item
-                                                                        }
-                                                                    />
-                                                                </span>
-                                                                <span className="mt-0.5 block text-xs text-muted tabular-nums">
-                                                                    {item.undone
-                                                                        ? "Undone, "
-                                                                        : ""}
+                                                                {isExpanded
+                                                                    ? exactDateTime
+                                                                    : compactDateTime}
+                                                            </time>
+                                                        </span>
+                                                    </span>
+                                                    {hasDetails && (
+                                                        <span
+                                                            aria-hidden="true"
+                                                            className={`icon-[lucide--chevron-right] block size-4 shrink-0 text-muted transition-transform duration-150 ease-out ${isExpanded ? "rotate-90" : ""}`}
+                                                        />
+                                                    )}
+                                                </button>
+
+                                                {isExpanded && (
+                                                    <div
+                                                        id={detailsId}
+                                                        className="pr-4 pb-5 pl-14 sm:pr-5"
+                                                    >
+                                                        {item.restoreTarget && (
+                                                            <div className="border-y border-hairline py-3">
+                                                                <p className="text-xs text-muted">
+                                                                    Restored to
+                                                                </p>
+                                                                <p className="mt-1 text-pretty text-sm leading-5 font-medium text-ink">
+                                                                    {
+                                                                        item
+                                                                            .restoreTarget
+                                                                            .title
+                                                                    }
+                                                                </p>
+                                                                <p className="mt-0.5 text-xs text-sub tabular-nums">
                                                                     <time
                                                                         dateTime={
-                                                                            item.occurredAt
+                                                                            item
+                                                                                .restoreTarget
+                                                                                .occurredAt
                                                                         }
                                                                         title={
-                                                                            exactDateTime
-                                                                        }
-                                                                        aria-label={
-                                                                            exactDateTime
-                                                                        }
-                                                                    >
-                                                                        {isExpanded
-                                                                            ? exactDateTime
-                                                                            : compactDateTime}
-                                                                    </time>
-                                                                </span>
-                                                            </span>
-                                                            {hasDetails && (
-                                                                <span
-                                                                    aria-hidden="true"
-                                                                    className={`icon-[lucide--chevron-right] block size-4 shrink-0 text-muted transition-transform duration-150 ease-out ${isExpanded ? "rotate-90" : ""}`}
-                                                                />
-                                                            )}
-                                                        </button>
-
-                                                        {isExpanded && (
-                                                            <div
-                                                                id={detailsId}
-                                                                className="pr-4 pb-5 pl-14 sm:pr-5"
-                                                            >
-                                                                {item.restoreTarget && (
-                                                                    <div className="border-y border-hairline py-3">
-                                                                        <p className="text-xs text-muted">
-                                                                            Restored
-                                                                            to
-                                                                        </p>
-                                                                        <p className="mt-1 text-pretty text-sm leading-5 font-medium text-ink">
-                                                                            {
+                                                                            formatLocalTime?.(
                                                                                 item
                                                                                     .restoreTarget
-                                                                                    .title
-                                                                            }
-                                                                        </p>
-                                                                        <p className="mt-0.5 text-xs text-sub tabular-nums">
-                                                                            <time
-                                                                                dateTime={
-                                                                                    item
-                                                                                        .restoreTarget
-                                                                                        .occurredAt
-                                                                                }
-                                                                                title={
-                                                                                    formatLocalTime?.(
-                                                                                        item
-                                                                                            .restoreTarget
-                                                                                            .occurredAt,
-                                                                                    )
-                                                                                        ?.exact ??
-                                                                                    `${item.restoreTarget.day} at ${item.restoreTarget.time}`
+                                                                                    .occurredAt,
+                                                                            )
+                                                                                ?.exact ??
+                                                                            `${item.restoreTarget.day} at ${item.restoreTarget.time}`
+                                                                        }
+                                                                    >
+                                                                        {formatLocalTime?.(
+                                                                            item
+                                                                                .restoreTarget
+                                                                                .occurredAt,
+                                                                        )
+                                                                            ?.exact ??
+                                                                            `${item.restoreTarget.day} at ${item.restoreTarget.time}`}
+                                                                    </time>
+                                                                </p>
+                                                            </div>
+                                                        )}
+
+                                                        {item.changes.length >
+                                                        0 ? (
+                                                            <div className="mt-4">
+                                                                <div
+                                                                    className={
+                                                                        item.restoreTarget
+                                                                            ? "space-y-5"
+                                                                            : ""
+                                                                    }
+                                                                >
+                                                                    {changeSections.map(
+                                                                        (
+                                                                            section,
+                                                                        ) => (
+                                                                            <section
+                                                                                key={
+                                                                                    section.key
                                                                                 }
                                                                             >
-                                                                                {formatLocalTime?.(
-                                                                                    item
-                                                                                        .restoreTarget
-                                                                                        .occurredAt,
-                                                                                )
-                                                                                    ?.exact ??
-                                                                                    `${item.restoreTarget.day} at ${item.restoreTarget.time}`}
-                                                                            </time>
-                                                                        </p>
-                                                                    </div>
-                                                                )}
-
-                                                                {item.changes
-                                                                    .length >
-                                                                0 ? (
-                                                                    <div className="mt-4">
-                                                                        <div
-                                                                            className={
-                                                                                item.restoreTarget
-                                                                                    ? "space-y-5"
-                                                                                    : ""
-                                                                            }
-                                                                        >
-                                                                            {changeSections.map(
-                                                                                (
-                                                                                    section,
-                                                                                ) => (
-                                                                                    <section
-                                                                                        key={
-                                                                                            section.key
-                                                                                        }
-                                                                                    >
-                                                                                        <div
-                                                                                            className={`${section.key === "changes" ? "min-h-8 px-2" : "min-h-9 bg-accent-tint-soft px-3"} flex items-center gap-2.5`}
-                                                                                        >
-                                                                                            {section.icon && (
-                                                                                                <span
-                                                                                                    aria-hidden="true"
-                                                                                                    className={`${section.icon} block size-4 shrink-0 text-accent-deep`}
-                                                                                                />
-                                                                                            )}
-                                                                                            <h4
-                                                                                                className={`${section.key === "changes" ? "text-sub" : "text-ink"} text-xs font-semibold text-balance`}
-                                                                                            >
-                                                                                                {
-                                                                                                    section.label
-                                                                                                }
-                                                                                            </h4>
-                                                                                        </div>
-                                                                                        <HistoryChangeRows
-                                                                                            entries={
-                                                                                                section.entries
-                                                                                            }
-                                                                                            item={
-                                                                                                item
-                                                                                            }
-                                                                                            listId={
-                                                                                                listId
-                                                                                            }
-                                                                                            defaultCurrency={
-                                                                                                defaultCurrency
-                                                                                            }
-                                                                                            sectioned={
-                                                                                                section.key !==
-                                                                                                "changes"
-                                                                                            }
-                                                                                            keepTriggerInPlace={
-                                                                                                keepTriggerInPlace
-                                                                                            }
+                                                                                <div
+                                                                                    className={`${section.key === "changes" ? "min-h-8 px-2" : "min-h-9 bg-accent-tint-soft px-3"} flex items-center gap-2.5`}
+                                                                                >
+                                                                                    {section.icon && (
+                                                                                        <span
+                                                                                            aria-hidden="true"
+                                                                                            className={`${section.icon} block size-4 shrink-0 text-accent-deep`}
                                                                                         />
-                                                                                    </section>
-                                                                                ),
-                                                                            )}
-                                                                        </div>
-                                                                        {item.changeCount >
-                                                                            HISTORY_CHANGES_PREVIEW_SIZE && (
-                                                                            <div className="mt-1 flex min-h-10 flex-wrap items-center gap-1">
+                                                                                    )}
+                                                                                    <h4
+                                                                                        className={`${section.key === "changes" ? "text-sub" : "text-ink"} text-xs font-semibold text-balance`}
+                                                                                    >
+                                                                                        {
+                                                                                            section.label
+                                                                                        }
+                                                                                    </h4>
+                                                                                </div>
+                                                                                <HistoryChangeRows
+                                                                                    entries={
+                                                                                        section.entries
+                                                                                    }
+                                                                                    item={
+                                                                                        item
+                                                                                    }
+                                                                                    listId={
+                                                                                        listId
+                                                                                    }
+                                                                                    defaultCurrency={
+                                                                                        defaultCurrency
+                                                                                    }
+                                                                                    sectioned={
+                                                                                        section.key !==
+                                                                                        "changes"
+                                                                                    }
+                                                                                    keepTriggerInPlace={
+                                                                                        keepTriggerInPlace
+                                                                                    }
+                                                                                />
+                                                                            </section>
+                                                                        ),
+                                                                    )}
+                                                                </div>
+                                                                {item.changeCount >
+                                                                    HISTORY_CHANGES_PREVIEW_SIZE && (
+                                                                    <div className="mt-1 flex min-h-10 flex-wrap items-center gap-1">
+                                                                        <button
+                                                                            type="button"
+                                                                            disabled={
+                                                                                loadingChanges ===
+                                                                                item.id
+                                                                            }
+                                                                            onClick={(
+                                                                                event,
+                                                                            ) =>
+                                                                                primaryShowsFewer
+                                                                                    ? showFewerChanges(
+                                                                                          item,
+                                                                                          event.currentTarget,
+                                                                                      )
+                                                                                    : showMoreChanges(
+                                                                                          item,
+                                                                                      )
+                                                                            }
+                                                                            className="flex h-10 cursor-pointer items-center gap-2 px-2 text-xs font-medium text-sub transition-[color,scale] duration-150 ease-out hover:text-ink active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-wait disabled:opacity-50 disabled:active:scale-100"
+                                                                        >
+                                                                            {loadingChanges ===
+                                                                            item.id
+                                                                                ? "Loading changes..."
+                                                                                : primaryShowsFewer
+                                                                                  ? "Show fewer changes"
+                                                                                  : `Show ${nextChangeCount.toLocaleString()} more changes`}
+                                                                            <span
+                                                                                aria-hidden="true"
+                                                                                className={`${primaryShowsFewer ? "icon-[lucide--chevron-up]" : "icon-[lucide--chevron-down]"} block size-3.5`}
+                                                                            />
+                                                                        </button>
+                                                                        {showsAllChanges &&
+                                                                            remainingChangeCount >
+                                                                                0 && (
                                                                                 <button
                                                                                     type="button"
                                                                                     disabled={
@@ -1632,263 +1638,224 @@ export const HistoryDialog = ({
                                                                                     onClick={(
                                                                                         event,
                                                                                     ) =>
-                                                                                        primaryShowsFewer
-                                                                                            ? showFewerChanges(
-                                                                                                  item,
-                                                                                                  event.currentTarget,
-                                                                                              )
-                                                                                            : showMoreChanges(
-                                                                                                  item,
-                                                                                              )
+                                                                                        showFewerChanges(
+                                                                                            item,
+                                                                                            event.currentTarget,
+                                                                                        )
                                                                                     }
                                                                                     className="flex h-10 cursor-pointer items-center gap-2 px-2 text-xs font-medium text-sub transition-[color,scale] duration-150 ease-out hover:text-ink active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-wait disabled:opacity-50 disabled:active:scale-100"
                                                                                 >
-                                                                                    {loadingChanges ===
-                                                                                    item.id
-                                                                                        ? "Loading changes..."
-                                                                                        : primaryShowsFewer
-                                                                                          ? "Show fewer changes"
-                                                                                          : `Show ${nextChangeCount.toLocaleString()} more changes`}
+                                                                                    Show
+                                                                                    fewer
+                                                                                    changes
                                                                                     <span
                                                                                         aria-hidden="true"
-                                                                                        className={`${primaryShowsFewer ? "icon-[lucide--chevron-up]" : "icon-[lucide--chevron-down]"} block size-3.5`}
+                                                                                        className="icon-[lucide--chevron-up] block size-3.5"
                                                                                     />
                                                                                 </button>
-                                                                                {showsAllChanges &&
-                                                                                    remainingChangeCount >
-                                                                                        0 && (
-                                                                                        <button
-                                                                                            type="button"
-                                                                                            disabled={
-                                                                                                loadingChanges ===
-                                                                                                item.id
-                                                                                            }
-                                                                                            onClick={(
-                                                                                                event,
-                                                                                            ) =>
-                                                                                                showFewerChanges(
-                                                                                                    item,
-                                                                                                    event.currentTarget,
-                                                                                                )
-                                                                                            }
-                                                                                            className="flex h-10 cursor-pointer items-center gap-2 px-2 text-xs font-medium text-sub transition-[color,scale] duration-150 ease-out hover:text-ink active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-wait disabled:opacity-50 disabled:active:scale-100"
-                                                                                        >
-                                                                                            Show
-                                                                                            fewer
-                                                                                            changes
-                                                                                            <span
-                                                                                                aria-hidden="true"
-                                                                                                className="icon-[lucide--chevron-up] block size-3.5"
-                                                                                            />
-                                                                                        </button>
-                                                                                    )}
-                                                                            </div>
-                                                                        )}
-                                                                    </div>
-                                                                ) : (
-                                                                    !item.restoreTarget && (
-                                                                        <p className="mt-3 text-xs leading-5 text-sub">
-                                                                            {item.undone
-                                                                                ? "This change was undone."
-                                                                                : item.category ===
-                                                                                    "reverted"
-                                                                                  ? "The original change is no longer available."
-                                                                                  : "The changed fields were not saved."}
-                                                                        </p>
-                                                                    )
-                                                                )}
-
-                                                                {item.undone &&
-                                                                    item.changes
-                                                                        .length >
-                                                                        0 && (
-                                                                        <p className="mt-3 text-xs text-muted">
-                                                                            This
-                                                                            change
-                                                                            was
-                                                                            undone.
-                                                                        </p>
-                                                                    )}
-
-                                                                {(item.canUndo ||
-                                                                    item.canRestore ||
-                                                                    item.canPermanentlyDelete) && (
-                                                                    <div
-                                                                        className={`mt-4 flex min-h-13 flex-wrap items-center justify-end gap-1 pt-3 ${item.changes.length === 0 && !item.restoreTarget ? "border-t border-hairline" : ""}`}
-                                                                    >
-                                                                        {isConfirming ? (
-                                                                            <>
-                                                                                <button
-                                                                                    type="button"
-                                                                                    onClick={() =>
-                                                                                        setConfirmingRestore(
-                                                                                            null,
-                                                                                        )
-                                                                                    }
-                                                                                    disabled={
-                                                                                        isLoading
-                                                                                    }
-                                                                                    className={
-                                                                                        quietButtonClass
-                                                                                    }
-                                                                                >
-                                                                                    Cancel
-                                                                                </button>
-                                                                                <button
-                                                                                    type="button"
-                                                                                    onClick={() =>
-                                                                                        restore(
-                                                                                            item,
-                                                                                        )
-                                                                                    }
-                                                                                    disabled={
-                                                                                        isLoading
-                                                                                    }
-                                                                                    className={
-                                                                                        primaryButtonClass
-                                                                                    }
-                                                                                >
-                                                                                    {restoring ===
-                                                                                    item.id
-                                                                                        ? "Restoring..."
-                                                                                        : "Restore"}
-                                                                                </button>
-                                                                            </>
-                                                                        ) : (
-                                                                            <>
-                                                                                {item.canPermanentlyDelete && (
-                                                                                    <button
-                                                                                        type="button"
-                                                                                        onClick={() =>
-                                                                                            setPermanentDelete(
-                                                                                                item,
-                                                                                            )
-                                                                                        }
-                                                                                        disabled={
-                                                                                            isLoading
-                                                                                        }
-                                                                                        className="mr-auto inline-flex h-10 cursor-pointer items-center px-3 text-xs font-medium text-rose transition-[background-color,scale] duration-150 ease-out hover:bg-rose-tint active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose disabled:cursor-wait disabled:opacity-50"
-                                                                                    >
-                                                                                        {permanentlyDeleting ===
-                                                                                        item.id
-                                                                                            ? "Deleting..."
-                                                                                            : "Delete permanently"}
-                                                                                    </button>
-                                                                                )}
-                                                                                {item.canUndo && (
-                                                                                    <button
-                                                                                        type="button"
-                                                                                        onClick={() =>
-                                                                                            undo(
-                                                                                                item,
-                                                                                            )
-                                                                                        }
-                                                                                        disabled={
-                                                                                            isLoading
-                                                                                        }
-                                                                                        className={
-                                                                                            quietButtonClass
-                                                                                        }
-                                                                                    >
-                                                                                        {undoing ===
-                                                                                        item.id
-                                                                                            ? item.reversal ===
-                                                                                              "redo"
-                                                                                                ? "Redoing..."
-                                                                                                : "Undoing..."
-                                                                                            : item.reversal ===
-                                                                                                "redo"
-                                                                                              ? "Redo"
-                                                                                              : "Undo"}
-                                                                                    </button>
-                                                                                )}
-                                                                                {item.canRestore && (
-                                                                                    <button
-                                                                                        type="button"
-                                                                                        onClick={() =>
-                                                                                            setConfirmingRestore(
-                                                                                                item.id,
-                                                                                            )
-                                                                                        }
-                                                                                        disabled={
-                                                                                            isLoading
-                                                                                        }
-                                                                                        className={
-                                                                                            quietButtonClass
-                                                                                        }
-                                                                                    >
-                                                                                        Restore
-                                                                                        to
-                                                                                        this
-                                                                                        point
-                                                                                    </button>
-                                                                                )}
-                                                                            </>
-                                                                        )}
+                                                                            )}
                                                                     </div>
                                                                 )}
                                                             </div>
+                                                        ) : (
+                                                            !item.restoreTarget && (
+                                                                <p className="mt-3 text-xs leading-5 text-sub">
+                                                                    {item.undone
+                                                                        ? "This change was undone."
+                                                                        : item.category ===
+                                                                            "reverted"
+                                                                          ? "The original change is no longer available."
+                                                                          : "The changed fields were not saved."}
+                                                                </p>
+                                                            )
                                                         )}
-                                                    </li>
-                                                );
-                                            },
-                                        )}
-                                    </ol>
-                                </section>
-                            ))}
-                        </div>
 
-                        {hasMore && (
-                            <div className="mt-8 border-t border-hairline pt-4">
-                                <button
-                                    type="button"
-                                    onClick={loadOlder}
-                                    disabled={isLoading}
-                                    className="h-11 w-full cursor-pointer text-xs font-medium text-sub transition-[background-color,color,scale] duration-150 ease-out hover:bg-surface hover:text-ink active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-wait disabled:opacity-50"
-                                >
-                                    {isLoading &&
-                                    undoing === null &&
-                                    restoring === null
-                                        ? "Loading..."
-                                        : "Load older changes"}
-                                </button>
-                            </div>
-                        )}
+                                                        {item.undone &&
+                                                            item.changes
+                                                                .length > 0 && (
+                                                                <p className="mt-3 text-xs text-muted">
+                                                                    This change
+                                                                    was undone.
+                                                                </p>
+                                                            )}
+
+                                                        {(item.canUndo ||
+                                                            item.canRestore ||
+                                                            item.canPermanentlyDelete) && (
+                                                            <div
+                                                                className={`mt-4 flex min-h-13 flex-wrap items-center justify-end gap-1 pt-3 ${item.changes.length === 0 && !item.restoreTarget ? "border-t border-hairline" : ""}`}
+                                                            >
+                                                                {isConfirming ? (
+                                                                    <>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() =>
+                                                                                setConfirmingRestore(
+                                                                                    null,
+                                                                                )
+                                                                            }
+                                                                            disabled={
+                                                                                isLoading
+                                                                            }
+                                                                            className={
+                                                                                quietButtonClass
+                                                                            }
+                                                                        >
+                                                                            Cancel
+                                                                        </button>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() =>
+                                                                                restore(
+                                                                                    item,
+                                                                                )
+                                                                            }
+                                                                            disabled={
+                                                                                isLoading
+                                                                            }
+                                                                            className={
+                                                                                primaryButtonClass
+                                                                            }
+                                                                        >
+                                                                            {restoring ===
+                                                                            item.id
+                                                                                ? "Restoring..."
+                                                                                : "Restore"}
+                                                                        </button>
+                                                                    </>
+                                                                ) : (
+                                                                    <>
+                                                                        {item.canPermanentlyDelete && (
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() =>
+                                                                                    setPermanentDelete(
+                                                                                        item,
+                                                                                    )
+                                                                                }
+                                                                                disabled={
+                                                                                    isLoading
+                                                                                }
+                                                                                className="mr-auto inline-flex h-10 cursor-pointer items-center px-3 text-xs font-medium text-rose transition-[background-color,scale] duration-150 ease-out hover:bg-rose-tint active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose disabled:cursor-wait disabled:opacity-50"
+                                                                            >
+                                                                                {permanentlyDeleting ===
+                                                                                item.id
+                                                                                    ? "Deleting..."
+                                                                                    : "Delete permanently"}
+                                                                            </button>
+                                                                        )}
+                                                                        {item.canUndo && (
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() =>
+                                                                                    undo(
+                                                                                        item,
+                                                                                    )
+                                                                                }
+                                                                                disabled={
+                                                                                    isLoading
+                                                                                }
+                                                                                className={
+                                                                                    quietButtonClass
+                                                                                }
+                                                                            >
+                                                                                {undoing ===
+                                                                                item.id
+                                                                                    ? item.reversal ===
+                                                                                      "redo"
+                                                                                        ? "Redoing..."
+                                                                                        : "Undoing..."
+                                                                                    : item.reversal ===
+                                                                                        "redo"
+                                                                                      ? "Redo"
+                                                                                      : "Undo"}
+                                                                            </button>
+                                                                        )}
+                                                                        {item.canRestore && (
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() =>
+                                                                                    setConfirmingRestore(
+                                                                                        item.id,
+                                                                                    )
+                                                                                }
+                                                                                disabled={
+                                                                                    isLoading
+                                                                                }
+                                                                                className={
+                                                                                    quietButtonClass
+                                                                                }
+                                                                            >
+                                                                                Restore
+                                                                                to
+                                                                                this
+                                                                                point
+                                                                            </button>
+                                                                        )}
+                                                                    </>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </li>
+                                        );
+                                    })}
+                                </ol>
+                            </section>
+                        ))}
                     </div>
-                )}
 
-                {permanentDelete && (
-                    <ConfirmDialog
-                        title={
-                            permanentDeleteLabel
-                                ? `Permanently delete ${permanentDeleteLabel}?`
-                                : "Permanently delete this application?"
-                        }
-                        detail="This removes the application from this list and from every History entry. It cannot be restored or undone."
-                        confirmLabel="Delete permanently"
-                        tone="danger"
-                        onConfirm={() => {
-                            permanentlyDelete(permanentDelete);
-                            setPermanentDelete(null);
-                        }}
-                        onCancel={() => setPermanentDelete(null)}
-                    />
-                )}
+                    {hasMore && (
+                        <div className="mt-8 border-t border-hairline pt-4">
+                            <button
+                                type="button"
+                                onClick={loadOlder}
+                                disabled={isLoading}
+                                className="h-11 w-full cursor-pointer text-xs font-medium text-sub transition-[background-color,color,scale] duration-150 ease-out hover:bg-surface hover:text-ink active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-wait disabled:opacity-50"
+                            >
+                                {isLoading &&
+                                undoing === null &&
+                                restoring === null
+                                    ? "Loading..."
+                                    : "Load older changes"}
+                            </button>
+                        </div>
+                    )}
+                </div>
+            )}
 
-                {confirmingClear && (
-                    <ConfirmDialog
-                        title="Clear all history?"
-                        detail="This deletes every History entry for this list. Your list and applications will not change. This cannot be undone."
-                        confirmLabel="Clear history"
-                        tone="danger"
-                        onConfirm={() => {
-                            setConfirmingClear(false);
-                            clearHistory();
-                        }}
-                        onCancel={() => setConfirmingClear(false)}
-                    />
-                )}
-            </div>
-        </dialog>
+            {permanentDelete && (
+                <ConfirmDialog
+                    title={
+                        permanentDeleteLabel
+                            ? `Permanently delete ${permanentDeleteLabel}?`
+                            : "Permanently delete this application?"
+                    }
+                    detail="This removes the application from this list and from every History entry. It cannot be restored or undone."
+                    confirmLabel="Delete permanently"
+                    tone="danger"
+                    onConfirm={() => {
+                        permanentlyDelete(permanentDelete);
+                        setPermanentDelete(null);
+                    }}
+                    onCancel={() => setPermanentDelete(null)}
+                />
+            )}
+
+            {confirmingClear && (
+                <ConfirmDialog
+                    title="Clear all history?"
+                    detail="This deletes every History entry for this list. Your list and applications will not change. This cannot be undone."
+                    confirmLabel="Clear history"
+                    tone="danger"
+                    onConfirm={() => {
+                        setConfirmingClear(false);
+                        clearHistory();
+                    }}
+                    onCancel={() => setConfirmingClear(false)}
+                />
+            )}
+        </>
     );
 };

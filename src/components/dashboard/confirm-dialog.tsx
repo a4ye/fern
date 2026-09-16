@@ -45,6 +45,10 @@ export const ConfirmDialog = ({
             aria-labelledby="confirm-dialog-title"
             onCancel={(event) => {
                 event.preventDefault();
+                // React walks the fiber tree for `cancel` even though the DOM
+                // event never bubbles, so an Escape in here would otherwise
+                // also close the dialog this one confirms against.
+                event.stopPropagation();
                 close(onCancel);
             }}
             onClick={(event) => {

@@ -4,7 +4,6 @@ import { useState } from "react";
 import { saveApplicationDetail } from "@/app/dashboard/actions";
 import {
     BasicsFields,
-    Drawer,
     DrawerFooter,
     DrawerHeader,
     NotesField,
@@ -18,7 +17,7 @@ import {
     secondaryButtonClass,
 } from "@/components/dashboard/table-controls";
 import { LocalDateTime } from "@/components/dashboard/local-date-time";
-import { useModalDialog } from "@/components/dashboard/use-modal-dialog";
+import { useOverlayDismiss } from "@/components/dashboard/overlay-shell";
 import {
     STATUS_META,
     browserTimeZone,
@@ -54,14 +53,12 @@ export const ApplicationPanel = ({
     listId,
     app,
     extras,
-    onClose,
 }: {
     listId: string;
     app: ApplicationRow;
     extras: ApplicationExtras;
-    onClose: () => void;
 }) => {
-    const { ref: dialogRef, close } = useModalDialog();
+    const dismiss = useOverlayDismiss();
     const [draft, setDraft] = useState<ApplicationFields>(() =>
         draftOf(app, extras),
     );
@@ -75,8 +72,6 @@ export const ApplicationPanel = ({
         key: K,
         value: ApplicationFields[K],
     ) => setDraft((current) => ({ ...current, [key]: value }));
-
-    const dismiss = () => close(onClose);
 
     const save = async () => {
         if (saving || !draft.company.trim()) return;
@@ -139,7 +134,7 @@ export const ApplicationPanel = ({
     ];
 
     return (
-        <Drawer dialogRef={dialogRef} onDismiss={dismiss}>
+        <>
             <DrawerHeader
                 title={app.company}
                 subtitle={app.role ?? ""}
@@ -235,6 +230,6 @@ export const ApplicationPanel = ({
                 submitLabel={saving ? "Saving" : "Save"}
                 submitDisabled={!draft.company.trim() || saving}
             />
-        </Drawer>
+        </>
     );
 };

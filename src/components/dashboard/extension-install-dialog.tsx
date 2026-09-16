@@ -35,6 +35,10 @@ export const ExtensionInstallDialog = ({
             aria-labelledby="extension-dialog-title"
             onCancel={(event) => {
                 event.preventDefault();
+                // React walks the fiber tree for `cancel` even though the DOM
+                // event never bubbles, so an Escape in here would otherwise
+                // also close the drawer this dialog opens over.
+                event.stopPropagation();
                 close(onClose);
             }}
             onClick={(event) => {

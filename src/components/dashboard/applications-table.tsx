@@ -67,6 +67,10 @@ import {
     DeferredDrawerLoading,
 } from "@/components/dashboard/deferred-overlay-loading";
 import {
+    OverlayDialog,
+    OverlayDrawer,
+} from "@/components/dashboard/overlay-shell";
+import {
     STATUS_META,
     arrangementLabel,
     browserTimeZone,
@@ -1203,23 +1207,29 @@ export const ApplicationsTable = ({
             </div>
 
             {adding && !bulkMode && (
-                <AddApplicationForm
-                    listId={listId}
-                    defaultCurrency={defaultCurrency}
-                    cleanLinks={cleanLinks}
-                    employerLinks={employerLinks}
-                    tidyTitles={tidyTitles}
-                    onClose={() => setAdding(false)}
-                />
+                <OverlayDrawer onClose={() => setAdding(false)}>
+                    <AddApplicationForm
+                        listId={listId}
+                        defaultCurrency={defaultCurrency}
+                        cleanLinks={cleanLinks}
+                        employerLinks={employerLinks}
+                        tidyTitles={tidyTitles}
+                    />
+                </OverlayDrawer>
             )}
 
             {importing && !bulkMode && (
-                <ImportDialog
-                    listId={listId}
-                    applications={optimisticApplications}
-                    defaultCurrency={defaultCurrency}
+                <OverlayDialog
+                    className="m-auto max-h-[85vh] w-180 max-w-[calc(100vw-2rem)] border-0 bg-background p-0 shadow-lg backdrop:bg-ink/25"
+                    panelClassName="flex max-h-[85vh] flex-col"
                     onClose={() => setImporting(false)}
-                />
+                >
+                    <ImportDialog
+                        listId={listId}
+                        applications={optimisticApplications}
+                        defaultCurrency={defaultCurrency}
+                    />
+                </OverlayDialog>
             )}
 
             {optimisticApplications.length === 0 ? (
@@ -1351,12 +1361,13 @@ export const ApplicationsTable = ({
             )}
 
             {editing && editingRow && (
-                <ApplicationPanel
-                    listId={listId}
-                    app={editingRow}
-                    extras={editing.extras}
-                    onClose={() => setEditing(null)}
-                />
+                <OverlayDrawer onClose={() => setEditing(null)}>
+                    <ApplicationPanel
+                        listId={listId}
+                        app={editingRow}
+                        extras={editing.extras}
+                    />
+                </OverlayDrawer>
             )}
 
             {confirmingDelete && (

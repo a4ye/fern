@@ -13,6 +13,7 @@ import {
 import { ConfirmDialog } from "@/components/dashboard/confirm-dialog";
 import type { ListStatus } from "@/components/dashboard/data";
 import { DeferredDialogLoading } from "@/components/dashboard/deferred-overlay-loading";
+import { OverlayDialog } from "@/components/dashboard/overlay-shell";
 import {
     ghostButtonClass,
     primaryButtonClass,
@@ -28,11 +29,7 @@ const HistoryDialog = dynamic(
         ),
     {
         loading: () => (
-            <DeferredDialogLoading
-                title="History"
-                label="Loading history..."
-                tall
-            />
+            <DeferredDialogLoading title="History" label="Loading history..." />
         ),
     },
 );
@@ -304,12 +301,17 @@ export const ListHeader = ({
             </div>
 
             {showingHistory && (
-                <HistoryDialog
-                    listId={listId}
-                    initialPage={history}
-                    defaultCurrency={defaultCurrency}
+                <OverlayDialog
+                    className="m-auto h-[min(45rem,calc(100dvh-2rem))] w-[calc(100dvw-2rem)] max-w-3xl overflow-hidden border-0 bg-background p-0 shadow-lg backdrop:bg-ink/25 sm:h-[min(45rem,calc(100dvh-3rem))] sm:w-[calc(100dvw-3rem)]"
+                    panelClassName="flex h-full min-h-0 flex-col border border-hairline"
                     onClose={() => setShowingHistory(false)}
-                />
+                >
+                    <HistoryDialog
+                        listId={listId}
+                        initialPage={history}
+                        defaultCurrency={defaultCurrency}
+                    />
+                </OverlayDialog>
             )}
 
             {confirmingDelete && (

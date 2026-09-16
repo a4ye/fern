@@ -17,7 +17,10 @@ import {
     primaryButtonClass,
     secondaryButtonClass,
 } from "@/components/dashboard/table-controls";
-import { useModalDialog } from "@/components/dashboard/use-modal-dialog";
+import {
+    DIALOG_TITLE_ID,
+    useOverlayDismiss,
+} from "@/components/dashboard/overlay-shell";
 import {
     IMPORT_FIELDS,
     matchColumns,
@@ -36,8 +39,6 @@ import {
     type RowOutcome,
     type Sheet,
 } from "@/lib/import/rows";
-
-const TITLE_ID = "import-dialog-title";
 
 type Step = "file" | "map" | "review";
 
@@ -767,14 +768,12 @@ export const ImportDialog = ({
     listId,
     applications,
     defaultCurrency,
-    onClose,
 }: {
     listId: string;
     applications: ApplicationRow[];
     defaultCurrency: string;
-    onClose: () => void;
 }) => {
-    const { ref: dialogRef, close } = useModalDialog();
+    const dismiss = useOverlayDismiss();
     const [step, setStep] = useState<Step>("file");
     const [sheet, setSheet] = useState<Sheet | null>(null);
     const [mapping, setMapping] = useState<ColumnMapping>({});
@@ -792,8 +791,6 @@ export const ImportDialog = ({
     const [keeping, setKeeping] = useState<ReadonlySet<number>>(new Set());
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
-
-    const dismiss = () => close(onClose);
 
     const listKeys = useMemo(() => existingIndex(applications), [applications]);
 
@@ -915,177 +912,156 @@ export const ImportDialog = ({
             ? "Choose which column holds the company name."
             : null);
 
-    // `display` stays the browser's to set. A `flex` class on the dialog would
-    // outrank the user-agent's `dialog:not([open]) { display: none }` and leave
-    // it laid out after it closes, so the layout goes on an inner element, the
-    // same way the drawer does it.
     return (
-        <dialog
-            ref={dialogRef}
-            aria-labelledby={TITLE_ID}
-            onCancel={(event) => {
-                event.preventDefault();
-                dismiss();
-            }}
-            onClick={(event) => {
-                if (event.target === dialogRef.current) dismiss();
-            }}
-            className="m-auto max-h-[85vh] w-180 max-w-[calc(100vw-2rem)] border-0 bg-background p-0 shadow-lg backdrop:bg-ink/25"
-        >
-            <div className="flex max-h-[85vh] flex-col">
-                <div className="h-0.75 shrink-0 bg-accent" aria-hidden="true" />
-                <header className="shrink-0 border-x border-b border-hairline px-4 py-4 sm:px-5">
-                    <div className="flex items-start gap-3">
-                        <div className="min-w-0 flex-1">
-                            <h2
-                                id={TITLE_ID}
-                                className="truncate text-sm font-medium text-ink"
-                            >
-                                Import applications
-                            </h2>
-                            <p className="mt-0.5 h-4 truncate text-xs text-sub">
-                                {step === "file"
-                                    ? "Add applications from a CSV or Excel file."
-                                    : sheet
-                                      ? `${countLabel(sheet.rows.length, "row")} read from your file.`
-                                      : ""}
-                            </p>
-                        </div>
-                        <button
-                            type="button"
-                            onClick={dismiss}
-                            aria-label="Close"
-                            title="Close"
-                            className="-mr-1 shrink-0 cursor-pointer p-1 text-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        <>
+            <div className="h-0.75 shrink-0 bg-accent" aria-hidden="true" />
+            <header className="shrink-0 border-x border-b border-hairline px-4 py-4 sm:px-5">
+                <div className="flex items-start gap-3">
+                    <div className="min-w-0 flex-1">
+                        <h2
+                            id={DIALOG_TITLE_ID}
+                            className="truncate text-sm font-medium text-ink"
                         >
-                            <span
-                                aria-hidden="true"
-                                className="icon-[lucide--x] block size-4"
-                            />
-                        </button>
+                            Import applications
+                        </h2>
+                        <p className="mt-0.5 h-4 truncate text-xs text-sub">
+                            {step === "file"
+                                ? "Add applications from a CSV or Excel file."
+                                : sheet
+                                  ? `${countLabel(sheet.rows.length, "row")} read from your file.`
+                                  : ""}
+                        </p>
                     </div>
-                    <div className="mt-3 border-t border-faint pt-3">
-                        <Stepper step={step} />
-                    </div>
-                </header>
-
-                <div className="min-h-0 flex-1 overflow-y-auto border-x border-hairline px-4 py-5 sm:px-5">
-                    {step === "file" && (
-                        <FileStep busy={busy} onPick={pickFile} />
-                    )}
-                    {step === "map" && sheet && (
-                        <MapStep
-                            sheet={sheet}
-                            mapping={mapping}
-                            statusEdits={statusEdits}
-                            arrangementEdits={arrangementEdits}
-                            fallbackStatus={fallbackStatus}
-                            onMap={remap}
-                            onStatus={(value, status) =>
-                                setStatusEdits((current) => ({
-                                    ...current,
-                                    [valueKey(value)]: status,
-                                }))
-                            }
-                            onArrangement={(value, arrangement) =>
-                                setArrangementEdits((current) => ({
-                                    ...current,
-                                    [valueKey(value)]: arrangement,
-                                }))
-                            }
-                            onFallbackStatus={setFallbackStatus}
+                    <button
+                        type="button"
+                        onClick={dismiss}
+                        aria-label="Close"
+                        title="Close"
+                        className="-mr-1 shrink-0 cursor-pointer p-1 text-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                    >
+                        <span
+                            aria-hidden="true"
+                            className="icon-[lucide--x] block size-4"
                         />
-                    )}
-                    {step === "review" && (
-                        <ReviewStep
-                            outcomes={outcomes}
-                            keeping={keeping}
-                            onKeep={(line, keep) =>
-                                setKeeping((current) => {
-                                    const next = new Set(current);
-                                    if (keep) next.add(line);
-                                    else next.delete(line);
-                                    return next;
-                                })
-                            }
-                            onKeepAll={(keep) =>
-                                setKeeping(
-                                    keep
-                                        ? new Set(
-                                              outcomes
-                                                  .filter(
-                                                      (outcome) =>
-                                                          outcome.kind ===
-                                                          "duplicate",
-                                                  )
-                                                  .map(
-                                                      (outcome) => outcome.line,
-                                                  ),
-                                          )
-                                        : new Set(),
-                                )
-                            }
-                        />
-                    )}
+                    </button>
                 </div>
+                <div className="mt-3 border-t border-faint pt-3">
+                    <Stepper step={step} />
+                </div>
+            </header>
 
-                <footer className="flex shrink-0 flex-wrap items-center justify-end gap-x-1 gap-y-2 border-x border-t border-b border-hairline px-4 py-3 sm:px-5">
-                    {/* Beside the buttons where there is room for it, on its own
+            <div className="min-h-0 flex-1 overflow-y-auto border-x border-hairline px-4 py-5 sm:px-5">
+                {step === "file" && <FileStep busy={busy} onPick={pickFile} />}
+                {step === "map" && sheet && (
+                    <MapStep
+                        sheet={sheet}
+                        mapping={mapping}
+                        statusEdits={statusEdits}
+                        arrangementEdits={arrangementEdits}
+                        fallbackStatus={fallbackStatus}
+                        onMap={remap}
+                        onStatus={(value, status) =>
+                            setStatusEdits((current) => ({
+                                ...current,
+                                [valueKey(value)]: status,
+                            }))
+                        }
+                        onArrangement={(value, arrangement) =>
+                            setArrangementEdits((current) => ({
+                                ...current,
+                                [valueKey(value)]: arrangement,
+                            }))
+                        }
+                        onFallbackStatus={setFallbackStatus}
+                    />
+                )}
+                {step === "review" && (
+                    <ReviewStep
+                        outcomes={outcomes}
+                        keeping={keeping}
+                        onKeep={(line, keep) =>
+                            setKeeping((current) => {
+                                const next = new Set(current);
+                                if (keep) next.add(line);
+                                else next.delete(line);
+                                return next;
+                            })
+                        }
+                        onKeepAll={(keep) =>
+                            setKeeping(
+                                keep
+                                    ? new Set(
+                                          outcomes
+                                              .filter(
+                                                  (outcome) =>
+                                                      outcome.kind ===
+                                                      "duplicate",
+                                              )
+                                              .map((outcome) => outcome.line),
+                                      )
+                                    : new Set(),
+                            )
+                        }
+                    />
+                )}
+            </div>
+
+            <footer className="flex shrink-0 flex-wrap items-center justify-end gap-x-1 gap-y-2 border-x border-t border-b border-hairline px-4 py-3 sm:px-5">
+                {/* Beside the buttons where there is room for it, on its own
                     line where there is not: a reason clipped to three words is
                     no reason at all. */}
-                    {note && (
-                        <p
-                            className={`min-w-0 truncate text-xs max-sm:w-full sm:mr-auto ${error ? "text-rose" : "text-muted"}`}
-                        >
-                            {note}
-                        </p>
-                    )}
-                    {step === "review" ? (
-                        <button
-                            type="button"
-                            onClick={() => setStep("map")}
-                            className={ghostButtonClass}
-                        >
-                            Back
-                        </button>
-                    ) : (
-                        <button
-                            type="button"
-                            onClick={dismiss}
-                            className={ghostButtonClass}
-                        >
-                            Cancel
-                        </button>
-                    )}
-                    {step === "map" && (
-                        <button
-                            type="button"
-                            onClick={() => setStep("review")}
-                            disabled={!companyMapped}
-                            className={primaryButtonClass}
-                        >
-                            Continue
-                        </button>
-                    )}
-                    {step === "review" && (
-                        <button
-                            type="button"
-                            onClick={run}
-                            disabled={busy || readyCount === 0}
-                            className={primaryButtonClass}
-                        >
-                            {/* The label holds still while the import runs and
+                {note && (
+                    <p
+                        className={`min-w-0 truncate text-xs max-sm:w-full sm:mr-auto ${error ? "text-rose" : "text-muted"}`}
+                    >
+                        {note}
+                    </p>
+                )}
+                {step === "review" ? (
+                    <button
+                        type="button"
+                        onClick={() => setStep("map")}
+                        className={ghostButtonClass}
+                    >
+                        Back
+                    </button>
+                ) : (
+                    <button
+                        type="button"
+                        onClick={dismiss}
+                        className={ghostButtonClass}
+                    >
+                        Cancel
+                    </button>
+                )}
+                {step === "map" && (
+                    <button
+                        type="button"
+                        onClick={() => setStep("review")}
+                        disabled={!companyMapped}
+                        className={primaryButtonClass}
+                    >
+                        Continue
+                    </button>
+                )}
+                {step === "review" && (
+                    <button
+                        type="button"
+                        onClick={run}
+                        disabled={busy || readyCount === 0}
+                        className={primaryButtonClass}
+                    >
+                        {/* The label holds still while the import runs and
                             the spinner keeps its place either way, so pressing
                             the button cannot resize it and shove the row. */}
-                            <span
-                                aria-hidden="true"
-                                className={`icon-[lucide--loader-circle] mr-1.5 size-3.5 shrink-0 animate-spin ${busy ? "" : "invisible"}`}
-                            />
-                            Import {countLabel(readyCount, "application")}
-                        </button>
-                    )}
-                </footer>
-            </div>
-        </dialog>
+                        <span
+                            aria-hidden="true"
+                            className={`icon-[lucide--loader-circle] mr-1.5 size-3.5 shrink-0 animate-spin ${busy ? "" : "invisible"}`}
+                        />
+                        Import {countLabel(readyCount, "application")}
+                    </button>
+                )}
+            </footer>
+        </>
     );
 };

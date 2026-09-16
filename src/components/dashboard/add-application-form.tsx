@@ -16,7 +16,6 @@ import {
 import { recordPostingRead } from "@/app/dashboard/metrics-actions";
 import {
     BasicsFields,
-    Drawer,
     DrawerFooter,
     DrawerHeader,
     EMPTY_FIELDS,
@@ -33,7 +32,10 @@ import {
     STATUS_OPTIONS,
     quietButtonClass,
 } from "@/components/dashboard/table-controls";
-import { useModalDialog } from "@/components/dashboard/use-modal-dialog";
+import {
+    useOverlayDismiss,
+    useOverlayTeardown,
+} from "@/components/dashboard/overlay-shell";
 import { useJobImportExtension } from "@/components/dashboard/use-job-import-extension";
 import { APP_NAME } from "@/lib/site";
 import {
@@ -102,16 +104,14 @@ export const AddApplicationForm = ({
     cleanLinks,
     employerLinks,
     tidyTitles,
-    onClose,
 }: {
     listId: string;
     defaultCurrency: string;
     cleanLinks: boolean;
     employerLinks: boolean;
     tidyTitles: boolean;
-    onClose: () => void;
 }) => {
-    const { ref: dialogRef, close } = useModalDialog();
+    const dismiss = useOverlayDismiss();
     const [draft, setDraft] = useState<ApplicationFields>({
         ...EMPTY_FIELDS,
         payCurrency: defaultCurrency,
@@ -157,10 +157,7 @@ export const AddApplicationForm = ({
         setFetching(false);
     };
 
-    const dismiss = () => {
-        dropFetch();
-        close(onClose);
-    };
+    useOverlayTeardown(dropFetch);
 
     const set = <K extends keyof ApplicationFields>(
         key: K,
@@ -488,299 +485,293 @@ export const AddApplicationForm = ({
 
     return (
         <>
-            <Drawer dialogRef={dialogRef} onDismiss={dismiss}>
-                <DrawerHeader
-                    title="New application"
-                    subtitle="Start with the posting link."
-                    onDismiss={dismiss}
-                />
+            <DrawerHeader
+                title="New application"
+                subtitle="Start with the posting link."
+                onDismiss={dismiss}
+            />
 
-                <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
-                    {/* The link leads, on a plate of its own, because a pasted one
+            <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
+                {/* The link leads, on a plate of its own, because a pasted one
                     answers most of the form below and typing first throws that
                     work away. */}
-                    <section className="border-b border-hairline bg-surface px-5 py-5">
-                        <label
-                            htmlFor={LINK_INPUT_ID}
-                            className="block text-sm font-medium text-ink"
-                        >
-                            Paste or scan a job posting link
-                        </label>
-                        <div className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-                            <div className="relative min-w-0">
+                <section className="border-b border-hairline bg-surface px-5 py-5">
+                    <label
+                        htmlFor={LINK_INPUT_ID}
+                        className="block text-sm font-medium text-ink"
+                    >
+                        Paste or scan a job posting link
+                    </label>
+                    <div className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+                        <div className="relative min-w-0">
+                            <span
+                                aria-hidden="true"
+                                className="icon-[lucide--link] pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted"
+                            />
+                            <input
+                                id={LINK_INPUT_ID}
+                                value={draft.url}
+                                onChange={(event) =>
+                                    onLinkChange(event.target.value)
+                                }
+                                onPaste={onPaste}
+                                onKeyDown={onLinkKeyDown}
+                                placeholder="https://"
+                                autoFocus
+                                maxLength={URL_MAX}
+                                className={`h-10 w-full border border-hairline bg-background pl-9 text-sm text-ink transition-colors placeholder:text-muted focus:border-accent focus:outline-none ${fetching ? "pr-20" : "pr-3"}`}
+                            />
+                            {fetching && (
+                                <div className="absolute top-1/2 right-3 flex -translate-y-1/2 items-center gap-2">
+                                    <span
+                                        aria-hidden="true"
+                                        className="icon-[lucide--loader-circle] size-3.5 animate-spin text-muted"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={skipFetch}
+                                        className={quietButtonClass}
+                                    >
+                                        Skip
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                        <QrLinkScanner disabled={fetching} onScan={onQrScan} />
+                    </div>
+                    {employerUrl ? (
+                        <div className="mt-3 bg-background px-3 py-3 shadow-sm">
+                            <div
+                                role="status"
+                                className="flex items-start gap-3"
+                            >
                                 <span
                                     aria-hidden="true"
-                                    className="icon-[lucide--link] pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted"
-                                />
-                                <input
-                                    id={LINK_INPUT_ID}
-                                    value={draft.url}
-                                    onChange={(event) =>
-                                        onLinkChange(event.target.value)
-                                    }
-                                    onPaste={onPaste}
-                                    onKeyDown={onLinkKeyDown}
-                                    placeholder="https://"
-                                    autoFocus
-                                    maxLength={URL_MAX}
-                                    className={`h-10 w-full border border-hairline bg-background pl-9 text-sm text-ink transition-colors placeholder:text-muted focus:border-accent focus:outline-none ${fetching ? "pr-20" : "pr-3"}`}
-                                />
-                                {fetching && (
-                                    <div className="absolute top-1/2 right-3 flex -translate-y-1/2 items-center gap-2">
+                                    className="flex size-8 shrink-0 items-center justify-center bg-accent-tint-soft text-accent-deep"
+                                >
+                                    <span className="icon-[lucide--external-link] size-4" />
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                    <p className="text-balance text-sm font-medium text-ink">
+                                        Employer link available
+                                    </p>
+                                    <p className="mt-0.5 text-pretty text-xs text-sub">
+                                        Replace the Simplify URL with the source
+                                        listing?
+                                    </p>
+                                    <p
+                                        title={employerUrl}
+                                        className="mt-2 flex min-w-0 items-start gap-1.5 text-xs font-medium text-accent-deep"
+                                    >
                                         <span
                                             aria-hidden="true"
-                                            className="icon-[lucide--loader-circle] size-3.5 animate-spin text-muted"
+                                            className="icon-[lucide--globe-2] mt-px size-3.5 shrink-0"
                                         />
-                                        <button
-                                            type="button"
-                                            onClick={skipFetch}
-                                            className={quietButtonClass}
-                                        >
-                                            Skip
-                                        </button>
-                                    </div>
-                                )}
+                                        <span className="break-words">
+                                            {employerHost(employerUrl)}
+                                        </span>
+                                    </p>
+                                </div>
                             </div>
-                            <QrLinkScanner
-                                disabled={fetching}
-                                onScan={onQrScan}
-                            />
+                            <div className="mt-3 flex justify-end gap-1 border-t border-faint pt-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setEmployerUrl(null)}
+                                    className={`${LINK_CHOICE_BUTTON_CLASS} text-sub hover:bg-surface hover:text-ink`}
+                                >
+                                    Keep Simplify
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={acceptEmployerUrl}
+                                    className={`${LINK_CHOICE_BUTTON_CLASS} bg-accent text-background hover:bg-accent-deep`}
+                                >
+                                    Use original link
+                                </button>
+                            </div>
                         </div>
-                        {employerUrl ? (
-                            <div className="mt-3 bg-background px-3 py-3 shadow-sm">
-                                <div
+                    ) : visibleImportUrl ? (
+                        <div
+                            role="status"
+                            className="mt-3 bg-background px-3 py-3 shadow-sm"
+                        >
+                            <div className="flex items-start gap-3">
+                                <span
+                                    aria-hidden="true"
+                                    className="flex size-8 shrink-0 items-center justify-center bg-gold-tint text-gold"
+                                >
+                                    <span className="icon-[lucide--panels-top-left] size-4" />
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                    <p className="text-balance text-sm font-medium text-ink">
+                                        Open this posting to finish importing
+                                    </p>
+                                    <p className="mt-0.5 text-pretty text-xs leading-5 text-sub">
+                                        Some job sites need to be opened once
+                                        before {APP_NAME} can fill their
+                                        details.
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="mt-3 flex justify-end border-t border-faint pt-2">
+                                <button
+                                    type="button"
+                                    onClick={openAndImport}
+                                    className={`${LINK_CHOICE_BUTTON_CLASS} gap-1.5 bg-accent text-background hover:bg-accent-deep`}
+                                >
+                                    Open posting &amp; import
+                                    <span
+                                        aria-hidden="true"
+                                        className="icon-[lucide--arrow-up-right] size-3.5"
+                                    />
+                                </button>
+                            </div>
+                        </div>
+                    ) : extension.availability === "missing" ? (
+                        <div className="mt-3 bg-background px-3 py-3 shadow-sm">
+                            <div className="flex items-start gap-3">
+                                <span
+                                    aria-hidden="true"
+                                    className="flex size-8 shrink-0 items-center justify-center bg-accent-tint-soft text-accent-deep"
+                                >
+                                    <span className="icon-[lucide--zap] size-4" />
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                    <p className="text-balance text-sm font-medium text-ink">
+                                        Import faster from more job sites
+                                    </p>
+                                    <p className="mt-0.5 text-pretty text-xs leading-5 text-sub">
+                                        Add the browser extension to fill
+                                        details from more sites. Already
+                                        installed? Refresh this page once.
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="mt-3 flex justify-end gap-1 border-t border-faint pt-2">
+                                <button
+                                    type="button"
+                                    onClick={() => window.location.reload()}
+                                    className={`${LINK_CHOICE_BUTTON_CLASS} gap-1.5 text-sub hover:bg-surface hover:text-ink`}
+                                >
+                                    Refresh page
+                                    <span
+                                        aria-hidden="true"
+                                        className="icon-[lucide--refresh-cw] size-3.5"
+                                    />
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setInstallOpen(true)}
+                                    className={`${LINK_CHOICE_BUTTON_CLASS} gap-1.5 text-accent-deep hover:bg-accent-tint-soft`}
+                                >
+                                    About the extension
+                                    <span
+                                        aria-hidden="true"
+                                        className="icon-[lucide--arrow-right] size-3.5"
+                                    />
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <p className="mt-2 flex items-start gap-1.5 text-pretty text-xs text-sub">
+                            {extension.availability === "available" && (
+                                <span
+                                    aria-hidden="true"
+                                    className="icon-[lucide--zap] mt-px size-3.5 shrink-0 text-accent-deep"
+                                />
+                            )}
+                            <span>
+                                {extension.availability === "available"
+                                    ? "Faster imports are ready. Paste a link to fill the details."
+                                    : "The company, role, location, and pay fill themselves in. No link? Fill the fields in below."}
+                            </span>
+                        </p>
+                    )}
+                </section>
+
+                {/* The fields are held while a link is being read, since the
+                    answer lands on all of them at once and would take anything
+                    typed in the meantime with it. Skip gives them back. */}
+                <BasicsFields
+                    draft={draft}
+                    set={set}
+                    disabled={fetching}
+                    companyRef={companyRef}
+                    omitLink
+                    roleNote={
+                        tidyRole && (
+                            <div className="bg-surface px-3 py-2.5 shadow-sm">
+                                <p
                                     role="status"
-                                    className="flex items-start gap-3"
+                                    className="flex items-start gap-1.5 text-xs text-sub"
                                 >
                                     <span
                                         aria-hidden="true"
-                                        className="flex size-8 shrink-0 items-center justify-center bg-accent-tint-soft text-accent-deep"
-                                    >
-                                        <span className="icon-[lucide--external-link] size-4" />
+                                        className="icon-[lucide--scissors] mt-px size-3.5 shrink-0 text-accent-deep"
+                                    />
+                                    <span className="text-pretty">
+                                        Shorter title available
                                     </span>
-                                    <div className="min-w-0 flex-1">
-                                        <p className="text-balance text-sm font-medium text-ink">
-                                            Employer link available
-                                        </p>
-                                        <p className="mt-0.5 text-pretty text-xs text-sub">
-                                            Replace the Simplify URL with the
-                                            source listing?
-                                        </p>
-                                        <p
-                                            title={employerUrl}
-                                            className="mt-2 flex min-w-0 items-start gap-1.5 text-xs font-medium text-accent-deep"
-                                        >
-                                            <span
-                                                aria-hidden="true"
-                                                className="icon-[lucide--globe-2] mt-px size-3.5 shrink-0"
-                                            />
-                                            <span className="break-words">
-                                                {employerHost(employerUrl)}
-                                            </span>
-                                        </p>
-                                    </div>
-                                </div>
-                                <div className="mt-3 flex justify-end gap-1 border-t border-faint pt-2">
+                                </p>
+                                <p className="mt-1.5 text-pretty text-sm font-medium text-ink">
+                                    {tidyRole}
+                                </p>
+                                <div className="mt-2 flex justify-end gap-1 border-t border-faint pt-2">
                                     <button
                                         type="button"
-                                        onClick={() => setEmployerUrl(null)}
-                                        className={`${LINK_CHOICE_BUTTON_CLASS} text-sub hover:bg-surface hover:text-ink`}
+                                        onClick={() => setTidyRole(null)}
+                                        className={`${LINK_CHOICE_BUTTON_CLASS} text-sub hover:bg-background hover:text-ink`}
                                     >
-                                        Keep Simplify
+                                        Keep as posted
                                     </button>
                                     <button
                                         type="button"
-                                        onClick={acceptEmployerUrl}
+                                        onClick={acceptTidyRole}
                                         className={`${LINK_CHOICE_BUTTON_CLASS} bg-accent text-background hover:bg-accent-deep`}
                                     >
-                                        Use original link
+                                        Use shorter title
                                     </button>
                                 </div>
                             </div>
-                        ) : visibleImportUrl ? (
-                            <div
-                                role="status"
-                                className="mt-3 bg-background px-3 py-3 shadow-sm"
-                            >
-                                <div className="flex items-start gap-3">
-                                    <span
-                                        aria-hidden="true"
-                                        className="flex size-8 shrink-0 items-center justify-center bg-gold-tint text-gold"
-                                    >
-                                        <span className="icon-[lucide--panels-top-left] size-4" />
-                                    </span>
-                                    <div className="min-w-0 flex-1">
-                                        <p className="text-balance text-sm font-medium text-ink">
-                                            Open this posting to finish
-                                            importing
-                                        </p>
-                                        <p className="mt-0.5 text-pretty text-xs leading-5 text-sub">
-                                            Some job sites need to be opened
-                                            once before {APP_NAME} can fill
-                                            their details.
-                                        </p>
-                                    </div>
-                                </div>
-                                <div className="mt-3 flex justify-end border-t border-faint pt-2">
-                                    <button
-                                        type="button"
-                                        onClick={openAndImport}
-                                        className={`${LINK_CHOICE_BUTTON_CLASS} gap-1.5 bg-accent text-background hover:bg-accent-deep`}
-                                    >
-                                        Open posting &amp; import
-                                        <span
-                                            aria-hidden="true"
-                                            className="icon-[lucide--arrow-up-right] size-3.5"
-                                        />
-                                    </button>
-                                </div>
-                            </div>
-                        ) : extension.availability === "missing" ? (
-                            <div className="mt-3 bg-background px-3 py-3 shadow-sm">
-                                <div className="flex items-start gap-3">
-                                    <span
-                                        aria-hidden="true"
-                                        className="flex size-8 shrink-0 items-center justify-center bg-accent-tint-soft text-accent-deep"
-                                    >
-                                        <span className="icon-[lucide--zap] size-4" />
-                                    </span>
-                                    <div className="min-w-0 flex-1">
-                                        <p className="text-balance text-sm font-medium text-ink">
-                                            Import faster from more job sites
-                                        </p>
-                                        <p className="mt-0.5 text-pretty text-xs leading-5 text-sub">
-                                            Add the browser extension to fill
-                                            details from more sites. Already
-                                            installed? Refresh this page once.
-                                        </p>
-                                    </div>
-                                </div>
-                                <div className="mt-3 flex justify-end gap-1 border-t border-faint pt-2">
-                                    <button
-                                        type="button"
-                                        onClick={() => window.location.reload()}
-                                        className={`${LINK_CHOICE_BUTTON_CLASS} gap-1.5 text-sub hover:bg-surface hover:text-ink`}
-                                    >
-                                        Refresh page
-                                        <span
-                                            aria-hidden="true"
-                                            className="icon-[lucide--refresh-cw] size-3.5"
-                                        />
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setInstallOpen(true)}
-                                        className={`${LINK_CHOICE_BUTTON_CLASS} gap-1.5 text-accent-deep hover:bg-accent-tint-soft`}
-                                    >
-                                        About the extension
-                                        <span
-                                            aria-hidden="true"
-                                            className="icon-[lucide--arrow-right] size-3.5"
-                                        />
-                                    </button>
-                                </div>
-                            </div>
-                        ) : (
-                            <p className="mt-2 flex items-start gap-1.5 text-pretty text-xs text-sub">
-                                {extension.availability === "available" && (
-                                    <span
-                                        aria-hidden="true"
-                                        className="icon-[lucide--zap] mt-px size-3.5 shrink-0 text-accent-deep"
-                                    />
-                                )}
-                                <span>
-                                    {extension.availability === "available"
-                                        ? "Faster imports are ready. Paste a link to fill the details."
-                                        : "The company, role, location, and pay fill themselves in. No link? Fill the fields in below."}
-                                </span>
-                            </p>
-                        )}
-                    </section>
-
-                    {/* The fields are held while a link is being read, since the
-                    answer lands on all of them at once and would take anything
-                    typed in the meantime with it. Skip gives them back. */}
-                    <BasicsFields
-                        draft={draft}
-                        set={set}
-                        disabled={fetching}
-                        companyRef={companyRef}
-                        omitLink
-                        roleNote={
-                            tidyRole && (
-                                <div className="bg-surface px-3 py-2.5 shadow-sm">
-                                    <p
-                                        role="status"
-                                        className="flex items-start gap-1.5 text-xs text-sub"
-                                    >
-                                        <span
-                                            aria-hidden="true"
-                                            className="icon-[lucide--scissors] mt-px size-3.5 shrink-0 text-accent-deep"
-                                        />
-                                        <span className="text-pretty">
-                                            Shorter title available
-                                        </span>
-                                    </p>
-                                    <p className="mt-1.5 text-pretty text-sm font-medium text-ink">
-                                        {tidyRole}
-                                    </p>
-                                    <div className="mt-2 flex justify-end gap-1 border-t border-faint pt-2">
-                                        <button
-                                            type="button"
-                                            onClick={() => setTidyRole(null)}
-                                            className={`${LINK_CHOICE_BUTTON_CLASS} text-sub hover:bg-background hover:text-ink`}
-                                        >
-                                            Keep as posted
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={acceptTidyRole}
-                                            className={`${LINK_CHOICE_BUTTON_CLASS} bg-accent text-background hover:bg-accent-deep`}
-                                        >
-                                            Use shorter title
-                                        </button>
-                                    </div>
-                                </div>
-                            )
-                        }
-                        locationSuggestions={locationSuggestions}
-                        onDismissLocationSuggestions={() =>
-                            setLocationSuggestions([])
-                        }
-                    />
-
-                    <Section title="Status">
-                        <CellSelect
-                            label="Status"
-                            value={status}
-                            options={STATUS_OPTIONS}
-                            onChange={changeStatus}
-                            variant="form"
-                            searchable
-                            disabled={fetching}
-                        />
-                    </Section>
-
-                    <PayFields draft={draft} set={set} disabled={fetching} />
-                    <NotesField draft={draft} set={set} disabled={fetching} />
-                </div>
-
-                <DrawerFooter
-                    note={
-                        note && (
-                            <p
-                                className={`mr-auto min-w-0 truncate text-xs ${error ? "text-rose" : "text-muted"}`}
-                            >
-                                {note}
-                            </p>
                         )
                     }
-                    onCancel={dismiss}
-                    onSubmit={save}
-                    submitLabel={saving ? "Adding" : "Add"}
-                    submitDisabled={!draft.company.trim() || fetching || saving}
+                    locationSuggestions={locationSuggestions}
+                    onDismissLocationSuggestions={() =>
+                        setLocationSuggestions([])
+                    }
                 />
-            </Drawer>
+
+                <Section title="Status">
+                    <CellSelect
+                        label="Status"
+                        value={status}
+                        options={STATUS_OPTIONS}
+                        onChange={changeStatus}
+                        variant="form"
+                        searchable
+                        disabled={fetching}
+                    />
+                </Section>
+
+                <PayFields draft={draft} set={set} disabled={fetching} />
+                <NotesField draft={draft} set={set} disabled={fetching} />
+            </div>
+
+            <DrawerFooter
+                note={
+                    note && (
+                        <p
+                            className={`mr-auto min-w-0 truncate text-xs ${error ? "text-rose" : "text-muted"}`}
+                        >
+                            {note}
+                        </p>
+                    )
+                }
+                onCancel={dismiss}
+                onSubmit={save}
+                submitLabel={saving ? "Adding" : "Add"}
+                submitDisabled={!draft.company.trim() || fetching || saving}
+            />
             {installOpen && (
                 <ExtensionInstallDialog onClose={() => setInstallOpen(false)} />
             )}

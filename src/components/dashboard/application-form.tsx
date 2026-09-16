@@ -2,6 +2,7 @@
 
 import type { ReactNode, RefObject } from "react";
 import { LocationInput } from "@/components/dashboard/location-input";
+import { DRAWER_TITLE_ID } from "@/components/dashboard/overlay-shell";
 import {
     ARRANGEMENT_OPTIONS,
     CURRENCY_OPTIONS,
@@ -333,35 +334,6 @@ export const NotesField = ({
             className={`${fieldClass} resize-y`}
         />
     </Section>
-);
-
-export const DRAWER_TITLE_ID = "application-drawer-title";
-
-export const Drawer = ({
-    dialogRef,
-    onDismiss,
-    children,
-}: {
-    dialogRef: RefObject<HTMLDialogElement | null>;
-    onDismiss: () => void;
-    children: ReactNode;
-}) => (
-    <dialog
-        ref={dialogRef}
-        aria-labelledby={DRAWER_TITLE_ID}
-        onCancel={(event) => {
-            event.preventDefault();
-            onDismiss();
-        }}
-        onClick={(event) => {
-            if (event.target === dialogRef.current) onDismiss();
-        }}
-        className="drawer m-0 ml-auto h-dvh max-h-dvh w-120 max-w-full border-0 bg-background p-0 backdrop:bg-ink/25"
-    >
-        <div className="flex h-full flex-col border-l border-hairline">
-            {children}
-        </div>
-    </dialog>
 );
 
 // The subtitle keeps its line whether or not it says anything, so a drawer
