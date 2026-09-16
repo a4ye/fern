@@ -1,4 +1,5 @@
 import { LIST_PAGE_SIZE } from "@/components/dashboard/data";
+import { EmailSyncSkeleton } from "@/components/dashboard/email-sync-skeleton";
 import {
     LIST_ROW_ACTION,
     LIST_ROW_MAIN,
@@ -80,9 +81,7 @@ export const ListsPageSkeleton = ({
                 <span className="skeleton h-8 w-full sm:w-56" />
                 <div className="flex items-center gap-3">
                     <span className="skeleton h-8 w-44" />
-                    {hasInboxSync ? (
-                        <span className="skeleton h-8 w-36" />
-                    ) : null}
+                    {hasInboxSync ? <EmailSyncSkeleton /> : null}
                     <span className="skeleton inline-flex h-8 shrink-0 items-center gap-1.5 px-3 text-sm font-medium whitespace-nowrap">
                         <span className="size-4 shrink-0" />
                         <span className="invisible">New list</span>

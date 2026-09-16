@@ -297,7 +297,7 @@ const EmailSyncTrigger = ({
         onClick={onToggle}
         aria-haspopup="dialog"
         aria-expanded={open}
-        className="focus-frame relative inline-flex h-8 w-8 cursor-pointer items-center justify-center gap-2 border border-hairline bg-background text-sm text-ink transition-colors after:absolute after:-inset-1 after:content-[''] hover:border-tile-border sm:w-36 sm:justify-start sm:pr-3 sm:pl-2.5 sm:after:inset-x-0"
+        className="focus-frame relative inline-flex h-8 w-8 cursor-pointer items-center justify-center gap-2 border border-hairline bg-background text-sm text-ink transition-colors after:absolute after:-inset-1 after:content-[''] hover:border-tile-border sm:w-auto sm:px-3 sm:after:inset-x-0"
     >
         <span
             aria-hidden="true"
@@ -305,7 +305,7 @@ const EmailSyncTrigger = ({
         />
         <span className="hidden sm:inline">Inbox sync</span>
         {count > 0 && (
-            <span className="flex h-4 min-w-4 items-center justify-center bg-accent px-1 text-xs font-medium tabular-nums text-background sm:ml-auto">
+            <span className="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center bg-accent px-1 text-xs font-medium tabular-nums text-background outline-2 outline-background">
                 {count}
             </span>
         )}

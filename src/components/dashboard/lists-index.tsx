@@ -33,6 +33,7 @@ import {
     LIST_ROW_PIN_ACTION,
 } from "@/components/dashboard/list-row-layout";
 import { LocalDateTime } from "@/components/dashboard/local-date-time";
+import { EmailSyncSkeleton } from "@/components/dashboard/email-sync-skeleton";
 import { ListRowsSkeleton } from "@/components/dashboard/lists-skeleton";
 import {
     ghostButtonClass,
@@ -47,15 +48,7 @@ const EmailSyncMenu = dynamic(
         import("@/components/dashboard/email-sync").then(
             (module) => module.EmailSyncMenu,
         ),
-    {
-        loading: () => (
-            <span
-                role="status"
-                aria-label="Loading inbox sync"
-                className="skeleton block h-8 w-36"
-            />
-        ),
-    },
+    { loading: () => <EmailSyncSkeleton /> },
 );
 
 const STATUS_KEYS: ListStatus[] = ["active", "closed", "archived"];
