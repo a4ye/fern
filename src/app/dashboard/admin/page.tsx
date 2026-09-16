@@ -3,7 +3,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getRealSession, getViewAs, isAdminRequest } from "@/lib/auth";
 import { searchUsers } from "@/db/admin";
-import { formatRelative } from "@/components/dashboard/data";
+import {
+    ADMIN_PATH,
+    backHref,
+    formatRelative,
+} from "@/components/dashboard/data";
 import { startViewAs } from "@/app/dashboard/admin/actions";
 
 export const metadata: Metadata = {
@@ -13,7 +17,7 @@ export const metadata: Metadata = {
 const AdminPage = async ({
     searchParams,
 }: {
-    searchParams: Promise<{ q?: string }>;
+    searchParams: Promise<{ q?: string; from?: string }>;
 }) => {
     // A page nobody but an admin may open is also a page nobody else should be
     // able to tell exists, so this is a miss rather than a refusal.
@@ -25,12 +29,13 @@ const AdminPage = async ({
         searchParams,
     ]);
     const search = (params.q ?? "").trim();
+    const back = backHref(params.from, ADMIN_PATH);
     const users = await searchUsers(search);
 
     return (
         <div className="mx-auto w-full max-w-5xl flex-1 px-6 py-10 sm:px-10">
             <Link
-                href="/dashboard"
+                href={back}
                 className="inline-flex items-center gap-1.5 text-sm text-sub transition-colors hover:text-ink"
             >
                 <span
@@ -48,7 +53,12 @@ const AdminPage = async ({
                 while impersonating.
             </p>
 
-            <form action="/dashboard/admin" className="mt-8 flex gap-2">
+            <form action={ADMIN_PATH} className="mt-8 flex gap-2">
+                {/* Searching reloads this page, so the way back rides along in
+                    the form or it is lost on the first search. */}
+                {back === "/dashboard" ? null : (
+                    <input type="hidden" name="from" value={back} />
+                )}
                 <input
                     type="search"
                     name="q"

@@ -1,35 +1,60 @@
 import { describe, expect, it } from "bun:test";
-import { settingsBackHref } from "@/components/dashboard/data";
+import {
+    ADMIN_PATH,
+    backHref,
+    FRIENDS_PATH,
+    SETTINGS_PATH,
+} from "@/components/dashboard/data";
 
-describe("settingsBackHref", () => {
+describe("backHref", () => {
     it("returns to the page the user left, filters and all", () => {
-        expect(settingsBackHref("/dashboard?q=acme&sort=name&page=2")).toBe(
-            "/dashboard?q=acme&sort=name&page=2",
-        );
-        expect(settingsBackHref("/dashboard/summer-2026?from=q%3Dacme")).toBe(
-            "/dashboard/summer-2026?from=q%3Dacme",
-        );
+        expect(
+            backHref("/dashboard?q=acme&sort=name&page=2", SETTINGS_PATH),
+        ).toBe("/dashboard?q=acme&sort=name&page=2");
+        expect(
+            backHref("/dashboard/summer-2026?from=q%3Dacme", FRIENDS_PATH),
+        ).toBe("/dashboard/summer-2026?from=q%3Dacme");
+    });
+
+    // One of these pages can be opened from another, and returns to it.
+    it("returns to a page that has a back button of its own", () => {
+        expect(
+            backHref(
+                "/dashboard/settings?from=%2Fdashboard%3Fq%3Dacme",
+                FRIENDS_PATH,
+            ),
+        ).toBe("/dashboard/settings?from=%2Fdashboard%3Fq%3Dacme");
     });
 
     it("falls back to the lists when there is nowhere to return to", () => {
-        expect(settingsBackHref(undefined)).toBe("/dashboard");
-        expect(settingsBackHref("")).toBe("/dashboard");
+        expect(backHref(undefined, SETTINGS_PATH)).toBe("/dashboard");
+        expect(backHref("", ADMIN_PATH)).toBe("/dashboard");
     });
 
     // The value is written in the URL, so a crafted one must not turn the back
     // button into a way off the site.
     it("refuses anywhere that is not a dashboard page of ours", () => {
-        expect(settingsBackHref("https://evil.example/x")).toBe("/dashboard");
-        expect(settingsBackHref("//evil.example")).toBe("/dashboard");
-        expect(settingsBackHref("/login")).toBe("/dashboard");
-        expect(settingsBackHref("/dashboardevil")).toBe("/dashboard");
-        expect(settingsBackHref("javascript:alert(1)")).toBe("/dashboard");
+        expect(backHref("https://evil.example/x", SETTINGS_PATH)).toBe(
+            "/dashboard",
+        );
+        expect(backHref("//evil.example", SETTINGS_PATH)).toBe("/dashboard");
+        expect(backHref("/login", SETTINGS_PATH)).toBe("/dashboard");
+        expect(backHref("/dashboardevil", SETTINGS_PATH)).toBe("/dashboard");
+        expect(backHref("javascript:alert(1)", SETTINGS_PATH)).toBe(
+            "/dashboard",
+        );
     });
 
-    // Settings linking back to itself would be a button that does nothing.
-    it("refuses the settings page itself", () => {
-        expect(settingsBackHref("/dashboard/settings")).toBe("/dashboard");
-        expect(settingsBackHref("/dashboard/settings?from=%2Fdashboard")).toBe(
+    // A page linking back to itself would be a button that does nothing.
+    it("refuses the page holding the button", () => {
+        expect(backHref("/dashboard/settings", SETTINGS_PATH)).toBe(
+            "/dashboard",
+        );
+        expect(
+            backHref("/dashboard/settings?from=%2Fdashboard", SETTINGS_PATH),
+        ).toBe("/dashboard");
+        expect(backHref("/dashboard/friends", FRIENDS_PATH)).toBe("/dashboard");
+        expect(backHref("/dashboard/admin?q=ada", ADMIN_PATH)).toBe(
             "/dashboard",
         );
     });

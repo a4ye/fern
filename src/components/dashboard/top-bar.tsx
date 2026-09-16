@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Logo } from "@/components/brand/logo";
 import { SignOutButton } from "@/components/auth/sign-out-button";
-import { SettingsLink } from "@/components/dashboard/settings-link";
+import { TopBarLinks } from "@/components/dashboard/top-bar-links";
 import { ViewAsBar } from "@/components/dashboard/view-as-bar";
 import { APP_NAME } from "@/lib/site";
 
@@ -29,31 +29,7 @@ export const DashboardTopBar = ({
                 </span>
             </Link>
             <div className="flex items-center gap-4">
-                {isAdmin ? (
-                    <Link
-                        href="/dashboard/admin"
-                        aria-label="Accounts"
-                        title="Accounts"
-                        className="focus-frame flex items-center text-muted transition-colors hover:text-ink"
-                    >
-                        <span
-                            aria-hidden="true"
-                            className="icon-[lucide--shield] size-4"
-                        />
-                    </Link>
-                ) : null}
-                <Link
-                    href="/dashboard/friends"
-                    aria-label="Friends"
-                    title="Friends"
-                    className="focus-frame flex items-center text-muted transition-colors hover:text-ink"
-                >
-                    <span
-                        aria-hidden="true"
-                        className="icon-[lucide--users] size-4"
-                    />
-                </Link>
-                <SettingsLink name={name} image={image} />
+                <TopBarLinks name={name} image={image} isAdmin={isAdmin} />
                 <SignOutButton />
             </div>
         </div>

@@ -4,13 +4,18 @@ import { redirect } from "next/navigation";
 import { getRequestSession, getViewAs } from "@/lib/auth";
 import { getFriendsPage, githubAccountIdForUser } from "@/db/friends";
 import { githubUsername } from "@/lib/github";
+import { backHref, FRIENDS_PATH } from "@/components/dashboard/data";
 import { FriendsManager } from "@/components/friends/friends-manager";
 
 export const metadata: Metadata = {
     title: "Friends",
 };
 
-const FriendsPage = async () => {
+const FriendsPage = async ({
+    searchParams,
+}: {
+    searchParams: Promise<{ from?: string }>;
+}) => {
     const session = await getRequestSession();
     if (!session) redirect("/login");
 
@@ -29,14 +34,14 @@ const FriendsPage = async () => {
     return (
         <div className="mx-auto w-full max-w-3xl flex-1 px-6 py-10 sm:px-10">
             <Link
-                href="/dashboard"
+                href={backHref((await searchParams).from, FRIENDS_PATH)}
                 className="inline-flex items-center gap-1.5 text-sm text-sub transition-colors hover:text-ink"
             >
                 <span
                     aria-hidden="true"
                     className="icon-[lucide--chevron-left] size-4"
                 />
-                Lists
+                Back
             </Link>
 
             <h1 className="mt-6 text-2xl font-semibold tracking-tight text-ink">

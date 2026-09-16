@@ -10,7 +10,7 @@ import {
 } from "@/lib/auth";
 import { getUserSettings } from "@/db/settings";
 import { githubUsername } from "@/lib/github";
-import { settingsBackHref } from "@/components/dashboard/data";
+import { backHref, SETTINGS_PATH } from "@/components/dashboard/data";
 import { AccountSettings } from "@/components/settings/account-settings";
 
 export const metadata: Metadata = {
@@ -48,7 +48,7 @@ const SettingsPage = async ({
     return (
         <div className="mx-auto w-full max-w-3xl flex-1 px-6 py-10 sm:px-10">
             <Link
-                href={settingsBackHref((await searchParams).from)}
+                href={backHref((await searchParams).from, SETTINGS_PATH)}
                 className="inline-flex items-center gap-1.5 text-sm text-sub transition-colors hover:text-ink"
             >
                 <span

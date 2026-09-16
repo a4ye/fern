@@ -440,17 +440,18 @@ export const listsHrefFrom = (from: string | undefined): string => {
 };
 
 export const SETTINGS_PATH = "/dashboard/settings";
+export const FRIENDS_PATH = "/dashboard/friends";
+export const ADMIN_PATH = "/dashboard/admin";
 
-// Settings is opened from wherever the user was reading, so the address they
-// left travels with the link and its back button returns to it whole, filters
-// and page included. A tab opened straight onto settings carries nothing and
-// lands on the lists. The value arrives in the URL, where anyone could write
-// it, so only our own dashboard paths are honoured: the rest would make the
-// back button a way off the site.
-export const settingsBackHref = (from: string | undefined): string =>
-    from &&
-    /^\/dashboard(?:[/?]|$)/.test(from) &&
-    !from.startsWith(SETTINGS_PATH)
+// Settings, friends and accounts are each opened from wherever the user was
+// reading, so the address they left travels with the link and the back button
+// returns to it whole, filters and page included. A tab opened straight onto
+// one of them carries nothing and lands on the lists. The value arrives in the
+// URL, where anyone could write it, so only our own dashboard paths are
+// honoured, and never the page holding the button: the rest would make it a way
+// off the site, or a button that goes nowhere.
+export const backHref = (from: string | undefined, self: string): string =>
+    from && /^\/dashboard(?:[/?]|$)/.test(from) && !from.startsWith(self)
         ? from
         : "/dashboard";
 
