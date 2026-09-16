@@ -48,12 +48,14 @@ mock.module("@/lib/email/classify", () => ({ classifyEmails }));
 
 const { syncEmailInbox } = await import("./sync");
 
+// Names the tracked company, since an email that names nobody never reaches the
+// classifier at all. That case has a test of its own below.
 const email = (id: string): NormalizedEmail => ({
     id,
-    from: "Recruiter <r@example.com>",
-    subject: "Interview",
+    from: "Recruiter <r@acme.com>",
+    subject: "Interview with Acme",
     snippet: "Choose a time",
-    body: "Choose a time for your interview.",
+    body: "Choose a time for your interview with Acme.",
     receivedAt: new Date("2026-08-31T12:00:00.000Z"),
 });
 
@@ -202,5 +204,33 @@ describe("syncEmailInbox", () => {
         );
         expect(result.found).toBe(0);
         expect(result.scanned).toBe(1);
+    });
+
+    // The model is the only part of a sync that costs money per call, and most
+    // of an inbox is nothing to do with any application.
+    it("never pays the model for a batch that names nobody tracked", async () => {
+        pendingBatches = [["m-1"]];
+        const bill: NormalizedEmail = {
+            id: "m-1",
+            from: "billing@hydroone.com",
+            subject: "Your electricity bill is ready",
+            snippet: "Your balance is due",
+            body: "Your account balance is due on the 15th of the month.",
+            receivedAt: new Date("2026-08-31T12:00:00.000Z"),
+        };
+
+        const result = await syncEmailInbox("user-1", {
+            ...provider(),
+            fetchMessages: mock(async () => [bill]),
+        });
+
+        expect(classifyEmails).not.toHaveBeenCalled();
+        // Still resolved, so it is never fetched or looked at again.
+        expect(completeEmailSyncMessages).toHaveBeenCalledWith(
+            "user-1",
+            ["m-1"],
+            [],
+        );
+        expect(result.scanned).toBe(0);
     });
 });

@@ -376,7 +376,7 @@ export const listPendingEmailSyncMessagesQuery = `-- name: ListPendingEmailSyncM
 select message_id
 from email_sync_messages
 where user_id = $1 and processed_at is null
-order by discovered_at, message_id
+order by discovered_at desc, message_id desc
 limit $2::int`;
 
 export interface ListPendingEmailSyncMessagesArgs {

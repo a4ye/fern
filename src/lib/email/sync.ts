@@ -13,6 +13,8 @@ import {
     type EmailDiscovery,
     type EmailProvider,
 } from "@/lib/email/types";
+import { candidatesFor } from "@/lib/email/candidates";
+import type { EmailMatch } from "@/lib/email/classify";
 
 const INITIAL_EMAIL_LIMIT = 100;
 const INITIAL_LOOKBACK_DAYS = 90;
@@ -80,20 +82,31 @@ export const syncEmailInbox = async (
             applications ?? (await getApplicationsForUser(userId));
         applications = applicationsForBatch;
         const emails = await emailsPromise;
-        const { classifyEmails } = await import("@/lib/email/classify");
-        const matches = await classifyEmails(
-            applicationsForBatch.map((application) => ({
-                company: application.company,
-                role: application.role,
-                currentStatus: application.status,
-            })),
-            emails,
-        );
 
-        const bestMatches = new Map<string, (typeof matches)[number]>();
+        // Only the applications one of these emails names, and only the emails
+        // that name one. A tracked list runs to thousands and a batch carries
+        // twenty-five whole message bodies, so handing over both in full buries
+        // the few that matter. A batch where the two never meet leaves nothing
+        // to ask about, so the call is not made at all.
+        const candidates = candidatesFor(applicationsForBatch, emails);
+
+        let matches: EmailMatch[] = [];
+        if (candidates.applications.length > 0) {
+            const { classifyEmails } = await import("@/lib/email/classify");
+            matches = await classifyEmails(
+                candidates.applications.map((application) => ({
+                    company: application.company,
+                    role: application.role,
+                    currentStatus: application.status,
+                })),
+                candidates.emails,
+            );
+        }
+
+        const bestMatches = new Map<string, EmailMatch>();
         for (const match of matches) {
-            const email = emails[match.emailIndex];
-            const application = applicationsForBatch[match.applicationIndex];
+            const email = candidates.emails[match.emailIndex];
+            const application = candidates.applications[match.applicationIndex];
             if (!email || !application) continue;
             if (application.status === match.suggestedStatus) continue;
 
@@ -107,8 +120,8 @@ export const syncEmailInbox = async (
         const suggestions: EmailSuggestionInput[] = [
             ...bestMatches.values(),
         ].map((match) => {
-            const email = emails[match.emailIndex];
-            const application = applicationsForBatch[match.applicationIndex];
+            const email = candidates.emails[match.emailIndex];
+            const application = candidates.applications[match.applicationIndex];
             return {
                 applicationId: application.id,
                 messageId: email.id,
@@ -127,7 +140,10 @@ export const syncEmailInbox = async (
             messageIds,
             suggestions,
         );
-        scanned += emails.length;
+        // What the model was actually given, which is what it is paid for.
+        // Messages the narrowing dropped were read from the inbox but never
+        // sent on, and are counted by `processed` like any other.
+        scanned += candidates.emails.length;
         processed += messageIds.length;
 
         // Discovery has already staged every ID, so a short batch means the

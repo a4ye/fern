@@ -134,10 +134,14 @@ values (@user_id, @history_id)
 on conflict (user_id) do update set history_id = excluded.history_id;
 
 -- name: ListPendingEmailSyncMessages :many
+-- Newest first. A sync reads a bounded number of messages, so whichever end of
+-- the backlog is drained last is the end that waits. Recent mail is where a
+-- status change is, and Gmail's message IDs climb with time, which orders the
+-- messages a single discovery staged together under one timestamp.
 select message_id
 from email_sync_messages
 where user_id = @user_id and processed_at is null
-order by discovered_at, message_id
+order by discovered_at desc, message_id desc
 limit @row_limit::int;
 
 -- name: MarkEmailSyncMessagesProcessed :exec
