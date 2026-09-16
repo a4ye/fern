@@ -122,6 +122,10 @@ export const AddApplicationForm = ({
     const [visibleImportUrl, setVisibleImportUrl] = useState<string | null>(
         null,
     );
+    // The read lands while this tab is in the background, so the filled fields
+    // are the only trace of it. Said out loud, since coming back to a form that
+    // quietly changed is indistinguishable from one that never did.
+    const [filledFromTab, setFilledFromTab] = useState(false);
     const [installOpen, setInstallOpen] = useState(false);
     // An aggregator link reads well but records the wrong page, so the
     // employer's own is offered here for the user to accept or leave. A user who
@@ -277,6 +281,7 @@ export const AddApplicationForm = ({
         setMissed(false);
         setRateLimited(false);
         setVisibleImportUrl(null);
+        setFilledFromTab(false);
         setEmployerUrl(null);
         setTidyRole(null);
         setLocationSuggestions([]);
@@ -379,6 +384,7 @@ export const AddApplicationForm = ({
                     "extension",
                     response.posting,
                 );
+                setFilledFromTab(true);
                 applyPosting(response.posting, url);
                 return;
             }
@@ -604,12 +610,14 @@ export const AddApplicationForm = ({
                                 </span>
                                 <div className="min-w-0 flex-1">
                                     <p className="text-balance text-sm font-medium text-ink">
-                                        Open this posting to finish importing
+                                        {fetching
+                                            ? "Reading the posting in the other tab"
+                                            : "Open this posting to finish importing"}
                                     </p>
                                     <p className="mt-0.5 text-pretty text-xs leading-5 text-sub">
-                                        Some job sites need to be opened once
-                                        before {APP_NAME} can fill their
-                                        details.
+                                        {fetching
+                                            ? "The fields fill themselves in once the posting has loaded. You can leave this open."
+                                            : `This site only shows its details to your own browser. ${APP_NAME} opens the posting in a new tab and reads it there. Come back to this tab and the fields will be filled.`}
                                     </p>
                                 </div>
                             </div>
@@ -617,7 +625,8 @@ export const AddApplicationForm = ({
                                 <button
                                     type="button"
                                     onClick={openAndImport}
-                                    className={`${LINK_CHOICE_BUTTON_CLASS} gap-1.5 bg-accent text-background hover:bg-accent-deep`}
+                                    disabled={fetching}
+                                    className={`${LINK_CHOICE_BUTTON_CLASS} gap-1.5 bg-accent text-background hover:bg-accent-deep disabled:cursor-default disabled:opacity-40 disabled:active:scale-100`}
                                 >
                                     Open posting &amp; import
                                     <span
@@ -625,6 +634,26 @@ export const AddApplicationForm = ({
                                         className="icon-[lucide--arrow-up-right] size-3.5"
                                     />
                                 </button>
+                            </div>
+                        </div>
+                    ) : filledFromTab ? (
+                        <div
+                            role="status"
+                            className="mt-3 flex items-start gap-3 bg-background px-3 py-3 shadow-sm"
+                        >
+                            <span
+                                aria-hidden="true"
+                                className="flex size-8 shrink-0 items-center justify-center bg-accent-tint-soft text-accent-deep"
+                            >
+                                <span className="icon-[lucide--check] size-4" />
+                            </span>
+                            <div className="min-w-0 flex-1">
+                                <p className="text-balance text-sm font-medium text-ink">
+                                    Filled from the posting you opened
+                                </p>
+                                <p className="mt-0.5 text-pretty text-xs leading-5 text-sub">
+                                    Check the details below before you save.
+                                </p>
                             </div>
                         </div>
                     ) : extension.availability === "missing" ? (
