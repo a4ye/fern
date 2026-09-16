@@ -454,9 +454,9 @@ export const settingsBackHref = (from: string | undefined): string =>
         ? from
         : "/dashboard";
 
-// One step in an application's status history. The opening step is where the
-// application started out rather than a move anyone recorded, so it has no
-// event behind it and cannot be taken back on its own.
+// One step in an application's status history. A step with no ID is one the
+// trail implies rather than records, which is where a row sits once every step
+// behind it has been taken back, so there is nothing left to take back.
 export type StatusStep = {
     id: string | null;
     status: ApplicationStatus;

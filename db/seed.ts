@@ -282,15 +282,35 @@ const main = async () => {
         );
     }
 
-    // A status trail for a share of the rows, so the flow chart has paths to
-    // draw and the detail panel has steps to take back.
+    // Every row opens its trail where it was created, the way the app writes
+    // one. A share of them then carry a move on top a few weeks later, so the
+    // flow chart has paths to draw and the detail panel has steps to take back.
     await pool.query(
-        `insert into application_events (application_id, from_status, to_status, occurred_at)
-         select a.id, 'applied'::application_status, a.status,
-                now() - (random() * interval '90 days')
-         from applications a
-         where a.list_id = $1
-            and a.status not in ('not_applied', 'applied')`,
+        `with opened as (
+             insert into application_events
+                 (application_id, from_status, to_status, occurred_at)
+             select
+                 a.id,
+                 null,
+                 case
+                     when a.status in ('not_applied', 'applied') then a.status
+                     else 'applied'::application_status
+                 end,
+                 now() - (random() * interval '90 days')
+             from applications a
+             where a.list_id = $1
+             returning application_id, occurred_at
+         )
+         insert into application_events
+             (application_id, from_status, to_status, occurred_at)
+         select
+             opened.application_id,
+             'applied'::application_status,
+             a.status,
+             opened.occurred_at + (random() * interval '21 days')
+         from opened
+         join applications a on a.id = opened.application_id
+         where a.status not in ('not_applied', 'applied')`,
         [listId],
     );
 

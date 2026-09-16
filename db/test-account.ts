@@ -166,6 +166,24 @@ const create = async () => {
         values,
     );
 
+    // Every row opens its trail where it was created, the way the app writes
+    // one. The rows past 'applied' then carry a move on top of that.
+    await pool.query(
+        `insert into application_events
+             (application_id, from_status, to_status, occurred_at)
+         select
+             a.id,
+             null,
+             case
+                 when a.status in ('not_applied', 'applied') then a.status
+                 else 'applied'::application_status
+             end,
+             now() - interval '7 days'
+         from applications a
+         where a.list_id = $1`,
+        [listId],
+    );
+
     await pool.query(
         `insert into application_events (application_id, from_status, to_status)
          select a.id, 'applied'::application_status, a.status

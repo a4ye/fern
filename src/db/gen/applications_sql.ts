@@ -5,41 +5,59 @@ interface Client {
 }
 
 export const createApplicationQuery = `-- name: CreateApplication :one
-insert into applications (
-    list_id, position, company_name, role_title, status, url, location,
-    arrangement, applied_at, pay_min, pay_max, pay_currency, pay_period,
-    bonus_amount, pay_note, notes, created_by_history_action_id
+with created as (
+    insert into applications (
+        list_id, position, company_name, role_title, status, url, location,
+        arrangement, applied_at, pay_min, pay_max, pay_currency, pay_period,
+        bonus_amount, pay_note, notes, created_by_history_action_id
+    )
+    select
+        l.id,
+        coalesce(
+            (
+                select max(a.position) + 1
+                from applications a
+                where a.list_id = l.id
+            ),
+            0
+        ),
+        $1,
+        $2,
+        $3::application_status,
+        $4,
+        $5,
+        $6::work_arrangement,
+        coalesce(
+            $7::date,
+            case
+                when $3::application_status = 'applied'
+                then (current_timestamp at time zone $8::text)::date
+            end
+        ),
+        $9::numeric,
+        $10::numeric,
+        $11,
+        $12::pay_period,
+        $13::numeric,
+        $14,
+        $15,
+        $16::bigint
+    from lists l
+    where l.id = $17 and l.user_id = $18
+    returning id, status
+),
+opening as (
+    insert into application_events (
+        application_id, from_status, to_status, history_action_id
+    )
+    select
+        created.id,
+        null::application_status,
+        created.status,
+        $16::bigint
+    from created
 )
-select
-    l.id,
-    coalesce(
-        (select max(a.position) + 1 from applications a where a.list_id = l.id),
-        0
-    ),
-    $1,
-    $2,
-    $3::application_status,
-    $4,
-    $5,
-    $6::work_arrangement,
-    coalesce(
-        $7::date,
-        case
-            when $3::application_status = 'applied'
-            then (current_timestamp at time zone $8::text)::date
-        end
-    ),
-    $9::numeric,
-    $10::numeric,
-    $11,
-    $12::pay_period,
-    $13::numeric,
-    $14,
-    $15,
-    $16::bigint
-from lists l
-where l.id = $17 and l.user_id = $18
-returning id`;
+select id from created`;
 
 export interface CreateApplicationArgs {
     companyName: string;
@@ -82,56 +100,74 @@ export async function createApplication(client: Client, args: CreateApplicationA
 }
 
 export const createApplicationsQuery = `-- name: CreateApplications :many
-insert into applications (
-    list_id, position, company_name, role_title, status, url, location,
-    arrangement, applied_at, pay_min, pay_max, pay_currency, pay_period,
-    pay_note, notes, created_by_history_action_id
+with created as (
+    insert into applications (
+        list_id, position, company_name, role_title, status, url, location,
+        arrangement, applied_at, pay_min, pay_max, pay_currency, pay_period,
+        pay_note, notes, created_by_history_action_id
+    )
+    select
+        l.id,
+        coalesce(
+            (
+                select max(a.position) + 1
+                from applications a
+                where a.list_id = l.id
+            ),
+            0
+        ) + row.offset,
+        row.company_name,
+        row.role_title,
+        row.status::application_status,
+        row.url,
+        row.location,
+        row.arrangement::work_arrangement,
+        coalesce(
+            row.applied_at::date,
+            case
+                when row.status::application_status = 'applied'
+                then (current_timestamp at time zone $1::text)::date
+            end
+        ),
+        row.pay_min::numeric,
+        row.pay_max::numeric,
+        row.pay_currency,
+        row.pay_period::pay_period,
+        row.pay_note,
+        row.notes,
+        $2::bigint
+    from lists l
+    cross join jsonb_to_recordset($3::jsonb) as row(
+        "offset" int,
+        company_name text,
+        role_title text,
+        status text,
+        url text,
+        location text,
+        arrangement text,
+        applied_at text,
+        pay_min text,
+        pay_max text,
+        pay_currency text,
+        pay_period text,
+        pay_note text,
+        notes text
+    )
+    where l.id = $4 and l.user_id = $5
+    returning id, status
+),
+opening as (
+    insert into application_events (
+        application_id, from_status, to_status, history_action_id
+    )
+    select
+        created.id,
+        null::application_status,
+        created.status,
+        $2::bigint
+    from created
 )
-select
-    l.id,
-    coalesce(
-        (select max(a.position) + 1 from applications a where a.list_id = l.id),
-        0
-    ) + row.offset,
-    row.company_name,
-    row.role_title,
-    row.status::application_status,
-    row.url,
-    row.location,
-    row.arrangement::work_arrangement,
-    coalesce(
-        row.applied_at::date,
-        case
-            when row.status::application_status = 'applied'
-            then (current_timestamp at time zone $1::text)::date
-        end
-    ),
-    row.pay_min::numeric,
-    row.pay_max::numeric,
-    row.pay_currency,
-    row.pay_period::pay_period,
-    row.pay_note,
-    row.notes,
-    $2::bigint
-from lists l
-cross join jsonb_to_recordset($3::jsonb) as row(
-    "offset" int,
-    company_name text,
-    role_title text,
-    status text,
-    url text,
-    location text,
-    arrangement text,
-    applied_at text,
-    pay_min text,
-    pay_max text,
-    pay_currency text,
-    pay_period text,
-    pay_note text,
-    notes text
-)
-where l.id = $4 and l.user_id = $5
-returning id`;
+select id from created`;
 
 export interface CreateApplicationsArgs {
     timeZone: string;

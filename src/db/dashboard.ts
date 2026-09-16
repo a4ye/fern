@@ -737,9 +737,9 @@ export const getApplicationExtras = async (
     ]);
     if (!detail) return null;
 
-    // The same replay the list does, over one application's events: the first
-    // event also contributes where it started from, which is the only record of
-    // the status it was created with.
+    // The same replay the list does, over one application's events. A trail
+    // opens with the status the application was created at, so the first event
+    // only contributes where it moved from once that opening step is gone.
     const history: StatusStep[] = [];
     for (const [index, row] of eventRows.entries()) {
         if (index === 0 && row.fromStatus) {
