@@ -2,6 +2,7 @@
 
 import type { ReactNode, RefObject } from "react";
 import { LocationInput } from "@/components/dashboard/location-input";
+import { SuggestInput } from "@/components/dashboard/suggest-input";
 import { DRAWER_TITLE_ID } from "@/components/dashboard/overlay-shell";
 import {
     ARRANGEMENT_OPTIONS,
@@ -20,6 +21,7 @@ import {
     type PayPeriod,
 } from "@/components/dashboard/data";
 import { DEFAULT_CURRENCY } from "@/lib/pay";
+import { searchRoleTitles } from "@/lib/roles";
 import {
     AMOUNT_INPUT_MAX,
     COMPANY_MAX,
@@ -174,9 +176,11 @@ export const BasicsFields = ({
             />
         </Field>
         <Field label="Role">
-            <input
+            <SuggestInput
+                label="Role"
                 value={draft.role}
-                onChange={(event) => set("role", event.target.value)}
+                onChange={(role) => set("role", role)}
+                suggest={searchRoleTitles}
                 maxLength={ROLE_MAX}
                 disabled={disabled}
                 className={fieldClass}
