@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import dynamic from "next/dynamic";
 import { loadListInsights } from "@/app/dashboard/actions";
 import { InsightsPlaceholder } from "@/components/dashboard/insights-placeholder";
@@ -29,31 +29,39 @@ export const ListInsights = ({
     const [open, setOpen] = useState(false);
     const [insights, setInsights] = useState<ListInsightsData | null>(null);
     const [error, setError] = useState<string | null>(null);
-    const [isPending, startLoading] = useTransition();
+    const [, startLoading] = useTransition();
+    const readFor = useRef<Stat[] | null>(null);
 
-    const toggle = () => {
-        if (open) {
-            setOpen(false);
-            return;
-        }
-
-        setOpen(true);
-        if (insights || isPending) return;
+    // Insights are read apart from the page they sit above, so what the panel
+    // holds goes out of date as the table below it is worked in. Every write to
+    // the list draws the page again, and `stats` arrives as a new array each
+    // time it is drawn and only then, which makes it the signal to read them
+    // again: in place while the panel is open, and otherwise at the next
+    // opening. A write can change a chart without changing a stat, so the
+    // reading is not narrowed to the numbers that moved.
+    useEffect(() => {
+        if (!open || readFor.current === stats) return;
+        readFor.current = stats;
         setError(null);
         startLoading(async () => {
-            try {
-                const loaded = await loadListInsights(listId);
-                if (loaded) {
-                    setInsights(loaded);
-                    return;
-                }
-            } catch {
-                // A rejected action request reads the same as an unavailable
-                // list here. Either way the table remains usable.
+            // A rejected action request reads the same as an unavailable list
+            // here. Either way the table remains usable.
+            const read = await loadListInsights(listId).catch(() => null);
+            // A later read has taken over, and its answer is the current one.
+            if (readFor.current !== stats) return;
+            if (read) {
+                setInsights(read);
+                return;
             }
+            // Leaves a retry to the next opening, and drops charts that can no
+            // longer be said to be of this list.
+            readFor.current = null;
+            setInsights(null);
             setError("Insights could not be loaded.");
         });
-    };
+    }, [open, stats, listId]);
+
+    const toggle = () => setOpen((shown) => !shown);
 
     return (
         <div>
