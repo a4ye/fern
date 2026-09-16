@@ -38,10 +38,21 @@ export const DashboardTopBar = ({
                     >
                         <span
                             aria-hidden="true"
-                            className="icon-[lucide--users] size-4"
+                            className="icon-[lucide--shield] size-4"
                         />
                     </Link>
                 ) : null}
+                <Link
+                    href="/dashboard/friends"
+                    aria-label="Friends"
+                    title="Friends"
+                    className="focus-frame flex items-center text-muted transition-colors hover:text-ink"
+                >
+                    <span
+                        aria-hidden="true"
+                        className="icon-[lucide--users] size-4"
+                    />
+                </Link>
                 <SettingsLink name={name} image={image} />
                 <SignOutButton />
             </div>

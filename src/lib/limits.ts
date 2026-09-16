@@ -44,6 +44,18 @@ export const RATE_LIMITS = {
     // report per read and no report without a read that could have happened.
     metrics: { requests: 60, windowSeconds: 60 },
 
+    // Opening a shared link, counted per link rather than per account because
+    // nobody opening one is signed in. A link is meant to be read by the handful
+    // of people it was sent to, and each read draws a whole list, so this is
+    // what stops one leaked address from being used to pull that list all day.
+    //
+    // Set well above a crowd rather than at one, because everyone holding a
+    // link shares this budget: a link dropped into a group chat is opened by
+    // everybody at once, and a ceiling set for one reader would be spent by the
+    // room. Whoever arrives after it is spent is asked to try again rather than
+    // told the link is gone.
+    share: { requests: 300, windowSeconds: 60 },
+
     // What every account together may ask of one provider in that same window,
     // which is what that provider actually sees coming from this app. This is
     // the only ceiling in the file that a crowd shares, so it is the only one
@@ -75,6 +87,29 @@ export type RateLimitName = keyof typeof RATE_LIMITS;
 export const MAX_LISTS = 100;
 export const MAX_APPLICATIONS_PER_LIST = 10_000;
 export const MAX_APPLICATIONS = 25_000;
+
+// People, and the ways a list reaches them. Friends is set where a cohort, a
+// club and a group chat all fit inside it. Requests awaiting an answer are held
+// much lower, since a pile of them is what someone sending them in bulk leaves
+// behind and nobody legitimately has fifty questions outstanding.
+export const MAX_FRIENDS = 200;
+export const MAX_FRIEND_REQUESTS_SENT = 50;
+
+// What the friends page will read of each group. Above the ceilings above for
+// the same reason as the application figures below: a quota is checked and then
+// written in two statements, so leaving headroom means nothing anyone actually
+// has is missing from the page.
+export const MAX_FRIEND_ROWS_READ = 250;
+
+// Per list: the friends and named people it is shared with, and the links that
+// open it. Both are worked through by hand in a dialog, so these are ceilings on
+// something automated rather than on anyone's sharing.
+export const MAX_SHARES_PER_LIST = 100;
+export const MAX_LINKS_PER_LIST = 25;
+
+// How many shared lists the lists page will show under its own. Well past what
+// anybody will be sent, and there so that the section cannot grow without end.
+export const MAX_SHARED_LISTS_READ = 200;
 
 // Recorded moves through the pipeline, per application. A job that went to four
 // rounds records about eight, and the busiest row in this database has four.

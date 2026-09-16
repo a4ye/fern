@@ -8,6 +8,7 @@ import {
     isPostingReader,
 } from "@/lib/metrics";
 import { POSTING_SOURCES } from "@/lib/job-import/shared";
+import { LINK_DURATION_VALUES } from "@/lib/share";
 import {
     APPLICATION_STATUSES,
     ARRANGEMENTS,
@@ -314,6 +315,34 @@ export const postingReadSchema = z
             read.attempted.includes(read.outcome),
         "The reader that filled the form must be one that was attempted.",
     );
+
+// A friend is added by the name GitHub knows them as, which is the one public
+// address every account here already has. GitHub's own rule is the rule: up to
+// 39 characters of letters, digits and single hyphens, never leading or
+// trailing. Enforced before the lookup so a malformed handle is answered here
+// rather than by spending a request on GitHub to be told the same thing.
+export const githubUsernameSchema = z
+    .string()
+    .trim()
+    .min(1, "Enter a GitHub username.")
+    .max(39, "That is not a GitHub username.")
+    .regex(
+        /^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/,
+        "That is not a GitHub username.",
+    );
+
+// Ids of rows this app handed the browser. Friendships, shares and links are all
+// uuids, and a caller sending anything else is turned away before the database
+// is asked about it.
+export const rowIdSchema = z.string().uuid("That is no longer available.");
+
+// Which of the fixed durations a new link was given. An open date field would
+// let a caller write a link that outlives the app; the menu is the whole of
+// what a link may be set to.
+export const linkDurationSchema = z.enum(
+    LINK_DURATION_VALUES,
+    "Choose how long the link should last.",
+);
 
 // Narrows a safeParse failure to a single message for display. Schemas above
 // validate one field at a time in practice, so the first issue is the relevant

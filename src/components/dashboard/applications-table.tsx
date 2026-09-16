@@ -51,6 +51,7 @@ import {
     DateField,
     STATUS_OPTIONS,
     ARRANGEMENT_OPTIONS,
+    SearchField,
     cellFieldClass,
     checkboxClass,
     dangerButtonClass,
@@ -472,32 +473,6 @@ const DeleteRow = ({
 // answers a question about a whole list rather than about one column. Escape
 // empties it, so the way back to every row never involves the keyboard's
 // backspace.
-const SearchField = ({
-    value,
-    onChange,
-}: {
-    value: string;
-    onChange: (value: string) => void;
-}) => (
-    <div className="relative max-sm:w-full sm:w-52">
-        <span
-            aria-hidden="true"
-            className="icon-[lucide--search] pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted"
-        />
-        <input
-            type="search"
-            value={value}
-            onChange={(event) => onChange(event.target.value)}
-            onKeyDown={(event) => {
-                if (event.key === "Escape") onChange("");
-            }}
-            placeholder="Search rows"
-            aria-label="Search applications"
-            className="focus-frame h-8 w-full border border-hairline bg-background pr-2.5 pl-8 text-sm text-ink transition-colors placeholder:text-muted hover:border-tile-border"
-        />
-    </div>
-);
-
 // The rule only reads as a separator while the bar is one line; once it wraps,
 // the groups are already apart and it lands mid-row as a stray mark.
 const Divider = () => (

@@ -3,10 +3,12 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getRequestSession } from "@/lib/auth";
 import { getListsForUser } from "@/db/dashboard";
+import { getListsSharedWithUser } from "@/db/shares";
 import { hasOnboarded } from "@/db/settings";
 import { loadEmailPanel } from "@/lib/email/panel";
 import { LIST_PAGE_SIZE, parseListSort } from "@/components/dashboard/data";
 import { ListsIndex } from "@/components/dashboard/lists-index";
+import { SharedWithYou } from "@/components/dashboard/shared-with-you";
 import { Welcome } from "@/components/onboarding/welcome";
 
 export const metadata: Metadata = {
@@ -27,7 +29,7 @@ const DashboardPage = async ({
     const sort = parseListSort(params.sort);
     const requestedPage = Math.max(1, Number(params.page) || 1);
 
-    const [{ lists, total, page, pageCount }, emailPanel, onboarded] =
+    const [{ lists, total, page, pageCount }, emailPanel, onboarded, shared] =
         await Promise.all([
             getListsForUser(session.user.id, {
                 search,
@@ -37,6 +39,7 @@ const DashboardPage = async ({
             }),
             loadEmailPanel(session.user.id, session.user.email, requestHeaders),
             hasOnboarded(session.user.id),
+            getListsSharedWithUser(session.user.id),
         ]);
 
     return (
@@ -51,6 +54,10 @@ const DashboardPage = async ({
                 sort={sort}
                 emailPanel={emailPanel}
             />
+            {/* Below the account's own lists, since these are somebody else's
+                work and the page is for yours. The search and sort above belong
+                to the list index alone and do not reach down here. */}
+            <SharedWithYou lists={shared} />
         </div>
     );
 };

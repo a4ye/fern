@@ -93,6 +93,12 @@ export const SeasonPageSkeleton = () => (
                     <span className="inline-flex h-10 min-w-10 items-center gap-2 pr-2.5 pl-2">
                         <span className="skeleton size-4 shrink-0" />
                         <TextBar className="hidden text-sm sm:inline-flex">
+                            Share
+                        </TextBar>
+                    </span>
+                    <span className="inline-flex h-10 min-w-10 items-center gap-2 pr-2.5 pl-2">
+                        <span className="skeleton size-4 shrink-0" />
+                        <TextBar className="hidden text-sm sm:inline-flex">
                             History
                         </TextBar>
                     </span>

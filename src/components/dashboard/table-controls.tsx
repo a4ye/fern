@@ -917,3 +917,31 @@ export const ARRANGEMENT_OPTIONS: Option<Arrangement | null>[] = [
         label: arrangementLabel(arrangement),
     })),
 ];
+
+// Escape empties the box, which is what the native clear button does and what a
+// hand already on the keyboard reaches for.
+export const SearchField = ({
+    value,
+    onChange,
+}: {
+    value: string;
+    onChange: (value: string) => void;
+}) => (
+    <div className="relative max-sm:w-full sm:w-52">
+        <span
+            aria-hidden="true"
+            className="icon-[lucide--search] pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted"
+        />
+        <input
+            type="search"
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            onKeyDown={(event) => {
+                if (event.key === "Escape") onChange("");
+            }}
+            placeholder="Search rows"
+            aria-label="Search applications"
+            className="focus-frame h-8 w-full border border-hairline bg-background pr-2.5 pl-8 text-sm text-ink transition-colors placeholder:text-muted hover:border-tile-border"
+        />
+    </div>
+);

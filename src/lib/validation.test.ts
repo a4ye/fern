@@ -8,6 +8,7 @@ import {
     LIST_NAME_MAX,
     applicationDetailSchema,
     firstIssue,
+    githubUsernameSchema,
     listCreateSchema,
     listUpdateSchema,
     timeZoneSchema,
@@ -164,5 +165,52 @@ describe("applicationDetailSchema", () => {
         expect(issue(detail({ payCurrency: "US$" }))).toBe(
             "Choose a valid currency.",
         );
+    });
+});
+
+describe("githubUsernameSchema", () => {
+    const name = (value: string) => githubUsernameSchema.safeParse(value);
+    const rejected = "That is not a GitHub username.";
+
+    it("takes the handles GitHub itself issues", () => {
+        for (const handle of [
+            "octocat",
+            "a",
+            "a4ye",
+            "a-b-c",
+            "A1",
+            "9lives",
+        ]) {
+            expect(name(handle).success).toBe(true);
+        }
+        expect(name("  octocat  ").data).toBe("octocat");
+        expect(name("a".repeat(39)).success).toBe(true);
+    });
+
+    it("turns away anything GitHub would not have issued", () => {
+        expect(issue(name(""))).toBe("Enter a GitHub username.");
+        expect(issue(name("   "))).toBe("Enter a GitHub username.");
+        expect(issue(name("a".repeat(40)))).toBe(rejected);
+        // Leading, trailing and doubled hyphens are all refused by GitHub, so
+        // spending a request on one would only be told the same thing.
+        expect(issue(name("-octocat"))).toBe(rejected);
+        expect(issue(name("octocat-"))).toBe(rejected);
+        expect(issue(name("oct--ocat"))).toBe(rejected);
+    });
+
+    // This value is interpolated into the path of a request to GitHub, so
+    // anything that could steer that request must not get past the schema.
+    it("turns away anything that could reshape the lookup URL", () => {
+        for (const attempt of [
+            "octocat/repos",
+            "../users/octocat",
+            "octocat?tab=x",
+            "octocat#x",
+            "octocat%2F",
+            "octo cat",
+            "octo\ncat",
+        ]) {
+            expect(name(attempt).success).toBe(false);
+        }
     });
 });

@@ -10,6 +10,10 @@ import {
     loadListHistory,
     updateList,
 } from "@/app/dashboard/actions";
+import {
+    loadShareSheet,
+    type ShareSheet,
+} from "@/app/dashboard/sharing-actions";
 import { ConfirmDialog } from "@/components/dashboard/confirm-dialog";
 import type { ListStatus } from "@/components/dashboard/data";
 import { DeferredDialogLoading } from "@/components/dashboard/deferred-overlay-loading";
@@ -30,6 +34,18 @@ const HistoryDialog = dynamic(
     {
         loading: () => (
             <DeferredDialogLoading title="History" label="Loading history..." />
+        ),
+    },
+);
+
+const ShareDialog = dynamic(
+    () =>
+        import("@/components/dashboard/share-dialog").then(
+            (module) => module.ShareDialog,
+        ),
+    {
+        loading: () => (
+            <DeferredDialogLoading title="Share" label="Loading sharing..." />
         ),
     },
 );
@@ -73,6 +89,8 @@ export const ListHeader = ({
     const [isEditing, setIsEditing] = useState(false);
     const [showingHistory, setShowingHistory] = useState(false);
     const [history, setHistory] = useState<ListHistoryPage | null>(null);
+    const [sharing, setSharing] = useState<ShareSheet | null>(null);
+    const [showingShare, setShowingShare] = useState(false);
     const [confirmingDelete, setConfirmingDelete] = useState(false);
     const [name, setName] = useState(initialName);
     const [description, setDescription] = useState(initialDescription ?? "");
@@ -148,6 +166,28 @@ export const ListHeader = ({
         });
     };
 
+    // Opened before the sharing has been read, the same way History is, so the
+    // dialog appears on the press and fills in. A failed read closes it again
+    // rather than leaving an empty panel to be dismissed.
+    const openShare = () => {
+        setShowingShare(true);
+        if (sharing || isPending) return;
+        startTransition(async () => {
+            try {
+                const sheet = await loadShareSheet(listId);
+                if (sheet) {
+                    setSharing(sheet);
+                    return;
+                }
+            } catch {
+                // One message covers a failed request and a list that went
+                // away between the page rendering and the press.
+            }
+            setShowingShare(false);
+            toast.error("Could not open sharing for this list.");
+        });
+    };
+
     const onKeyDown = (event: ReactKeyboardEvent) => {
         if (event.key === "Enter") {
             event.preventDefault();
@@ -204,6 +244,21 @@ export const ListHeader = ({
                 <div className="flex min-h-10 shrink-0 items-center justify-end">
                     {!isEditing && (
                         <>
+                            <button
+                                type="button"
+                                onClick={openShare}
+                                aria-haspopup="dialog"
+                                aria-expanded={showingShare}
+                                aria-label="Share this list"
+                                title="Share"
+                                className="inline-flex h-10 min-w-10 cursor-pointer items-center justify-center gap-2 pr-2.5 pl-2 text-sm text-muted transition-[color,scale] duration-150 ease-out hover:text-ink active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                            >
+                                <span
+                                    aria-hidden="true"
+                                    className="icon-[lucide--share-2] block size-4"
+                                />
+                                <span className="hidden sm:inline">Share</span>
+                            </button>
                             <button
                                 type="button"
                                 onClick={openHistory}
@@ -311,6 +366,31 @@ export const ListHeader = ({
                         initialPage={history}
                         defaultCurrency={defaultCurrency}
                     />
+                </OverlayDialog>
+            )}
+
+            {/* Sized by what is in it rather than to a fixed height, which left
+                a list with one link sitting above half a panel of nothing. It
+                grows to the viewport and scrolls from there. */}
+            {showingShare && (
+                <OverlayDialog
+                    className="m-auto max-h-[85vh] w-[calc(100dvw-2rem)] max-w-2xl overflow-hidden border-0 bg-background p-0 shadow-lg backdrop:bg-ink/25 sm:w-[calc(100dvw-3rem)]"
+                    panelClassName="flex max-h-[85vh] min-h-0 flex-col border border-hairline"
+                    onClose={() => setShowingShare(false)}
+                >
+                    {sharing ? (
+                        <ShareDialog
+                            listId={listId}
+                            listName={initialName}
+                            friends={sharing.friends}
+                            initial={sharing.state}
+                        />
+                    ) : (
+                        <DeferredDialogLoading
+                            title="Share"
+                            label="Loading sharing..."
+                        />
+                    )}
                 </OverlayDialog>
             )}
 

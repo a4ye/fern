@@ -21,6 +21,7 @@
         "db:seed": "bun run db/seed.ts",
         "db:seed-history": "bun run db/seed-history.ts",
         "db:seed-suggestions": "bun run db/seed-suggestions.ts",
+        "db:seed-sharing": "bun run db/seed-sharing.ts",
         "db:test-account": "bun run db/test-account.ts",
         "cities:build": "bun run scripts/build-city-data.ts",
         "map:build": "bun run scripts/build-map-detail.ts",

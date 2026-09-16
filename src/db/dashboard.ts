@@ -581,6 +581,70 @@ export const deleteList = async (
     await gen.deleteList(getPool(), { id: listId, userId });
 };
 
+// The stored columns of one application as the table reads them. Shared with
+// the read-only view a shared list is drawn in, so a list looks the same to
+// somebody it was sent to as it does to the person who wrote it.
+export const toApplicationRow = (row: {
+    id: string;
+    companyName: string;
+    roleTitle: string | null;
+    status: string;
+    url: string | null;
+    location: string | null;
+    arrangement: string | null;
+    payMin: string | null;
+    payMax: string | null;
+    payCurrency: string;
+    payPeriod: string | null;
+    bonusAmount: string | null;
+    payNote: string | null;
+    appliedAt: Date | null;
+    updatedAt: Date;
+}): ApplicationRow => ({
+    id: row.id,
+    company: row.companyName,
+    role: row.roleTitle,
+    status: row.status as ApplicationStatus,
+    pay: formatPay({
+        payMin: row.payMin,
+        payMax: row.payMax,
+        payCurrency: row.payCurrency,
+        payPeriod: row.payPeriod as PayPeriod | null,
+        payNote: row.payNote,
+    }),
+    payNote: row.payNote,
+    payMin: row.payMin,
+    payMax: row.payMax,
+    payCurrency: row.payCurrency,
+    payPeriod: row.payPeriod as PayPeriod | null,
+    bonus: row.bonusAmount,
+    location: row.location,
+    arrangement: row.arrangement as Arrangement | null,
+    appliedAt: row.appliedAt ? toDateInput(row.appliedAt) : null,
+    url: row.url,
+    updated: formatRelative(row.updatedAt),
+    updatedAt: row.updatedAt.toISOString(),
+});
+
+export const listStats = (applications: ApplicationRow[]): Stat[] => {
+    const counts = new Map<ApplicationStatus, number>();
+    for (const app of applications) {
+        counts.set(app.status, (counts.get(app.status) ?? 0) + 1);
+    }
+    const sumOf = (statuses: ApplicationStatus[]): number =>
+        statuses.reduce(
+            (total, status) => total + (counts.get(status) ?? 0),
+            0,
+        );
+
+    return [
+        { label: "Total", value: String(applications.length) },
+        { label: "Active", value: String(sumOf(ACTIVE_STATUSES)) },
+        { label: "Interviewing", value: String(sumOf(INTERVIEWING_STATUSES)) },
+        { label: "Offers", value: String(sumOf(OFFER_STATUSES)) },
+    ];
+};
+
 export const getListDetail = async (
     userId: string,
     listId: string,
@@ -596,59 +660,14 @@ export const getListDetail = async (
     ]);
     if (!list) return null;
 
-    const applications: ApplicationRow[] = applicationRows.map((row) => {
-        const status = row.status as ApplicationStatus;
-        return {
-            id: row.id,
-            company: row.companyName,
-            role: row.roleTitle,
-            status,
-            pay: formatPay({
-                payMin: row.payMin,
-                payMax: row.payMax,
-                payCurrency: row.payCurrency,
-                payPeriod: row.payPeriod as PayPeriod | null,
-                payNote: row.payNote,
-            }),
-            payNote: row.payNote,
-            payMin: row.payMin,
-            payMax: row.payMax,
-            payCurrency: row.payCurrency,
-            payPeriod: row.payPeriod as PayPeriod | null,
-            bonus: row.bonusAmount,
-            location: row.location,
-            arrangement: row.arrangement as Arrangement | null,
-            appliedAt: row.appliedAt ? toDateInput(row.appliedAt) : null,
-            url: row.url,
-            updated: formatRelative(row.updatedAt),
-            updatedAt: row.updatedAt.toISOString(),
-        };
-    });
-
-    const counts = new Map<ApplicationStatus, number>();
-    for (const row of applicationRows) {
-        const status = row.status as ApplicationStatus;
-        counts.set(status, (counts.get(status) ?? 0) + 1);
-    }
-    const sumOf = (statuses: ApplicationStatus[]): number =>
-        statuses.reduce(
-            (total, status) => total + (counts.get(status) ?? 0),
-            0,
-        );
-
-    const stats: Stat[] = [
-        { label: "Total", value: String(applications.length) },
-        { label: "Active", value: String(sumOf(ACTIVE_STATUSES)) },
-        { label: "Interviewing", value: String(sumOf(INTERVIEWING_STATUSES)) },
-        { label: "Offers", value: String(sumOf(OFFER_STATUSES)) },
-    ];
+    const applications = applicationRows.map(toApplicationRow);
 
     return {
         id: list.id,
         name: list.name,
         description: list.description,
         status: list.status as ListStatus,
-        stats,
+        stats: listStats(applications),
         applications,
     };
 };

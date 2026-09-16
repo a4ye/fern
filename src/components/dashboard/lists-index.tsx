@@ -700,7 +700,9 @@ export const ListsIndex = ({
     const hasNext = page < pageCount;
 
     return (
-        <div className="flex flex-1 flex-col">
+        // Not flex-1: stretching to fill the page pushed whatever follows it,
+        // which is now the shared lists, down to the bottom of the viewport.
+        <div className="flex flex-col">
             <div className="flex flex-wrap items-end justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-semibold tracking-tight">
