@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import {
+    useEffect,
+    useOptimistic,
+    useRef,
+    useState,
+    useTransition,
+} from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -46,70 +52,61 @@ const SuggestionRow = ({
 }: {
     suggestion: EmailSuggestion;
     onResolve: (id: string, accept: boolean) => void;
-}) => {
-    const [isPending, startTransition] = useTransition();
-
-    const resolve = (accept: boolean) =>
-        startTransition(() => onResolve(suggestion.id, accept));
-
-    return (
-        <li className="flex flex-col gap-3 border-b border-faint px-4 py-4 last:border-b-0">
-            <div className="min-w-0">
-                <div className="flex items-center justify-between gap-3">
-                    <span className="truncate text-sm font-medium text-ink">
-                        {suggestion.company}
-                    </span>
-                    <span className="inline-flex max-w-32 shrink-0 items-center gap-1 text-xs text-muted">
-                        <span
-                            aria-hidden="true"
-                            className="icon-[lucide--list] size-3 shrink-0"
-                        />
-                        <span className="truncate">{suggestion.listName}</span>
-                    </span>
-                </div>
-                <a
-                    href={gmailMessageUrl(suggestion.messageId)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title="Open the original email in Gmail"
-                    className="mt-1 inline-flex min-h-10 max-w-full items-center gap-1.5 text-xs text-sub underline decoration-hairline underline-offset-3 transition-[color,text-decoration-color] hover:text-ink hover:decoration-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                >
-                    <span className="truncate">{suggestion.subject}</span>
+}) => (
+    <li className="flex flex-col gap-3 border-b border-faint px-4 py-4 last:border-b-0">
+        <div className="min-w-0">
+            <div className="flex items-center justify-between gap-3">
+                <span className="truncate text-sm font-medium text-ink">
+                    {suggestion.company}
+                </span>
+                <span className="inline-flex max-w-32 shrink-0 items-center gap-1 text-xs text-muted">
                     <span
                         aria-hidden="true"
-                        className="icon-[lucide--external-link] size-3 shrink-0"
+                        className="icon-[lucide--list] size-3 shrink-0"
                     />
-                </a>
+                    <span className="truncate">{suggestion.listName}</span>
+                </span>
             </div>
-            <div className="flex max-w-full items-center gap-2 self-start bg-surface px-3 py-2.5">
-                <StatusPill status={suggestion.currentStatus} />
+            <a
+                href={gmailMessageUrl(suggestion.messageId)}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Open the original email in Gmail"
+                className="mt-1 inline-flex min-h-10 max-w-full items-center gap-1.5 text-xs text-sub underline decoration-hairline underline-offset-3 transition-[color,text-decoration-color] hover:text-ink hover:decoration-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            >
+                <span className="truncate">{suggestion.subject}</span>
                 <span
                     aria-hidden="true"
-                    className="icon-[lucide--arrow-right] size-3.5 shrink-0 text-muted"
+                    className="icon-[lucide--external-link] size-3 shrink-0"
                 />
-                <StatusPill status={suggestion.suggestedStatus} />
-            </div>
-            <div className="flex items-center justify-end gap-2 border-t border-faint pt-3">
-                <button
-                    type="button"
-                    onClick={() => resolve(false)}
-                    disabled={isPending}
-                    className="focus-frame inline-flex h-10 cursor-pointer items-center border border-hairline bg-background px-4 text-sm text-sub transition-[background-color,color,transform] hover:bg-surface hover:text-ink active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                    Dismiss
-                </button>
-                <button
-                    type="button"
-                    onClick={() => resolve(true)}
-                    disabled={isPending}
-                    className="inline-flex h-10 cursor-pointer items-center bg-accent px-4 text-sm font-medium text-background transition-[background-color,transform] hover:bg-accent-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-accent"
-                >
-                    Apply
-                </button>
-            </div>
-        </li>
-    );
-};
+            </a>
+        </div>
+        <div className="flex max-w-full items-center gap-2 self-start bg-surface px-3 py-2.5">
+            <StatusPill status={suggestion.currentStatus} />
+            <span
+                aria-hidden="true"
+                className="icon-[lucide--arrow-right] size-3.5 shrink-0 text-muted"
+            />
+            <StatusPill status={suggestion.suggestedStatus} />
+        </div>
+        <div className="flex items-center justify-end gap-2 border-t border-faint pt-3">
+            <button
+                type="button"
+                onClick={() => onResolve(suggestion.id, false)}
+                className="focus-frame inline-flex h-10 cursor-pointer items-center border border-hairline bg-background px-4 text-sm text-sub transition-[background-color,color,transform] hover:bg-surface hover:text-ink active:scale-[0.96]"
+            >
+                Dismiss
+            </button>
+            <button
+                type="button"
+                onClick={() => onResolve(suggestion.id, true)}
+                className="inline-flex h-10 cursor-pointer items-center bg-accent px-4 text-sm font-medium text-background transition-[background-color,transform] hover:bg-accent-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:scale-[0.96]"
+            >
+                Apply
+            </button>
+        </div>
+    </li>
+);
 
 type EmailSyncPopoverProps = {
     panel: EmailSyncPanel;
@@ -316,20 +313,21 @@ export const EmailSyncMenu = ({ panel }: { panel: EmailSyncPanel }) => {
     const router = useRouter();
     const [isConnecting, startConnect] = useTransition();
     const [isSyncing, startSync] = useTransition();
+    const [, startResolve] = useTransition();
     const [needsReconnect, setNeedsReconnect] = useState(false);
     const [open, setOpen] = useState(false);
     const ref = useRef<HTMLDivElement>(null);
-    const [suggestions, setSuggestions] = useState<EmailSuggestion[]>(
-        panel.suggestions,
-    );
 
-    // The URL never changes here, so re-sync local state when a server refresh
-    // delivers a new set of suggestions (e.g. right after a sync).
-    const [committed, setCommitted] = useState(panel.suggestions);
-    if (panel.suggestions !== committed) {
-        setCommitted(panel.suggestions);
-        setSuggestions(panel.suggestions);
-    }
+    // An answered suggestion leaves the list on the click rather than on the
+    // reply, so the row and the count badge keep up with the button. The
+    // removal is held for as long as the write runs and is discarded when it
+    // ends, which is what puts a refused row back without asking the server
+    // what the list should be.
+    const [suggestions, removeSuggestion] = useOptimistic(
+        panel.suggestions,
+        (current: EmailSuggestion[], id: string) =>
+            current.filter((suggestion) => suggestion.id !== id),
+    );
 
     useEffect(() => {
         if (!open) return;
@@ -387,17 +385,24 @@ export const EmailSyncMenu = ({ panel }: { panel: EmailSyncPanel }) => {
             }
         });
 
+    // The accepted status lands on a page this popover is not showing, so the
+    // toast is the only word that it moved and goes up with the row leaving
+    // rather than after the write. A refusal is reported under the same id, so
+    // it replaces that confirmation instead of stacking a contradiction on top
+    // of it, and the row it explains slides back as the transition ends.
     const onResolve = (id: string, accept: boolean) => {
-        setSuggestions((current) => current.filter((s) => s.id !== id));
-        void (async () => {
-            if (accept) {
-                await acceptSuggestion(id, browserTimeZone());
-                toast.success(EMAIL_SYNC_COPY.statusUpdated);
-            } else {
-                await dismissSuggestionAction(id);
+        startResolve(async () => {
+            removeSuggestion(id);
+            if (accept) toast.success(EMAIL_SYNC_COPY.statusUpdated, { id });
+            try {
+                const result = accept
+                    ? await acceptSuggestion(id, browserTimeZone())
+                    : await dismissSuggestionAction(id);
+                if (!result.ok) toast.error(result.error, { id });
+            } catch {
+                toast.error(EMAIL_SYNC_COPY.resolveFailed, { id });
             }
-            router.refresh();
-        })();
+        });
     };
 
     return (

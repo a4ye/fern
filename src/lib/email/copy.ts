@@ -6,6 +6,9 @@ export const EMAIL_SYNC_COPY = {
     accessExpired: "Reconnect Gmail to keep checking your inbox.",
     genericFailure: "Couldn't check your inbox. Please try again.",
     statusUpdated: "Status updated.",
+    signInToResolve: "Sign in to update your applications.",
+    suggestionGone: "That suggestion is no longer there.",
+    resolveFailed: "Couldn't save that change. Please try again.",
 } as const;
 
 export type EmailSyncSuccessCopyInput = {
