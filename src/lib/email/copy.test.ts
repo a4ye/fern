@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { MAX_EMAILS_PER_SYNC } from "@/lib/limits";
 import { emailSyncSuccessMessage } from "./copy";
 
 describe("emailSyncSuccessMessage", () => {
@@ -6,6 +7,7 @@ describe("emailSyncSuccessMessage", () => {
         expect(
             emailSyncSuccessMessage({
                 found: 1,
+                remaining: 0,
                 hasMore: false,
                 initialScanLimited: false,
             }),
@@ -16,16 +18,40 @@ describe("emailSyncSuccessMessage", () => {
         expect(
             emailSyncSuccessMessage({
                 found: 0,
+                remaining: 0,
                 hasMore: false,
                 initialScanLimited: false,
             }),
         ).toBe("No updates found.");
     });
 
-    it("reports remaining work after several suggestions", () => {
+    it("counts the backlog left in the queue", () => {
         expect(
             emailSyncSuccessMessage({
                 found: 3,
+                remaining: 420,
+                hasMore: true,
+                initialScanLimited: false,
+            }),
+        ).toBe("3 updates found. 420 emails remaining to sync.");
+    });
+
+    it("uses singular copy for a backlog of one", () => {
+        expect(
+            emailSyncSuccessMessage({
+                found: 0,
+                remaining: 1,
+                hasMore: true,
+                initialScanLimited: false,
+            }),
+        ).toBe("No updates found. 1 email remaining to sync.");
+    });
+
+    it("falls back when more mail waits but none is queued", () => {
+        expect(
+            emailSyncSuccessMessage({
+                found: 3,
+                remaining: 0,
                 hasMore: true,
                 initialScanLimited: false,
             }),
@@ -36,9 +62,12 @@ describe("emailSyncSuccessMessage", () => {
         expect(
             emailSyncSuccessMessage({
                 found: 0,
+                remaining: 0,
                 hasMore: false,
                 initialScanLimited: true,
             }),
-        ).toBe("No updates found in your 100 most recent emails.");
+        ).toBe(
+            `No updates found in your ${MAX_EMAILS_PER_SYNC} most recent emails.`,
+        );
     });
 });

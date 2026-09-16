@@ -11,6 +11,9 @@ import {
 const GMAIL_API = "https://gmail.googleapis.com/gmail/v1/users/me";
 const BODY_LIMIT = 4000;
 
+// The most IDs Gmail will return from one list call, whatever is asked for.
+const LIST_PAGE_LIMIT = 500;
+
 type GmailHeader = { name: string; value: string };
 type GmailPart = {
     mimeType?: string;
@@ -157,26 +160,46 @@ export const createGmailProvider = (accessToken: string): EmailProvider => {
             const profileResponse = await authedFetch(accessToken, "/profile");
             const profile = (await profileResponse.json()) as GmailProfile;
 
-            // Scope to the inbox: recruiter status updates land there, while the
-            // user's own outgoing mail (sent-only) and drafts are excluded. A
-            // message sent to oneself keeps the INBOX label, so it still matches.
-            const query = encodeURIComponent(
-                `in:inbox newer_than:${newerThanDays}d`,
-            );
-            const listResponse = await authedFetch(
-                accessToken,
-                `/messages?maxResults=${maxResults}&q=${query}`,
-            );
-            const list = (await listResponse.json()) as {
-                messages?: { id: string }[];
-                nextPageToken?: string;
-            };
+            const ids: string[] = [];
+            let pageToken = "";
+
+            // A scan wider than one page is walked page by page. Bounded by the
+            // page count rather than by the IDs collected, because Gmail may
+            // answer with an empty page and a token to follow it.
+            const pages = Math.ceil(maxResults / LIST_PAGE_LIMIT);
+            for (let page = 0; page < pages; page += 1) {
+                const params = new URLSearchParams({
+                    // Scoped to the inbox: recruiter status updates land there,
+                    // while the user's own outgoing mail (sent-only) and drafts
+                    // are excluded. A message sent to oneself keeps the INBOX
+                    // label, so it still matches.
+                    q: `in:inbox newer_than:${newerThanDays}d`,
+                    maxResults: String(
+                        Math.min(LIST_PAGE_LIMIT, maxResults - ids.length),
+                    ),
+                });
+                if (pageToken) params.set("pageToken", pageToken);
+
+                const listResponse = await authedFetch(
+                    accessToken,
+                    `/messages?${params.toString()}`,
+                );
+                const list = (await listResponse.json()) as {
+                    messages?: { id: string }[];
+                    nextPageToken?: string;
+                };
+                for (const message of list.messages ?? []) ids.push(message.id);
+
+                pageToken = list.nextPageToken ?? "";
+                if (!pageToken || ids.length >= maxResults) break;
+            }
+
             return {
-                messageIds: unique(
-                    (list.messages ?? []).map((message) => message.id),
-                ),
+                messageIds: unique(ids),
                 historyId: profile.historyId,
-                hasMore: Boolean(list.nextPageToken),
+                // A token still in hand means the scan stopped at its ceiling
+                // rather than at the end of the inbox.
+                hasMore: pageToken !== "",
             };
         },
 

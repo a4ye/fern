@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, mock } from "bun:test";
+import { MAX_EMAILS_PER_SYNC } from "@/lib/limits";
 import type { EmailProvider, NormalizedEmail } from "./types";
 import { EmailHistoryExpiredError } from "./types";
+
+// Mirrors PROCESSING_BATCH_LIMIT, which sync.ts keeps to itself.
+const BATCH_SIZE = 25;
 
 let historyId: string | null = null;
 let pendingBatches: string[][] = [];
@@ -100,7 +104,7 @@ describe("syncEmailInbox", () => {
         const result = await syncEmailInbox("user-1", gmail);
 
         expect(gmail.discoverRecent).toHaveBeenCalledWith({
-            maxResults: 100,
+            maxResults: MAX_EMAILS_PER_SYNC,
             newerThanDays: 90,
         });
         expect(stageEmailSyncMessages).toHaveBeenCalledWith(
@@ -134,23 +138,26 @@ describe("syncEmailInbox", () => {
         });
     });
 
-    it("caps one sync at 100 messages while preserving the backlog", async () => {
+    // The ceiling is reached with the queue still full, so the loop has to stop
+    // on its own count rather than on running out of pending messages.
+    it("caps one sync at the per-sync ceiling while preserving the backlog", async () => {
         const messageIds = Array.from(
-            { length: 100 },
+            { length: MAX_EMAILS_PER_SYNC },
             (_, index) => `m-${index + 1}`,
         );
-        pendingBatches = Array.from({ length: 4 }, (_, index) =>
-            messageIds.slice(index * 25, (index + 1) * 25),
+        const batches = MAX_EMAILS_PER_SYNC / BATCH_SIZE;
+        pendingBatches = Array.from({ length: batches }, (_, index) =>
+            messageIds.slice(index * BATCH_SIZE, (index + 1) * BATCH_SIZE),
         );
         remaining = 5;
 
         const result = await syncEmailInbox("user-1", provider(messageIds));
 
-        expect(listPendingEmailSyncMessageIds).toHaveBeenCalledTimes(4);
-        expect(completeEmailSyncMessages).toHaveBeenCalledTimes(4);
+        expect(listPendingEmailSyncMessageIds).toHaveBeenCalledTimes(batches);
+        expect(completeEmailSyncMessages).toHaveBeenCalledTimes(batches);
         expect(result).toMatchObject({
-            found: 4,
-            scanned: 100,
+            found: batches,
+            scanned: MAX_EMAILS_PER_SYNC,
             remaining: 5,
             hasMore: true,
         });

@@ -25,6 +25,7 @@ import {
     type EmailSyncPanel,
 } from "@/components/dashboard/data";
 import { LocalDateTime } from "@/components/dashboard/local-date-time";
+import { useTooltip } from "@/components/dashboard/tooltip";
 import { APP_NAME } from "@/lib/site";
 
 // Gmail read-only scope, requested when the user links their Google account.
@@ -108,6 +109,43 @@ const SuggestionRow = ({
     </li>
 );
 
+const SyncNowButton = ({
+    isSyncing,
+    onSync,
+}: {
+    isSyncing: boolean;
+    onSync: () => void;
+}) => {
+    const { triggerProps, tooltip, tooltipId, open, hide } =
+        useTooltip<HTMLButtonElement>(EMAIL_SYNC_COPY.syncCeiling);
+
+    return (
+        <>
+            <button
+                {...triggerProps}
+                type="button"
+                onClick={() => {
+                    // Closed by hand because the click disables the button, and a
+                    // disabled button is not guaranteed to report the pointer
+                    // leaving it.
+                    hide();
+                    onSync();
+                }}
+                disabled={isSyncing}
+                aria-describedby={open ? tooltipId : undefined}
+                className="focus-frame inline-flex h-10 shrink-0 cursor-pointer items-center gap-1.5 border border-hairline bg-background px-3 text-sm text-ink transition-[border-color,transform] hover:border-tile-border active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+                <span
+                    aria-hidden="true"
+                    className={`icon-[lucide--refresh-cw] size-3.5 ${isSyncing ? "animate-spin" : ""}`}
+                />
+                {isSyncing ? "Syncing" : "Sync now"}
+            </button>
+            {tooltip}
+        </>
+    );
+};
+
 type EmailSyncPopoverProps = {
     panel: EmailSyncPanel;
     suggestions: EmailSuggestion[];
@@ -164,18 +202,7 @@ const EmailSyncPopover = ({
                     Needs attention
                 </span>
             ) : panel.connected ? (
-                <button
-                    type="button"
-                    onClick={onSync}
-                    disabled={isSyncing}
-                    className="focus-frame inline-flex h-10 shrink-0 cursor-pointer items-center gap-1.5 border border-hairline bg-background px-3 text-sm text-ink transition-[border-color,transform] hover:border-tile-border active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                    <span
-                        aria-hidden="true"
-                        className={`icon-[lucide--refresh-cw] size-3.5 ${isSyncing ? "animate-spin" : ""}`}
-                    />
-                    {isSyncing ? "Syncing" : "Sync now"}
-                </button>
+                <SyncNowButton isSyncing={isSyncing} onSync={onSync} />
             ) : (
                 <span className="shrink-0 text-xs text-muted">
                     Not connected

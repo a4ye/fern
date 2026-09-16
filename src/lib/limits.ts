@@ -136,6 +136,13 @@ export const MAX_APPLICATION_BATCH = 2_000;
 // Steps added or dropped in a single save from the detail panel.
 export const MAX_STATUS_STEP_EDITS = 100;
 
+// Inbox messages one sync will read and classify. Every discovered ID is queued
+// in the database first, so a backlog above this waits for the next press rather
+// than being dropped. Set where a season of neglected mail clears in a couple of
+// syncs, and below what the request has time to finish: the model calls run one
+// group after another, and only the narrowing keeps most groups from making one.
+export const MAX_EMAILS_PER_SYNC = 1_000;
+
 // The write is one statement whatever the row count, so this is a ceiling on
 // how much of someone's old tracker has to arrive in pieces, not on the
 // database. The mapping step is what feels it: every row is re-read through the

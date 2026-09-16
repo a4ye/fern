@@ -50,8 +50,73 @@ describe("Gmail discovery", () => {
         });
         const calls = fetchMock.mock.calls.map((call) => String(call[0]));
         expect(calls[0]).toEndWith("/profile");
-        expect(calls[1]).toContain("/messages?maxResults=100");
+        expect(calls[1]).toContain("maxResults=100");
         expect(calls[1]).toContain("newer_than%3A90d");
+    });
+
+    it("pages a scan wider than one Gmail page", async () => {
+        responses = [
+            json({ historyId: "100" }),
+            json({
+                messages: Array.from({ length: 500 }, (_, index) => ({
+                    id: `m-${index + 1}`,
+                })),
+                nextPageToken: "older",
+            }),
+            json({ messages: [{ id: "m-501" }] }),
+        ];
+
+        const result = await createGmailProvider("token").discoverRecent({
+            maxResults: 1000,
+            newerThanDays: 90,
+        });
+
+        expect(result.messageIds).toHaveLength(501);
+        expect(result.hasMore).toBe(false);
+        const calls = fetchMock.mock.calls.map((call) => String(call[0]));
+        expect(calls[1]).toContain("maxResults=500");
+        expect(calls[2]).toContain("pageToken=older");
+        expect(calls[2]).toContain("maxResults=500");
+    });
+
+    it("stops at the ceiling and reports the inbox still has more", async () => {
+        responses = [
+            json({ historyId: "100" }),
+            json({
+                messages: Array.from({ length: 500 }, (_, index) => ({
+                    id: `m-${index + 1}`,
+                })),
+                nextPageToken: "older",
+            }),
+        ];
+
+        const result = await createGmailProvider("token").discoverRecent({
+            maxResults: 500,
+            newerThanDays: 90,
+        });
+
+        expect(result.messageIds).toHaveLength(500);
+        expect(result.hasMore).toBe(true);
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    // Gmail can answer with an empty page and a token to follow it, so the walk
+    // is bounded by the pages it is allowed rather than by the IDs it collects.
+    it("gives up after its page budget when Gmail returns empty pages", async () => {
+        responses = [
+            json({ historyId: "100" }),
+            json({ messages: [], nextPageToken: "older" }),
+            json({ messages: [], nextPageToken: "older-still" }),
+        ];
+
+        const result = await createGmailProvider("token").discoverRecent({
+            maxResults: 1000,
+            newerThanDays: 90,
+        });
+
+        expect(result.messageIds).toEqual([]);
+        expect(result.hasMore).toBe(true);
+        expect(fetchMock).toHaveBeenCalledTimes(3);
     });
 
     it("uses the last fully staged record as the cursor for a partial history page", async () => {

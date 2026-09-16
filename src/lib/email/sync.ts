@@ -15,12 +15,20 @@ import {
 } from "@/lib/email/types";
 import { candidatesFor } from "@/lib/email/candidates";
 import type { EmailMatch } from "@/lib/email/classify";
+import { MAX_EMAILS_PER_SYNC } from "@/lib/limits";
 
-const INITIAL_EMAIL_LIMIT = 100;
 const INITIAL_LOOKBACK_DAYS = 90;
+
+// Gmail's own ceiling on one page of history, so a delta cannot queue more than
+// this however far behind the cursor is. Nothing is lost by stopping here: the
+// cursor only advances to the last record staged, so the next sync resumes.
 const HISTORY_PAGE_LIMIT = 500;
+
+// Messages per model call, and per round of Gmail reads. Gmail allows one
+// account 250 quota units a second and a message read costs 5, so 25 at once
+// spends half of that. Raising it also hands the model more indexes to keep
+// straight in a single prompt.
 const PROCESSING_BATCH_LIMIT = 25;
-const MAX_MESSAGES_PER_SYNC = 100;
 
 export type EmailSyncOutcome = {
     found: number;
@@ -31,9 +39,11 @@ export type EmailSyncOutcome = {
     initialScanLimited: boolean;
 };
 
+// A first sync discovers exactly what one sync can then work through, so the
+// scan never stages mail it has no chance of reading.
 const initialDiscovery = (provider: EmailProvider): Promise<EmailDiscovery> =>
     provider.discoverRecent({
-        maxResults: INITIAL_EMAIL_LIMIT,
+        maxResults: MAX_EMAILS_PER_SYNC,
         newerThanDays: INITIAL_LOOKBACK_DAYS,
     });
 
@@ -66,10 +76,10 @@ export const syncEmailInbox = async (
     let scanned = 0;
     let processed = 0;
 
-    while (processed < MAX_MESSAGES_PER_SYNC) {
+    while (processed < MAX_EMAILS_PER_SYNC) {
         const batchLimit = Math.min(
             PROCESSING_BATCH_LIMIT,
-            MAX_MESSAGES_PER_SYNC - processed,
+            MAX_EMAILS_PER_SYNC - processed,
         );
         const messageIds = await listPendingEmailSyncMessageIds(
             userId,
