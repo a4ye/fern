@@ -386,11 +386,13 @@ const fuzzyCandidates = (words: readonly string[]): Candidate[] => {
 const isPopular = (candidate: Candidate): boolean =>
     popularLocationPriority(candidate.record.label) < Number.MAX_SAFE_INTEGER;
 
+// How much of the query the candidate accounts for. Leaving nothing over is
+// as complete as naming the region or country the leftover words name: "san
+// fra" is all city name, "york england" is a city and its country.
+const explanationFor = (candidate: Candidate): number =>
+    candidate.contextQuality === 0 ? 2 : candidate.contextQuality;
+
 const compareCandidates = (left: Candidate, right: Candidate): number => {
-    const leftExact = left.match === "exact";
-    const rightExact = right.match === "exact";
-    const exactWordDifference =
-        leftExact && rightExact ? right.cityWordCount - left.cityWordCount : 0;
     const leftPopular = isPopular(left);
     const rightPopular = isPopular(right);
     const popularityDifference =
@@ -399,13 +401,11 @@ const compareCandidates = (left: Candidate, right: Candidate): number => {
               popularLocationPriority(right.record.label)
             : 0;
     return (
-        Number(rightExact) - Number(leftExact) ||
-        exactWordDifference ||
-        right.contextQuality - left.contextQuality ||
+        explanationFor(right) - explanationFor(left) ||
         Number(rightPopular) - Number(leftPopular) ||
         popularityDifference ||
-        right.matchScore - left.matchScore ||
         right.cityWordCount - left.cityWordCount ||
+        right.matchScore - left.matchScore ||
         left.distance - right.distance ||
         right.record.population - left.record.population ||
         left.record.label.localeCompare(right.record.label, "en")
@@ -446,9 +446,9 @@ const resolutionFor = (
     exact: boolean,
 ): ImportedLocationResolution => {
     const ranked = uniqueCandidates(rawCandidates);
-    const bestContext = ranked[0]?.contextQuality;
+    const best = ranked[0] ? explanationFor(ranked[0]) : 0;
     const candidates = ranked.filter(
-        (candidate) => candidate.contextQuality === bestContext,
+        (candidate) => explanationFor(candidate) === best,
     );
     if (candidates.length === 0) return { status: "unmatched" };
 
@@ -586,70 +586,44 @@ export const searchComprehensiveLocations = (
         return [];
     }
 
-    const popularResolution = resolvePopularLocation(raw);
-    const exactMatches = exactCandidates(words);
-    if (
-        popularResolution.status === "unmatched" &&
-        STANDALONE_ENTITIES.has(normalizeLocationPhrase(words.join(" ")))
-    ) {
-        return uniqueCandidates(exactMatches)
-            .slice(0, limit)
-            .map((candidate) => candidate.record.label);
-    }
-    const ranked = uniqueCandidates([
-        ...exactMatches,
-        ...prefixCandidates(words),
-        ...(exactMatches.length === 0 &&
-        popularResolution.status === "unmatched"
-            ? fuzzyCandidates(words)
-            : []),
-    ]);
-    const bestContext = ranked[0]?.contextQuality;
-    const contextual = ranked.filter(
-        (candidate) => candidate.contextQuality === bestContext,
+    // A query naming a country or a region names no city, so only cities that
+    // carry that name themselves stay. Everything a hub is called still
+    // belongs: "ca" is the code for California and the start of Calgary.
+    const entity = STANDALONE_ENTITIES.has(
+        normalizeLocationPhrase(words.join(" ")),
     );
-    const exact = contextual.filter((candidate) => candidate.match === "exact");
-    let globalCandidates: Candidate[];
-    if (exact.length > 0) {
-        const significantExact = exact.filter(
-            (candidate) =>
-                candidate.record.population >= SIGNIFICANT_CITY_POPULATION,
-        );
-        const leadingExact =
-            significantExact.length >= 2 ? significantExact : exact;
-        globalCandidates =
-            leadingExact.length >= 2
-                ? leadingExact
-                : [
-                      ...leadingExact,
-                      ...contextual.filter(
-                          (candidate) => candidate.match !== "exact",
-                      ),
-                  ];
-    } else {
-        const significant = contextual.filter(
-            (candidate) =>
-                candidate.record.population >= SIGNIFICANT_CITY_POPULATION,
-        );
-        globalCandidates = significant.length >= 2 ? significant : contextual;
-    }
+    const exactMatches = exactCandidates(words);
+    const ranked = uniqueCandidates(
+        entity
+            ? exactMatches
+            : [
+                  ...exactMatches,
+                  ...prefixCandidates(words),
+                  ...(exactMatches.length === 0 ? fuzzyCandidates(words) : []),
+              ],
+    );
+    const best = ranked[0] ? explanationFor(ranked[0]) : 0;
+    const explained = ranked.filter(
+        (candidate) => explanationFor(candidate) === best,
+    );
+    // Several cities carrying the whole query as their name is a question of
+    // which one, not the opening of a longer name.
+    const exact = explained.filter((candidate) => candidate.match === "exact");
+    const shown = exact.length >= 2 ? exact : explained;
+    // Villages crowd out the cities people work in, so they go once two
+    // sizeable matches remain. The leading match stays whatever its size:
+    // someone who spells a small town out in full means that town.
+    const significant = shown.filter(
+        (candidate, at) =>
+            at === 0 ||
+            candidate.record.population >= SIGNIFICANT_CITY_POPULATION,
+    );
+    const global = (significant.length >= 2 ? significant : shown).map(
+        (candidate) => candidate.record.label,
+    );
 
-    const popular = searchPopularLocations(raw, limit);
-    const globalSource =
-        popularResolution.status === "matched" && exact.length === 0
-            ? []
-            : popularResolution.status === "matched"
-              ? exact
-              : globalCandidates;
-    const global = globalSource.map((candidate) => candidate.record.label);
-    const popularFirst =
-        popularResolution.status !== "unmatched" ||
-        (words.join(" ").length <= 3 && exact.length > 0);
-    const ordered = popularFirst
-        ? [...popular, ...global]
-        : [...global, ...popular];
     const seen = new Set<string>();
-    return ordered
+    return [...searchPopularLocations(raw, limit), ...global]
         .filter((location) => {
             const key = normalizeLocationPhrase(location);
             if (!key || seen.has(key)) return false;

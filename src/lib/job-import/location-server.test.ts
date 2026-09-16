@@ -178,6 +178,37 @@ describe("searchComprehensiveLocations", () => {
         expect(searchComprehensiveLocations("Londn")).toEqual(expected);
     });
 
+    test("leads with the city the whole query spells out", () => {
+        const cases = [
+            ["San Fra", "San Francisco, California, United States"],
+            ["New Yo", "New York, New York, United States"],
+            ["Los An", "Los Angeles, California, United States"],
+            ["Ho Ch", "Ho Chi Minh City, Ho Chi Minh City, Vietnam"],
+            ["The Ha", "The Hague, South Holland, Netherlands"],
+        ];
+        for (const [query, expected] of cases) {
+            expect(searchComprehensiveLocations(query)[0]).toBe(expected);
+        }
+    });
+
+    test("still finds hubs behind queries that are also region codes", () => {
+        expect(searchComprehensiveLocations("Sa")).toContain(
+            "San Francisco, California, United States",
+        );
+        expect(searchComprehensiveLocations("To")[0]).toBe(
+            "Toronto, Ontario, Canada",
+        );
+    });
+
+    test("names a city once however the index spells its region", () => {
+        expect(searchComprehensiveLocations("Berl")).not.toContain(
+            "Berlin, State of Berlin, Germany",
+        );
+        expect(searchComprehensiveLocations("Taip")).not.toContain(
+            "Taipei, Taiwan, Taiwan",
+        );
+    });
+
     test("ranks literal prefixes above shorter fuzzy corrections", () => {
         const results = searchComprehensiveLocations("cambrid");
         expect(results.slice(0, 3)).toEqual([

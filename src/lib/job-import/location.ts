@@ -322,6 +322,7 @@ export const POPULAR_LOCATIONS: readonly LocationRecord[] = [
         countryCode3: "DEU",
         adminCode: "16",
         population: 3_664_088,
+        regionAliases: ["State of Berlin"],
         bareCityAliases: ["Berlin"],
     },
     {
@@ -572,6 +573,7 @@ export const POPULAR_LOCATIONS: readonly LocationRecord[] = [
         countryCode3: "VNM",
         adminCode: "79",
         population: 14_002_598,
+        regionAliases: ["Ho Chi Minh City (HCMC)"],
         cityAliases: ["Saigon", "Sai Gon", "HCMC"],
         bareCityAliases: ["Ho Chi Minh City", "Saigon", "Sai Gon", "HCMC"],
     },
@@ -614,6 +616,7 @@ export const POPULAR_LOCATIONS: readonly LocationRecord[] = [
         countryCode3: "TWN",
         adminCode: "03",
         population: 2_494_813,
+        regionAliases: ["Taiwan"],
         bareCityAliases: ["Taipei"],
     },
     {
