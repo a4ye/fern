@@ -797,18 +797,22 @@ set
         when $1::application_status = 'applied'
         then coalesce(
             a.applied_at,
-            (current_timestamp at time zone $2::text)::date
+            (
+                least($3::timestamptz, current_timestamp)
+                    at time zone $2::text
+            )::date
         )
         else a.applied_at
     end
 from lists l
 where a.list_id = l.id
-    and a.id = $3
-    and l.user_id = $4`;
+    and a.id = $4
+    and l.user_id = $5`;
 
 export interface SetApplicationStatusArgs {
     status: string;
     timeZone: string;
+    occurredAt: Date;
     applicationId: string;
     userId: string;
 }
@@ -816,7 +820,7 @@ export interface SetApplicationStatusArgs {
 export async function setApplicationStatus(client: Client, args: SetApplicationStatusArgs): Promise<void> {
     await client.query({
         text: setApplicationStatusQuery,
-        values: [args.status, args.timeZone, args.applicationId, args.userId],
+        values: [args.status, args.timeZone, args.occurredAt, args.applicationId, args.userId],
         rowMode: "array"
     });
 }

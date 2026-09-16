@@ -4,14 +4,15 @@
 //   bun run db:seed-suggestions              # 3 suggestions for the Google-linked user
 //   bun run db:seed-suggestions 8            # a different count
 //   bun run db:seed-suggestions 8 you@example.com
+//   bun run db:seed-suggestions --list="My list"  # only that list's applications
 //   bun run db:seed-suggestions --clear      # remove every seeded suggestion
 //
 // Seeded rows carry a "seed-" message id, which is what --clear matches on, so
 // suggestions from a real sync are never touched.
 
 import { getPool } from "../src/db/client";
+import { applicationsForUser } from "../src/db/queries";
 import {
-    getApplicationsForUser,
     insertEmailSuggestions,
     type EmailSuggestionInput,
     type UserApplication,
@@ -140,7 +141,9 @@ const buildSuggestion = (
         from: `careers@${senderDomain(application.company)}`,
         subject: template.subject(application.company, role),
         snippet: template.snippet(application.company, role),
-        receivedAt: new Date(Date.now() - (index + 1) * 3_600_000),
+        // Days back rather than hours, so accepting one visibly dates the step
+        // by the mail instead of by the click.
+        receivedAt: new Date(Date.now() - (index + 1) * 86_400_000),
         currentStatus: application.status,
         suggestedStatus,
         confidence: 0.7 + Math.random() * 0.25,
@@ -175,6 +178,30 @@ const findUser = async (email: string | undefined): Promise<SeedUser> => {
     return user;
 };
 
+const findApplications = async (
+    userId: string,
+    listName: string | undefined,
+): Promise<UserApplication[]> => {
+    const rows = await applicationsForUser(getPool(), { userId });
+    const matching = listName
+        ? rows.filter(
+              (row) => row.listName.toLowerCase() === listName.toLowerCase(),
+          )
+        : rows;
+    if (listName && matching.length === 0) {
+        const names = [...new Set(rows.map((row) => row.listName))];
+        throw new Error(
+            `No applications in a list named "${listName}". Lists: ${names.join(", ")}`,
+        );
+    }
+    return matching.map((row) => ({
+        id: row.id,
+        company: row.companyName,
+        role: row.roleTitle,
+        status: row.status as ApplicationStatus,
+    }));
+};
+
 const clearSeeded = async (userId: string): Promise<number> => {
     const { rowCount } = await getPool().query(
         `delete from email_suggestions
@@ -190,6 +217,9 @@ const run = async (): Promise<void> => {
     const rest = args.filter((arg) => !arg.startsWith("--"));
     const count = Number(rest.find((arg) => /^\d+$/.test(arg)) ?? 3);
     const email = rest.find((arg) => arg.includes("@"));
+    const listName = args
+        .find((arg) => arg.startsWith("--list="))
+        ?.slice("--list=".length);
 
     const user = await findUser(email);
 
@@ -199,7 +229,7 @@ const run = async (): Promise<void> => {
         return;
     }
 
-    const applications = await getApplicationsForUser(user.id);
+    const applications = await findApplications(user.id, listName);
     const suggestions = shuffle(applications)
         .map(buildSuggestion)
         .filter((suggestion): suggestion is EmailSuggestionInput =>

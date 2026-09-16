@@ -96,6 +96,7 @@ const suggestion = {
     applicationId: "app-1",
     suggestedStatus: "interviewing",
     currentStatus: "applied",
+    emailReceivedAt: new Date("2026-09-10T14:30:00Z"),
 };
 const getSuggestionForUser = mock(
     async (..._args: unknown[]): Promise<typeof suggestion | null> =>
@@ -633,6 +634,17 @@ describe("applySuggestion", () => {
         expect(setSuggestionState.mock.calls[0]?.[1]).toMatchObject({
             id: "suggestion-1",
             state: "accepted",
+        });
+    });
+
+    it("dates the move by the mail that reported it", async () => {
+        await applySuggestion("user-1", "suggestion-1", "America/Toronto");
+
+        expect(insertApplicationEvent.mock.calls[0]?.[1]).toMatchObject({
+            occurredAt: suggestion.emailReceivedAt,
+        });
+        expect(setApplicationStatus.mock.calls[0]?.[1]).toMatchObject({
+            occurredAt: suggestion.emailReceivedAt,
         });
     });
 

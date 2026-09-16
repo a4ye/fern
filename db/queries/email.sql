@@ -75,7 +75,7 @@ order by s.email_received_at desc
 limit 100;
 
 -- name: GetSuggestionForUser :one
-select id, application_id, suggested_status, current_status
+select id, application_id, suggested_status, current_status, email_received_at
 from email_suggestions
 where id = @id and user_id = @user_id and state = 'pending'
 for update;

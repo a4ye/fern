@@ -171,28 +171,39 @@ export async function deleteApplicationEvent(client: Client, args: DeleteApplica
 
 export const insertApplicationEventQuery = `-- name: InsertApplicationEvent :exec
 insert into application_events (
-    application_id, from_status, to_status, note, history_action_id
+    application_id, from_status, to_status, note, occurred_at, history_action_id
 )
-values (
+select
     $1,
     $2,
     $3,
     $4,
-    $5::bigint
-)`;
+    least(
+        greatest(
+            $5::timestamptz,
+            (
+                select max(e.occurred_at) + interval '1 microsecond'
+                from application_events e
+                where e.application_id = $1
+            )
+        ),
+        statement_timestamp()
+    ),
+    $6::bigint`;
 
 export interface InsertApplicationEventArgs {
     applicationId: string;
     fromStatus: string | null;
     toStatus: string | null;
     note: string | null;
+    occurredAt: Date;
     historyActionId: string | null;
 }
 
 export async function insertApplicationEvent(client: Client, args: InsertApplicationEventArgs): Promise<void> {
     await client.query({
         text: insertApplicationEventQuery,
-        values: [args.applicationId, args.fromStatus, args.toStatus, args.note, args.historyActionId],
+        values: [args.applicationId, args.fromStatus, args.toStatus, args.note, args.occurredAt, args.historyActionId],
         rowMode: "array"
     });
 }

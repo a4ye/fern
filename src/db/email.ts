@@ -185,8 +185,10 @@ export const recordEmailSync = async (userId: string): Promise<void> => {
 };
 
 // Applies an accepted suggestion: flips the application's status and records the
-// transition as an event, so it surfaces in the list's activity feed. Returns
-// false when the suggestion no longer exists or was already resolved.
+// transition as an event, so it surfaces in the list's activity feed. Both are
+// dated by the mail rather than the click, within the bounds each write holds
+// it to. Returns false when the suggestion no longer exists or was already
+// resolved.
 export const applySuggestion = async (
     userId: string,
     suggestionId: string,
@@ -235,6 +237,7 @@ export const applySuggestion = async (
                         applicationId: suggestion.applicationId,
                         userId,
                         status: toStatus,
+                        occurredAt: suggestion.emailReceivedAt,
                         timeZone,
                     });
                     await gen.insertApplicationEvent(historyClient, {
@@ -242,6 +245,7 @@ export const applySuggestion = async (
                         fromStatus: application.status,
                         toStatus,
                         note: "Detected from email",
+                        occurredAt: suggestion.emailReceivedAt,
                         historyActionId,
                     });
                 },

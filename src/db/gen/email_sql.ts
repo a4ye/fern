@@ -175,7 +175,7 @@ export async function listPendingSuggestions(client: Client, args: ListPendingSu
 }
 
 export const getSuggestionForUserQuery = `-- name: GetSuggestionForUser :one
-select id, application_id, suggested_status, current_status
+select id, application_id, suggested_status, current_status, email_received_at
 from email_suggestions
 where id = $1 and user_id = $2 and state = 'pending'
 for update`;
@@ -190,6 +190,7 @@ export interface GetSuggestionForUserRow {
     applicationId: string;
     suggestedStatus: string;
     currentStatus: string;
+    emailReceivedAt: Date;
 }
 
 export async function getSuggestionForUser(client: Client, args: GetSuggestionForUserArgs): Promise<GetSuggestionForUserRow | null> {
@@ -206,7 +207,8 @@ export async function getSuggestionForUser(client: Client, args: GetSuggestionFo
         id: row[0],
         applicationId: row[1],
         suggestedStatus: row[2],
-        currentStatus: row[3]
+        currentStatus: row[3],
+        emailReceivedAt: row[4]
     };
 }
 

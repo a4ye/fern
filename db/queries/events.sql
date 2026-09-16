@@ -65,17 +65,32 @@ where e.application_id = a.id
     and e.application_id = @application_id
     and l.user_id = @user_id;
 
+-- The move is dated by whatever reported it, which for mail is days behind the
+-- click that accepted the report. Two bounds keep the trail ordered: never
+-- before a step already recorded, since the last step is read as where the
+-- application stands, and never after now, since the date came from a clock
+-- that is not ours.
 -- name: InsertApplicationEvent :exec
 insert into application_events (
-    application_id, from_status, to_status, note, history_action_id
+    application_id, from_status, to_status, note, occurred_at, history_action_id
 )
-values (
+select
     @application_id,
     @from_status,
     @to_status,
     sqlc.narg('note'),
-    sqlc.narg('history_action_id')::bigint
-);
+    least(
+        greatest(
+            @occurred_at::timestamptz,
+            (
+                select max(e.occurred_at) + interval '1 microsecond'
+                from application_events e
+                where e.application_id = @application_id
+            )
+        ),
+        statement_timestamp()
+    ),
+    sqlc.narg('history_action_id')::bigint;
 
 -- Apply all staged history edits after taking one application lock. Removed
 -- events are deleted together, additions are chained in their submitted order,

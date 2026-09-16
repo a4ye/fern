@@ -423,6 +423,9 @@ where a.list_id = l.id
     and a.arrangement is distinct from
         sqlc.narg('arrangement')::work_arrangement;
 
+-- The day an application was sent is the day whatever reported it is dated,
+-- not the day the report was read. Bounded above by today, since the date can
+-- come from a clock that is not ours and no application was sent in future.
 -- name: SetApplicationStatus :exec
 update applications a
 set
@@ -431,7 +434,10 @@ set
         when @status::application_status = 'applied'
         then coalesce(
             a.applied_at,
-            (current_timestamp at time zone @time_zone::text)::date
+            (
+                least(@occurred_at::timestamptz, current_timestamp)
+                    at time zone @time_zone::text
+            )::date
         )
         else a.applied_at
     end
