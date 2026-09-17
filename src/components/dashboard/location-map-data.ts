@@ -12,7 +12,7 @@ export const MAX_SCALE = 1024;
 
 // Roughly the width of the largest circles, so merging stops at about the point
 // where the circles would stop touching.
-export const CLUSTER_RADIUS = 44;
+export const CLUSTER_RADIUS = 16;
 
 // Mercator runs to 85 degrees, where Antarctica is wider than Africa and the
 // inhabited world is squeezed into a band. Framing the latitudes people work in
@@ -40,8 +40,11 @@ const MAX_FIT_SCALE = 8;
 
 // Small enough that neighbours stay apart: at the zoom that fits a spread of
 // cities, Toronto and New York are some thirty pixels apart, and a circle that
-// swallows that gap hides the very thing the map is for.
-const MAX_RADIUS = 15;
+// swallows that gap hides the very thing the map is for. This also sets how
+// soon a group can break up, since merging has to hold two circles apart:
+// CLUSTER_RADIUS is measured against this width, so a smaller cap splits a
+// group at a lower zoom.
+const MAX_RADIUS = 12;
 const MIN_RADIUS = 3;
 
 // Web Mercator counts a zoom level per doubling of a 256 pixel world.
