@@ -7,22 +7,27 @@
 @theme {
     --font-sans: var(--font-be-vietnam-pro), sans-serif;
 
-    --color-background: #fbfbf9;
-    --color-surface: #f4f5f0;
+    /* Light neutrals run warm (R > G > B) and the accent family runs sage, so
+       the two sit on opposite sides of neutral. That temperature gap is what
+       carries the colour here; raising chroma would do the same job far more
+       loudly. Ink is the exception and stays sage: it fills whole bands on the
+       landing page, where a warm dark reads as brown rather than as near-black. */
+    --color-background: #fcf8ee;
+    --color-surface: #f8f3e6;
     --color-accent: #6f7d5f;
     --color-accent-deep: #5a6650;
-    --color-accent-tint: #e6e9df;
-    --color-accent-tint-soft: #f0f2ea;
-    --color-hairline: #e6e7e0;
-    --color-faint: #eeeee8;
+    --color-accent-tint: #e8ecdd;
+    --color-accent-tint-soft: #f1f5e7;
+    --color-hairline: #e7e0d2;
+    --color-faint: #f1ece2;
     --color-ink: #2c2f28;
-    --color-muted: #9aa08f;
-    --color-sub: #7c8274;
+    --color-muted: #a19a89;
+    --color-sub: #837c6f;
     --color-gold: #8a6f3f;
-    --color-gold-tint: #f0e9dc;
+    --color-gold-tint: #f2e7d6;
     --color-rose: #b0908c;
     --color-rose-tint: #f4eae8;
-    --color-tile-border: #d9ded0;
+    --color-tile-border: #dcd3c1;
 }
 
 /* Bordered controls focus as one continuous frame. The border and adjacent
@@ -219,11 +224,11 @@ input[type="checkbox"]:indeterminate {
 }
 
 input[type="checkbox"]:checked {
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23fbfbf9' stroke-width='2.5'><path d='M3.5 8.5l3 3 6-6'/></svg>");
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23fcf8ee' stroke-width='2.5'><path d='M3.5 8.5l3 3 6-6'/></svg>");
 }
 
 input[type="checkbox"]:indeterminate {
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23fbfbf9' stroke-width='2.5'><path d='M4 8h8'/></svg>");
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23fcf8ee' stroke-width='2.5'><path d='M4 8h8'/></svg>");
 }
 
 /* The map swaps between levels of detail as it is zoomed. Only one is ever

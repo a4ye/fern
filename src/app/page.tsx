@@ -114,7 +114,7 @@ const Home = () => {
             <SiteHeader />
 
             <div className="mx-auto w-full max-w-6xl flex-1 border-x border-hairline">
-                <section className="px-6 pt-16 pb-20 [background:linear-gradient(165deg,var(--color-accent-tint-soft)_0%,var(--color-background)_55%)] sm:px-10 lg:pt-20">
+                <section className="px-6 pt-16 pb-20 [background:linear-gradient(165deg,var(--color-surface)_0%,var(--color-background)_55%)] sm:px-10 lg:pt-20">
                     <div className="grid items-center gap-16 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16">
                         <div>
                             <h1 className="text-4xl font-semibold tracking-tight text-balance sm:text-5xl lg:text-6xl">
@@ -204,7 +204,7 @@ const Home = () => {
                 </section>
 
                 <SectionRule number={nextSection()} id="how" />
-                <section className="bg-accent-tint-soft px-6 py-16 sm:px-10 lg:py-20">
+                <section className="bg-surface px-6 py-16 sm:px-10 lg:py-20">
                     <h2 className="max-w-xl text-3xl font-semibold tracking-tight text-balance">
                         {EMAIL_SYNC_PROMOTION_ENABLED ? (
                             <>
@@ -355,7 +355,7 @@ const Home = () => {
                 </section>
 
                 <SectionRule number={nextSection()} />
-                <section className="bg-accent-tint-soft px-6 py-16 sm:px-10 lg:py-20">
+                <section className="bg-surface px-6 py-16 sm:px-10 lg:py-20">
                     <h2 className="max-w-xl text-3xl font-semibold tracking-tight text-balance">
                         Where you applied.
                     </h2>

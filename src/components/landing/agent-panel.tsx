@@ -26,7 +26,7 @@ const STEPS = [
 
 export const AgentPanel = () => (
     <div aria-hidden="true" className="border border-hairline bg-background">
-        <div className="border-b border-hairline bg-accent-tint-soft px-4 py-4">
+        <div className="border-b border-hairline bg-surface px-4 py-4">
             <p className="text-xs font-medium text-muted">You</p>
             <p className="mt-2 text-base leading-6 sm:text-lg sm:leading-7">
                 {WORDS.map(({ word, offset }, index) => (
