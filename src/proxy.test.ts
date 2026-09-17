@@ -18,6 +18,12 @@ const requestFor = (path: string, cookie?: string) =>
         headers: cookie ? { cookie } : undefined,
     });
 
+const actionRequestFor = (path: string, cookie: string) =>
+    new NextRequest(new URL(path, "https://tracker.test"), {
+        method: "POST",
+        headers: { cookie, "next-action": "abc123" },
+    });
+
 const expectPassThrough = (res: Response) => {
     expect(res.status).toBe(200);
     expect(res.headers.get("location")).toBeNull();
@@ -97,6 +103,21 @@ describe("proxy", () => {
             expect(
                 proxy(requestFor("/", SIGNED_IN)).headers.get("set-cookie"),
             ).toBeNull();
+        });
+
+        // Next reads a cookie written during a Server Action as proof the
+        // action changed something, and re-renders the page alongside the
+        // action's own answer. A stamp here would say that of every read, and
+        // anything that re-reads when the page is drawn again would call
+        // itself in a loop. Navigations carry the stamp often enough.
+        it("writes nothing on a server action", () => {
+            const res = proxy(actionRequestFor(GATED_PATH, SIGNED_IN));
+            expectPassThrough(res);
+            expect(res.headers.get("set-cookie")).toBeNull();
+        });
+
+        it("still turns a server action away without a session", () => {
+            expectRedirectToLogin(proxy(actionRequestFor(GATED_PATH, "a=1")));
         });
     });
 

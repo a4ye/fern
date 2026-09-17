@@ -3,7 +3,9 @@ import {
     ADMIN_PATH,
     backHref,
     FRIENDS_PATH,
+    listRevision,
     SETTINGS_PATH,
+    type ApplicationRow,
 } from "@/components/dashboard/data";
 
 describe("backHref", () => {
@@ -57,5 +59,52 @@ describe("backHref", () => {
         expect(backHref("/dashboard/admin?q=ada", ADMIN_PATH)).toBe(
             "/dashboard",
         );
+    });
+});
+
+describe("listRevision", () => {
+    const row = (id: string, updatedAt: string) =>
+        ({ id, updatedAt }) as ApplicationRow;
+
+    const MORNING = "2026-09-17T09:00:00.000Z";
+    const NOON = "2026-09-17T12:00:00.000Z";
+
+    it("holds still while the list does", () => {
+        const applications = [row("a", MORNING), row("b", NOON)];
+        expect(listRevision(applications)).toBe(
+            listRevision([...applications]),
+        );
+    });
+
+    it("moves when a row is written to", () => {
+        expect(listRevision([row("a", MORNING)])).not.toBe(
+            listRevision([row("a", NOON)]),
+        );
+    });
+
+    it("moves when a row is added or removed", () => {
+        expect(listRevision([row("a", NOON)])).not.toBe(
+            listRevision([row("a", NOON), row("b", MORNING)]),
+        );
+    });
+
+    // A count and a timestamp both start with digits, so reading them as one
+    // value would let a list of 30 outrank the year it was last written in.
+    it("keeps the count from being weighed against a timestamp", () => {
+        const many = Array.from({ length: 30 }, (_, index) =>
+            row(String(index), MORNING),
+        );
+        expect(listRevision(many)).not.toBe(
+            listRevision(
+                many.map((application) => ({
+                    ...application,
+                    updatedAt: NOON,
+                })),
+            ),
+        );
+    });
+
+    it("answers for a list with nothing in it", () => {
+        expect(listRevision([])).toBe("0:");
     });
 });

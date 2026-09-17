@@ -35,6 +35,12 @@ const SECURE_SESSION_NAME = `${SECURE_COOKIE_PREFIX}${SESSION_NAME}`;
 // database holds as live. Re-stamping the cookie already on the request costs
 // no read, since how long a session lives is the row's to say and the cookie
 // only has to outlast it.
+//
+// Only a navigation carries the stamp. Next reads any cookie written during a
+// Server Action as a signal that the action changed something, and answers it
+// with a re-rendered page on top of the action's own result. Stamping there
+// would say that of every action, including the ones that only read, and a
+// component that re-reads when the page is drawn again would never stop.
 export const proxy = (request: NextRequest) => {
     if (!isProtected(request.nextUrl.pathname)) {
         return NextResponse.next();
@@ -44,8 +50,10 @@ export const proxy = (request: NextRequest) => {
         return NextResponse.redirect(new URL("/login", request.url));
     }
 
-    const secure = request.cookies.has(SECURE_SESSION_NAME);
     const response = NextResponse.next();
+    if (request.method !== "GET") return response;
+
+    const secure = request.cookies.has(SECURE_SESSION_NAME);
     response.cookies.set(
         secure ? SECURE_SESSION_NAME : SESSION_NAME,
         sessionCookie,

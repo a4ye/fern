@@ -7,7 +7,7 @@ import { getListDetail } from "@/db/dashboard";
 import { getExchangeRates } from "@/db/exchange-rates";
 import { getUserSettings } from "@/db/settings";
 import { ApplicationsTable } from "@/components/dashboard/applications-table";
-import { listsHrefFrom } from "@/components/dashboard/data";
+import { listRevision, listsHrefFrom } from "@/components/dashboard/data";
 import { ListHeader } from "@/components/dashboard/list-header";
 import { ListInsights } from "@/components/dashboard/list-insights";
 
@@ -65,6 +65,7 @@ const SeasonPage = async ({ params, searchParams }: Props) => {
                     name={detail.name}
                     listId={detail.id}
                     stats={detail.stats}
+                    revision={listRevision(detail.applications)}
                 />
             </div>
 

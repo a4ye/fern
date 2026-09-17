@@ -489,6 +489,19 @@ export type ApplicationRow = {
     updatedAt: string;
 };
 
+// What a list holds, as a value that changes when any of it does. Every write
+// touches a row's `updatedAt`, and the ones that add or remove rows move the
+// count, so anything read alongside the list can tell a page drawn again over
+// changed data from one drawn again for any other reason.
+export const listRevision = (applications: ApplicationRow[]): string => {
+    const latest = applications.reduce(
+        (newest, application) =>
+            application.updatedAt > newest ? application.updatedAt : newest,
+        "",
+    );
+    return `${applications.length}:${latest}`;
+};
+
 // The parts of an application the table leaves out, which only the detail panel
 // shows. They are read for the one row being opened rather than carried by every
 // row: the notes and the status trail together outweigh everything the table

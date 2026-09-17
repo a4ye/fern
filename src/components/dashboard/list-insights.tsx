@@ -21,34 +21,36 @@ export const ListInsights = ({
     name,
     listId,
     stats,
+    revision,
 }: {
     name: string;
     listId: string;
     stats: Stat[];
+    revision: string;
 }) => {
     const [open, setOpen] = useState(false);
     const [insights, setInsights] = useState<ListInsightsData | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [, startLoading] = useTransition();
-    const readFor = useRef<Stat[] | null>(null);
+    const readFor = useRef<string | null>(null);
 
     // Insights are read apart from the page they sit above, so what the panel
-    // holds goes out of date as the table below it is worked in. Every write to
-    // the list draws the page again, and `stats` arrives as a new array each
-    // time it is drawn and only then, which makes it the signal to read them
-    // again: in place while the panel is open, and otherwise at the next
-    // opening. A write can change a chart without changing a stat, so the
-    // reading is not narrowed to the numbers that moved.
+    // holds goes out of date as the table below it is worked in. `revision`
+    // says what the list held when the page was drawn, which makes a change in
+    // it the signal to read the insights again: in place while the panel is
+    // open, and otherwise at the next opening. A write can change a chart
+    // without changing a stat, so the reading is not narrowed to the numbers
+    // the strip prints.
     useEffect(() => {
-        if (!open || readFor.current === stats) return;
-        readFor.current = stats;
+        if (!open || readFor.current === revision) return;
+        readFor.current = revision;
         setError(null);
         startLoading(async () => {
             // A rejected action request reads the same as an unavailable list
             // here. Either way the table remains usable.
             const read = await loadListInsights(listId).catch(() => null);
             // A later read has taken over, and its answer is the current one.
-            if (readFor.current !== stats) return;
+            if (readFor.current !== revision) return;
             if (read) {
                 setInsights(read);
                 return;
@@ -59,7 +61,7 @@ export const ListInsights = ({
             setInsights(null);
             setError("Insights could not be loaded.");
         });
-    }, [open, stats, listId]);
+    }, [open, revision, listId]);
 
     const toggle = () => setOpen((shown) => !shown);
 
