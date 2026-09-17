@@ -3,7 +3,6 @@ import { Logo } from "@/components/brand/logo";
 import { SignOutButton } from "@/components/auth/sign-out-button";
 import { TopBarLinks } from "@/components/dashboard/top-bar-links";
 import { ViewAsBar } from "@/components/dashboard/view-as-bar";
-import { APP_NAME } from "@/lib/site";
 
 export const DashboardTopBar = ({
     name,
@@ -21,12 +20,9 @@ export const DashboardTopBar = ({
         <div className="mx-auto flex h-14 w-full max-w-7xl items-center justify-between px-6 sm:px-10">
             <Link
                 href="/"
-                className="flex items-center gap-2.5 transition-opacity hover:opacity-70"
+                className="flex items-center transition-opacity hover:opacity-70"
             >
                 <Logo className="h-5 w-auto" />
-                <span className="text-sm font-semibold tracking-tight text-ink">
-                    {APP_NAME}
-                </span>
             </Link>
             <div className="flex items-center gap-4">
                 <TopBarLinks name={name} image={image} isAdmin={isAdmin} />

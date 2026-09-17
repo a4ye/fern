@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Logo } from "@/components/brand/logo";
 import { SiteAccountLink } from "@/components/landing/site-account-link";
-import { APP_NAME, GITHUB_URL } from "@/lib/site";
+import { GITHUB_URL } from "@/lib/site";
 
 export const SiteHeader = ({ framed = true }: { framed?: boolean }) => (
     <header className="sticky top-0 z-50 border-b border-hairline bg-background/90 backdrop-blur-sm">
@@ -11,12 +11,9 @@ export const SiteHeader = ({ framed = true }: { framed?: boolean }) => (
         >
             <Link
                 href="/"
-                className="flex items-center gap-2.5 transition-opacity hover:opacity-70"
+                className="flex items-center transition-opacity hover:opacity-70"
             >
                 <Logo className="h-5 w-auto" />
-                <span className="text-sm font-semibold tracking-tight text-ink">
-                    {APP_NAME}
-                </span>
             </Link>
             <div className="flex items-center gap-5">
                 <a
