@@ -295,11 +295,11 @@ describe("clusterZoomFor", () => {
 describe("CLUSTER_EXTENT", () => {
     // Clustering measures its radius against the extent, while clusterZoomFor
     // counts levels against a tile. When the two disagreed the radius meant
-    // half what it said, so two groups could sit a circle's width apart and be
-    // drawn one on top of the other.
-    test("merges groups before their circles can cover each other", () => {
+    // half what it said, so groups merged at half the distance the constant
+    // names. Levels are whole numbers, so the distance on screen drifts by up
+    // to half a level either way, and nothing more.
+    test("merges at the distance CLUSTER_RADIUS names", () => {
         const base = projectionFor(WIDTH, HEIGHT).scale();
-        const widest = radiusFor(1, 1) * 2;
 
         for (let step = 0; step <= 200; step += 1) {
             const scale = base * 2 ** ((step / 200) * 10);
@@ -307,7 +307,8 @@ describe("CLUSTER_EXTENT", () => {
                 (2 * Math.PI * scale * CLUSTER_RADIUS) /
                 (CLUSTER_EXTENT * 2 ** clusterZoomFor(scale));
 
-            expect(merged).toBeGreaterThanOrEqual(widest);
+            expect(merged).toBeGreaterThanOrEqual(CLUSTER_RADIUS / Math.SQRT2);
+            expect(merged).toBeLessThanOrEqual(CLUSTER_RADIUS * Math.SQRT2);
         }
     });
 });
