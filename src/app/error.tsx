@@ -7,10 +7,10 @@ import { ErrorShell } from "@/components/error/error-shell";
 
 const ErrorPage = ({
     error,
-    unstable_retry,
+    retry,
 }: {
     error: Error & { digest?: string };
-    unstable_retry: () => void;
+    retry: () => void;
 }) => {
     useEffect(() => {
         Sentry.captureException(error);
@@ -24,7 +24,7 @@ const ErrorPage = ({
         >
             <button
                 type="button"
-                onClick={() => unstable_retry()}
+                onClick={() => retry()}
                 className="inline-flex h-10 items-center bg-accent px-5 text-sm font-medium text-background transition-colors hover:bg-accent-deep"
             >
                 Try again

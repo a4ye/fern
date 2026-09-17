@@ -409,16 +409,316 @@
     }
 }
 
+/* Capture panel: the drawn code is read the way a reader reads one, finding its
+   three corner patterns in turn and closing the frame once it has them. Then
+   the accent lines of the import mapping, drawn over their resting grey. Both
+   rest in a finished state, so reduced motion keeps a whole code and a made
+   match. */
+
+.qr-lock {
+    animation: qr-lock 4.5s ease-in-out infinite;
+}
+
+@keyframes qr-lock {
+    0%,
+    6% {
+        fill: var(--color-ink);
+    }
+    12%,
+    60% {
+        fill: var(--color-accent);
+    }
+    68%,
+    100% {
+        fill: var(--color-ink);
+    }
+}
+
+.qr-frame {
+    animation: qr-frame 4.5s ease-in-out infinite;
+}
+
+@keyframes qr-frame {
+    0%,
+    28% {
+        scale: 1;
+    }
+    38%,
+    60% {
+        scale: 0.94;
+    }
+    70%,
+    100% {
+        scale: 1;
+    }
+}
+
+.link-draw {
+    stroke-dasharray: 1;
+    animation: link-draw 7s ease-in-out infinite;
+}
+
+@keyframes link-draw {
+    0%,
+    4% {
+        stroke-dashoffset: 1;
+    }
+    20%,
+    74% {
+        stroke-dashoffset: 0;
+    }
+    90%,
+    100% {
+        stroke-dashoffset: 1;
+    }
+}
+
+/* Map marks: one wave west to east across the cities, by per-mark delay. */
+
+.map-dot {
+    animation: map-dot 6s ease-in-out infinite;
+}
+
+@keyframes map-dot {
+    0%,
+    100% {
+        opacity: 0.45;
+    }
+    30%,
+    60% {
+        opacity: 1;
+    }
+}
+
+/* Agent section: a 10s loop where three tool calls run in turn, each under a
+   spinner until it settles into its result. A step is keyed to its own slice of
+   the loop rather than offset by a delay, so all three clear together at the
+   end instead of rolling over one at a time. Opacity only, since a step holds
+   its place either way. The resting state is the settled one, so reduced motion
+   shows three finished steps. */
+
+.ag {
+    animation-duration: 10s;
+    animation-iteration-count: infinite;
+    animation-fill-mode: both;
+}
+
+.ag-type {
+    animation-name: ag-type;
+}
+.ag-step-1 {
+    animation-name: ag-step-1;
+}
+.ag-step-2 {
+    animation-name: ag-step-2;
+}
+.ag-step-3 {
+    animation-name: ag-step-3;
+}
+.ag-run-1 {
+    animation-name: ag-run-1;
+}
+.ag-done-1 {
+    animation-name: ag-done-1;
+}
+.ag-run-2 {
+    animation-name: ag-run-2;
+}
+.ag-done-2 {
+    animation-name: ag-done-2;
+}
+.ag-run-3 {
+    animation-name: ag-run-3;
+}
+.ag-done-3 {
+    animation-name: ag-done-3;
+}
+
+@keyframes ag-type {
+    0% {
+        opacity: 0;
+    }
+    1%,
+    93% {
+        opacity: 1;
+    }
+    95%,
+    100% {
+        opacity: 0;
+    }
+}
+
+@keyframes ag-step-1 {
+    0%,
+    18% {
+        opacity: 0;
+    }
+    22%,
+    94% {
+        opacity: 1;
+    }
+    100% {
+        opacity: 0;
+    }
+}
+
+@keyframes ag-step-2 {
+    0%,
+    34% {
+        opacity: 0;
+    }
+    38%,
+    94% {
+        opacity: 1;
+    }
+    100% {
+        opacity: 0;
+    }
+}
+
+@keyframes ag-step-3 {
+    0%,
+    50% {
+        opacity: 0;
+    }
+    54%,
+    94% {
+        opacity: 1;
+    }
+    100% {
+        opacity: 0;
+    }
+}
+
+@keyframes ag-run-1 {
+    0%,
+    18% {
+        opacity: 0;
+    }
+    22%,
+    30% {
+        opacity: 1;
+    }
+    34%,
+    100% {
+        opacity: 0;
+    }
+}
+
+@keyframes ag-done-1 {
+    0%,
+    30% {
+        opacity: 0;
+    }
+    34%,
+    94% {
+        opacity: 1;
+    }
+    100% {
+        opacity: 0;
+    }
+}
+
+@keyframes ag-run-2 {
+    0%,
+    34% {
+        opacity: 0;
+    }
+    38%,
+    46% {
+        opacity: 1;
+    }
+    50%,
+    100% {
+        opacity: 0;
+    }
+}
+
+@keyframes ag-done-2 {
+    0%,
+    46% {
+        opacity: 0;
+    }
+    50%,
+    94% {
+        opacity: 1;
+    }
+    100% {
+        opacity: 0;
+    }
+}
+
+@keyframes ag-run-3 {
+    0%,
+    50% {
+        opacity: 0;
+    }
+    54%,
+    62% {
+        opacity: 1;
+    }
+    66%,
+    100% {
+        opacity: 0;
+    }
+}
+
+@keyframes ag-done-3 {
+    0%,
+    62% {
+        opacity: 0;
+    }
+    66%,
+    94% {
+        opacity: 1;
+    }
+    100% {
+        opacity: 0;
+    }
+}
+
+/* The agent is still at it: a deeper copy of the line underneath the muted one,
+   shown only where a band sweeps across it. The band rests off the end, so the
+   line is plain muted text when motion is turned down. */
+
+.think {
+    mask-image: linear-gradient(
+        100deg,
+        transparent 38%,
+        black 50%,
+        transparent 62%
+    );
+    mask-repeat: no-repeat;
+    mask-size: 300% 100%;
+    mask-position: 130% 0;
+    animation: think 2.8s linear infinite;
+}
+
+@keyframes think {
+    from {
+        mask-position: 130% 0;
+    }
+    to {
+        mask-position: -30% 0;
+    }
+}
+
 @media (prefers-reduced-motion: reduce) {
     .lp,
     .lp-caret,
     .tl,
-    .pip {
+    .pip,
+    .ag,
+    .link-draw,
+    .map-dot,
+    .qr-lock,
+    .qr-frame {
         animation: none;
     }
     .lp-caret,
     .flow-curve,
-    .sankey-shine {
+    .sankey-shine,
+    .think {
         display: none;
     }
 }

@@ -1,10 +1,16 @@
 import Link from "next/link";
 import { APP_NAME } from "@/lib/site";
 import { CARET_PATH, SLASH_PATH } from "@/components/brand/logo";
+import { AgentPanel } from "@/components/landing/agent-panel";
+import { AppliedMap } from "@/components/landing/applied-map";
+import { CapturePanel } from "@/components/landing/capture-panel";
+import { ChangeLog } from "@/components/landing/change-log";
 import { HeroMock } from "@/components/landing/hero-mock";
+import { ImportMap } from "@/components/landing/import-map";
 import { ParallaxLayer } from "@/components/landing/parallax-layer";
 import { Pipeline } from "@/components/landing/pipeline";
 import { Sankey } from "@/components/landing/sankey";
+import { SharePanel } from "@/components/landing/share-panel";
 import { SiteFooter } from "@/components/landing/site-footer";
 import { SiteHeader } from "@/components/landing/site-header";
 import { SpreadsheetArt } from "@/components/landing/spreadsheet-art";
@@ -100,6 +106,9 @@ const SectionRule = ({ number, id }: { number: string; id?: string }) => (
 );
 
 const Home = () => {
+    let sections = 0;
+    const nextSection = () => String(++sections).padStart(2, "0");
+
     return (
         <main className="flex flex-1 flex-col overflow-x-clip">
             <SiteHeader />
@@ -172,7 +181,7 @@ const Home = () => {
                     </div>
                 </section>
 
-                <SectionRule number="01" />
+                <SectionRule number={nextSection()} />
                 <section className="px-6 py-16 [background:radial-gradient(55%_65%_at_88%_0%,var(--color-rose-tint),transparent)] sm:px-10 lg:py-20">
                     <h2 className="max-w-xl text-3xl font-semibold tracking-tight text-balance">
                         The sheet only knows what you remember to tell it.
@@ -194,7 +203,7 @@ const Home = () => {
                     </div>
                 </section>
 
-                <SectionRule number="02" id="how" />
+                <SectionRule number={nextSection()} id="how" />
                 <section className="bg-accent-tint-soft px-6 py-16 sm:px-10 lg:py-20">
                     <h2 className="max-w-xl text-3xl font-semibold tracking-tight text-balance">
                         {EMAIL_SYNC_PROMOTION_ENABLED ? (
@@ -242,6 +251,35 @@ const Home = () => {
                     </div>
                 </section>
 
+                <SectionRule number={nextSection()} />
+                <section className="bg-surface px-6 py-16 sm:px-10 lg:py-20">
+                    <h2 className="max-w-xl text-3xl font-semibold tracking-tight text-balance">
+                        Three ways to add a posting.
+                    </h2>
+                    <p className="mt-4 max-w-lg text-sm leading-6 text-sub">
+                        The extension covers the sites a plain link cannot
+                        reach. The scanner reads a QR code directly, with no
+                        link to copy first.
+                    </p>
+                    <div className="mt-12">
+                        <CapturePanel />
+                    </div>
+                </section>
+
+                <SectionRule number={nextSection()} />
+                <section className="px-6 py-16 sm:px-10 lg:py-20">
+                    <h2 className="max-w-xl text-3xl font-semibold tracking-tight text-balance">
+                        Bring the old spreadsheet with you.
+                    </h2>
+                    <p className="mt-4 max-w-lg text-sm leading-6 text-sub">
+                        Drop in a CSV or an Excel file. {APP_NAME} reads your
+                        headers and matches them to fields.
+                    </p>
+                    <div className="mt-12">
+                        <ImportMap />
+                    </div>
+                </section>
+
                 <div className="relative overflow-hidden border-t border-hairline bg-ink px-6 py-24 sm:px-10 lg:py-32">
                     <svg
                         aria-hidden="true"
@@ -258,7 +296,7 @@ const Home = () => {
                     />
                 </div>
 
-                <SectionRule number="03" />
+                <SectionRule number={nextSection()} />
                 <section className="px-6 py-16 sm:px-10 lg:py-20">
                     <h2 className="max-w-xl text-3xl font-semibold tracking-tight text-balance">
                         One season, start to offer.
@@ -274,7 +312,7 @@ const Home = () => {
 
                 {EMAIL_SYNC_PROMOTION_ENABLED && (
                     <>
-                        <SectionRule number="04" />
+                        <SectionRule number={nextSection()} />
                         <section className="relative overflow-hidden bg-surface px-6 py-16 sm:px-10 lg:py-20">
                             <svg
                                 aria-hidden="true"
@@ -302,9 +340,7 @@ const Home = () => {
                     </>
                 )}
 
-                <SectionRule
-                    number={EMAIL_SYNC_PROMOTION_ENABLED ? "05" : "04"}
-                />
+                <SectionRule number={nextSection()} />
                 <section className="px-6 py-16 sm:px-10 lg:py-20">
                     <h2 className="max-w-xl text-3xl font-semibold tracking-tight text-balance">
                         The chart you never had to make.
@@ -318,9 +354,69 @@ const Home = () => {
                     </div>
                 </section>
 
-                <SectionRule
-                    number={EMAIL_SYNC_PROMOTION_ENABLED ? "06" : "05"}
-                />
+                <SectionRule number={nextSection()} />
+                <section className="bg-accent-tint-soft px-6 py-16 sm:px-10 lg:py-20">
+                    <h2 className="max-w-xl text-3xl font-semibold tracking-tight text-balance">
+                        Where you applied.
+                    </h2>
+                    <p className="mt-4 max-w-md text-sm leading-6 text-sub">
+                        Each dot is a city you applied to.
+                    </p>
+                    <div className="mt-12">
+                        <AppliedMap />
+                    </div>
+                </section>
+
+                <SectionRule number={nextSection()} />
+                <section className="px-6 py-16 sm:px-10 lg:py-20">
+                    <h2 className="max-w-xl text-3xl font-semibold tracking-tight text-balance">
+                        Nothing you change is lost.
+                    </h2>
+                    <p className="mt-4 max-w-lg text-sm leading-6 text-sub">
+                        Every change is saved to the version history and can be
+                        undone. You can also revert a list to any point in its
+                        history.
+                    </p>
+                    <div className="mt-12">
+                        <ChangeLog />
+                    </div>
+                </section>
+
+                <SectionRule number={nextSection()} />
+                <section className="bg-surface px-6 py-16 sm:px-10 lg:py-20">
+                    <h2 className="max-w-xl text-3xl font-semibold tracking-tight text-balance">
+                        Share a list.
+                    </h2>
+                    <p className="mt-4 max-w-lg text-sm leading-6 text-sub">
+                        Share it with a friend, or make a link that you can set
+                        to expire.
+                    </p>
+                    <div className="mt-12">
+                        <SharePanel />
+                    </div>
+                </section>
+
+                <SectionRule number={nextSection()} />
+                <section className="px-6 py-16 sm:px-10 lg:py-20">
+                    <h2 className="max-w-xl text-3xl font-semibold tracking-tight text-balance">
+                        Let an agent do the work.
+                    </h2>
+                    <p className="mt-4 max-w-lg text-sm leading-6 text-sub">
+                        Your agent can use the {APP_NAME} MCP server to view and
+                        edit your lists and applications for you.
+                    </p>
+                    <Link
+                        href="/mcp"
+                        className="mt-6 inline-flex text-sm font-medium text-accent-deep underline decoration-hairline underline-offset-4 transition-colors hover:decoration-accent"
+                    >
+                        How to connect
+                    </Link>
+                    <div className="mt-12">
+                        <AgentPanel />
+                    </div>
+                </section>
+
+                <SectionRule number={nextSection()} />
                 <section className="bg-surface px-6 py-16 sm:px-10">
                     <div className="grid gap-10 sm:grid-cols-3">
                         {FINE_PRINT.map((item) => (
