@@ -38,6 +38,7 @@ import {
 import { ConfirmDialog } from "@/components/dashboard/confirm-dialog";
 import { useLocalDateTimeFormatter } from "@/components/dashboard/local-date-time";
 import { CurrencyFlag } from "@/components/dashboard/currency-flag";
+import { useViewing } from "@/components/dashboard/viewing";
 import {
     HISTORY_APPLICATIONS_PAGE_SIZE,
     HISTORY_CHANGES_PAGE_SIZE,
@@ -1061,6 +1062,10 @@ export const HistoryDialog = ({
 }) => {
     const router = useRouter();
     const dismiss = useOverlayDismiss();
+    // The record itself is worth reading while an admin views an account, so
+    // the dialog stays open to them and only the buttons that would rewrite it
+    // come off.
+    const viewing = useViewing();
     const [items, setItems] = useState(initialPage?.items ?? []);
     const [cursor, setCursor] = useState(initialPage?.nextCursor ?? null);
     const [hasMore, setHasMore] = useState(initialPage?.hasMore ?? false);
@@ -1285,7 +1290,7 @@ export const HistoryDialog = ({
                     History
                 </h2>
                 <div className="flex items-center gap-0.5">
-                    {items.length > 0 && (
+                    {!viewing && items.length > 0 && (
                         <button
                             type="button"
                             onClick={() => setConfirmingClear(true)}
@@ -1395,12 +1400,19 @@ export const HistoryDialog = ({
                                                 item.restoreTarget !== null,
                                             );
                                         const detailsId = `history-details-${item.id}`;
+                                        const canUndo =
+                                            !viewing && item.canUndo;
+                                        const canRestore =
+                                            !viewing && item.canRestore;
+                                        const canPermanentlyDelete =
+                                            !viewing &&
+                                            item.canPermanentlyDelete;
                                         const hasDetails =
                                             item.changeCount > 0 ||
                                             item.undone ||
-                                            item.canUndo ||
-                                            item.canRestore ||
-                                            item.canPermanentlyDelete ||
+                                            canUndo ||
+                                            canRestore ||
+                                            canPermanentlyDelete ||
                                             item.restoreTarget !== null;
                                         const isConfirming =
                                             confirmingRestore === item.id;
@@ -1679,9 +1691,9 @@ export const HistoryDialog = ({
                                                                 </p>
                                                             )}
 
-                                                        {(item.canUndo ||
-                                                            item.canRestore ||
-                                                            item.canPermanentlyDelete) && (
+                                                        {(canUndo ||
+                                                            canRestore ||
+                                                            canPermanentlyDelete) && (
                                                             <div
                                                                 className={`mt-4 flex min-h-13 flex-wrap items-center justify-end gap-1 pt-3 ${item.changes.length === 0 && !item.restoreTarget ? "border-t border-hairline" : ""}`}
                                                             >
@@ -1725,7 +1737,7 @@ export const HistoryDialog = ({
                                                                     </>
                                                                 ) : (
                                                                     <>
-                                                                        {item.canPermanentlyDelete && (
+                                                                        {canPermanentlyDelete && (
                                                                             <button
                                                                                 type="button"
                                                                                 onClick={() =>
@@ -1744,7 +1756,7 @@ export const HistoryDialog = ({
                                                                                     : "Delete permanently"}
                                                                             </button>
                                                                         )}
-                                                                        {item.canUndo && (
+                                                                        {canUndo && (
                                                                             <button
                                                                                 type="button"
                                                                                 onClick={() =>
@@ -1771,7 +1783,7 @@ export const HistoryDialog = ({
                                                                                       : "Undo"}
                                                                             </button>
                                                                         )}
-                                                                        {item.canRestore && (
+                                                                        {canRestore && (
                                                                             <button
                                                                                 type="button"
                                                                                 onClick={() =>

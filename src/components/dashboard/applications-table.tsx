@@ -63,6 +63,7 @@ import {
 } from "@/components/dashboard/table-controls";
 import { ConfirmDialog } from "@/components/dashboard/confirm-dialog";
 import { CURRENCY_MARK_CLASS } from "@/components/dashboard/currency-flag";
+import { useViewing } from "@/components/dashboard/viewing";
 import {
     DeferredDialogLoading,
     DeferredDrawerLoading,
@@ -278,6 +279,7 @@ const ReadRow = ({
     convertedPay,
     selected,
     opening,
+    viewing,
     onSelect,
     onEdit,
     onPrefetch,
@@ -287,6 +289,10 @@ const ReadRow = ({
     convertedPay: string | null;
     selected: boolean;
     opening: boolean;
+    // A tick is only ever the start of a bulk edit or a delete, so the box goes
+    // with them while an admin is viewing this account. The drawer stays, since
+    // notes and the status trail are not on the row, and opens flat.
+    viewing: boolean;
     onSelect: (selected: boolean) => void;
     onEdit: () => void;
     onPrefetch: () => void;
@@ -297,16 +303,20 @@ const ReadRow = ({
         <li
             className={`${COLUMNS} ${ROW_HEIGHT} group border-b border-faint px-5 text-xs transition-colors last:border-b-0 ${selected ? "bg-accent-tint-soft" : "hover:bg-surface"}`}
         >
-            <input
-                type="checkbox"
-                checked={selected}
-                onChange={(event) => onSelect(event.target.checked)}
-                // Firefox restores tick marks across a reload, which would
-                // outlive the selection state that drives the rest of the UI.
-                autoComplete="off"
-                aria-label={`Select ${app.company}`}
-                className={checkboxClass}
-            />
+            {viewing ? (
+                <span />
+            ) : (
+                <input
+                    type="checkbox"
+                    checked={selected}
+                    onChange={(event) => onSelect(event.target.checked)}
+                    // Firefox restores tick marks across a reload, which would
+                    // outlive the selection state that drives the rest of the UI.
+                    autoComplete="off"
+                    aria-label={`Select ${app.company}`}
+                    className={checkboxClass}
+                />
+            )}
             <Cell value={app.company} className="font-medium text-ink" />
             <Cell value={app.role} />
             <span className="min-w-0">
@@ -369,8 +379,10 @@ const ReadRow = ({
                     onMouseEnter={onPrefetch}
                     onFocus={onPrefetch}
                     disabled={opening}
-                    title="Edit application"
-                    aria-label="Edit application"
+                    title={viewing ? "Open application" : "Edit application"}
+                    aria-label={
+                        viewing ? "Open application" : "Edit application"
+                    }
                     className={`${ACTION_CLASS} focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
                         opening
                             ? "cursor-wait opacity-100"
@@ -379,21 +391,23 @@ const ReadRow = ({
                 >
                     <span
                         aria-hidden="true"
-                        className={`block size-3.5 ${opening ? "icon-[lucide--loader-circle] animate-spin" : "icon-[lucide--pencil]"}`}
+                        className={`block size-3.5 ${opening ? "icon-[lucide--loader-circle] animate-spin" : viewing ? "icon-[lucide--eye]" : "icon-[lucide--pencil]"}`}
                     />
                 </button>
-                <button
-                    type="button"
-                    onClick={onDelete}
-                    title="Delete application"
-                    aria-label="Delete application"
-                    className={`${ACTION_CLASS} ${REVEAL_CLASS} cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`}
-                >
-                    <span
-                        aria-hidden="true"
-                        className="icon-[lucide--trash-2] block size-3.5"
-                    />
-                </button>
+                {viewing ? null : (
+                    <button
+                        type="button"
+                        onClick={onDelete}
+                        title="Delete application"
+                        aria-label="Delete application"
+                        className={`${ACTION_CLASS} ${REVEAL_CLASS} cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`}
+                    >
+                        <span
+                            aria-hidden="true"
+                            className="icon-[lucide--trash-2] block size-3.5"
+                        />
+                    </button>
+                )}
             </span>
         </li>
     );
@@ -545,6 +559,7 @@ export const ApplicationsTable = ({
     rates: ExchangeRates;
 }) => {
     const [, startMutation] = useTransition();
+    const viewing = useViewing();
     // The panel opens on more than the table carries, so the row it is opened
     // over travels with the notes and status trail fetched for it. Both arrive
     // together, which is what lets the panel draw complete rather than fill in.
@@ -1114,19 +1129,21 @@ export const ApplicationsTable = ({
                                     />
                                     {view.rows.length > 0 && (
                                         <>
-                                            <button
-                                                type="button"
-                                                onClick={startBulkEdit}
-                                                className={`${secondaryButtonClass} ${FILL_NARROW}`}
-                                            >
-                                                <span
-                                                    aria-hidden="true"
-                                                    className="icon-[lucide--pencil-line] size-4 shrink-0"
-                                                />
-                                                {filtered
-                                                    ? "Edit shown"
-                                                    : "Edit all"}
-                                            </button>
+                                            {viewing ? null : (
+                                                <button
+                                                    type="button"
+                                                    onClick={startBulkEdit}
+                                                    className={`${secondaryButtonClass} ${FILL_NARROW}`}
+                                                >
+                                                    <span
+                                                        aria-hidden="true"
+                                                        className="icon-[lucide--pencil-line] size-4 shrink-0"
+                                                    />
+                                                    {filtered
+                                                        ? "Edit shown"
+                                                        : "Edit all"}
+                                                </button>
+                                            )}
                                             <DownloadMenu
                                                 title="Export these applications"
                                                 heading={
@@ -1152,28 +1169,34 @@ export const ApplicationsTable = ({
                                     {/* Outside the guard above: an empty list is
                                     exactly where someone arriving from another
                                     tracker starts. */}
-                                    <button
-                                        type="button"
-                                        onClick={() => setImporting(true)}
-                                        className={`${secondaryButtonClass} ${FILL_NARROW}`}
-                                    >
-                                        <span
-                                            aria-hidden="true"
-                                            className="icon-[lucide--upload] size-4 shrink-0"
-                                        />
-                                        Import
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setAdding(true)}
-                                        className={`${primaryButtonClass} ${FILL_NARROW}`}
-                                    >
-                                        <span
-                                            aria-hidden="true"
-                                            className="icon-[lucide--plus] mr-1.5 size-4 shrink-0"
-                                        />
-                                        Add application
-                                    </button>
+                                    {viewing ? null : (
+                                        <>
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    setImporting(true)
+                                                }
+                                                className={`${secondaryButtonClass} ${FILL_NARROW}`}
+                                            >
+                                                <span
+                                                    aria-hidden="true"
+                                                    className="icon-[lucide--upload] size-4 shrink-0"
+                                                />
+                                                Import
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setAdding(true)}
+                                                className={`${primaryButtonClass} ${FILL_NARROW}`}
+                                            >
+                                                <span
+                                                    aria-hidden="true"
+                                                    className="icon-[lucide--plus] mr-1.5 size-4 shrink-0"
+                                                />
+                                                Add application
+                                            </button>
+                                        </>
+                                    )}
                                 </>
                             )}
                         </div>
@@ -1242,7 +1265,8 @@ export const ApplicationsTable = ({
                                       )
                         }
                         selectAll={
-                            !bulkMode && (
+                            !bulkMode &&
+                            !viewing && (
                                 <input
                                     ref={selectAllRef}
                                     type="checkbox"
@@ -1313,6 +1337,7 @@ export const ApplicationsTable = ({
                                             payInCurrency(app, convertTo, rates)
                                         }
                                         selected={selected.has(app.id)}
+                                        viewing={viewing}
                                         onSelect={(isSelected) =>
                                             toggleSelected(app.id, isSelected)
                                         }

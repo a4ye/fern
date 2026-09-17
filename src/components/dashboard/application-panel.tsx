@@ -18,6 +18,7 @@ import {
 } from "@/components/dashboard/table-controls";
 import { LocalDateTime } from "@/components/dashboard/local-date-time";
 import { useOverlayDismiss } from "@/components/dashboard/overlay-shell";
+import { useViewing } from "@/components/dashboard/viewing";
 import {
     STATUS_META,
     browserTimeZone,
@@ -59,6 +60,10 @@ export const ApplicationPanel = ({
     extras: ApplicationExtras;
 }) => {
     const dismiss = useOverlayDismiss();
+    // The notes and the status trail are only here, so the panel still opens
+    // while an admin is viewing this account. Every field goes flat and the
+    // save goes with them.
+    const viewing = useViewing();
     const [draft, setDraft] = useState<ApplicationFields>(() =>
         draftOf(app, extras),
     );
@@ -148,73 +153,83 @@ export const ApplicationPanel = ({
             </DrawerHeader>
 
             <div className="min-h-0 flex-1 overflow-y-auto">
-                <BasicsFields draft={draft} set={set} />
+                <BasicsFields draft={draft} set={set} disabled={viewing} />
 
-                <Section title="Status">
-                    {rows.length > 0 && (
-                        <ol className="mb-3 divide-y divide-faint border-y border-faint">
-                            {rows.map((row, index) => (
-                                <li
-                                    key={row.key}
-                                    className="group flex h-8 items-center gap-3 text-xs"
-                                >
-                                    <span
-                                        className={`min-w-0 truncate ${index === rows.length - 1 ? "font-medium text-ink" : "text-sub"}`}
-                                    >
-                                        {row.label}
-                                    </span>
-                                    <span className="ml-auto shrink-0 text-muted tabular-nums">
-                                        {row.dateTime ? (
-                                            <LocalDateTime
-                                                dateTime={row.dateTime}
-                                                display="date"
-                                            >
-                                                {row.when}
-                                            </LocalDateTime>
-                                        ) : (
-                                            row.when
-                                        )}
-                                    </span>
-                                    <button
-                                        type="button"
-                                        onClick={row.drop}
-                                        aria-label={`Remove ${row.label} step`}
-                                        title="Remove this step"
-                                        className="shrink-0 cursor-pointer text-muted opacity-0 transition-[color,opacity] group-hover:opacity-100 hover:text-rose focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                {viewing && rows.length === 0 ? null : (
+                    <Section title="Status">
+                        {rows.length > 0 && (
+                            <ol
+                                className={`divide-y divide-faint border-y border-faint ${viewing ? "" : "mb-3"}`}
+                            >
+                                {rows.map((row, index) => (
+                                    <li
+                                        key={row.key}
+                                        className="group flex h-8 items-center gap-3 text-xs"
                                     >
                                         <span
-                                            aria-hidden="true"
-                                            className="icon-[lucide--x] block size-3.5"
-                                        />
-                                    </button>
-                                </li>
-                            ))}
-                        </ol>
-                    )}
-                    <div className="flex items-center gap-2">
-                        <CellSelect
-                            label="Status to record"
-                            placeholder={staged ? undefined : "Add a step"}
-                            value={staged}
-                            options={STATUS_OPTIONS}
-                            onChange={setStaged}
-                            variant="form"
-                            className="flex-1"
-                            searchable
-                        />
-                        <button
-                            type="button"
-                            onClick={stageStep}
-                            disabled={!staged}
-                            className={secondaryButtonClass}
-                        >
-                            Add
-                        </button>
-                    </div>
-                </Section>
+                                            className={`min-w-0 truncate ${index === rows.length - 1 ? "font-medium text-ink" : "text-sub"}`}
+                                        >
+                                            {row.label}
+                                        </span>
+                                        <span className="ml-auto shrink-0 text-muted tabular-nums">
+                                            {row.dateTime ? (
+                                                <LocalDateTime
+                                                    dateTime={row.dateTime}
+                                                    display="date"
+                                                >
+                                                    {row.when}
+                                                </LocalDateTime>
+                                            ) : (
+                                                row.when
+                                            )}
+                                        </span>
+                                        {viewing ? null : (
+                                            <button
+                                                type="button"
+                                                onClick={row.drop}
+                                                aria-label={`Remove ${row.label} step`}
+                                                title="Remove this step"
+                                                className="shrink-0 cursor-pointer text-muted opacity-0 transition-[color,opacity] group-hover:opacity-100 hover:text-rose focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                                            >
+                                                <span
+                                                    aria-hidden="true"
+                                                    className="icon-[lucide--x] block size-3.5"
+                                                />
+                                            </button>
+                                        )}
+                                    </li>
+                                ))}
+                            </ol>
+                        )}
+                        {viewing ? null : (
+                            <div className="flex items-center gap-2">
+                                <CellSelect
+                                    label="Status to record"
+                                    placeholder={
+                                        staged ? undefined : "Add a step"
+                                    }
+                                    value={staged}
+                                    options={STATUS_OPTIONS}
+                                    onChange={setStaged}
+                                    variant="form"
+                                    className="flex-1"
+                                    searchable
+                                />
+                                <button
+                                    type="button"
+                                    onClick={stageStep}
+                                    disabled={!staged}
+                                    className={secondaryButtonClass}
+                                >
+                                    Add
+                                </button>
+                            </div>
+                        )}
+                    </Section>
+                )}
 
-                <PayFields draft={draft} set={set} />
-                <NotesField draft={draft} set={set} />
+                <PayFields draft={draft} set={set} disabled={viewing} />
+                <NotesField draft={draft} set={set} disabled={viewing} />
             </div>
 
             <DrawerFooter
@@ -226,9 +241,16 @@ export const ApplicationPanel = ({
                     )
                 }
                 onCancel={dismiss}
-                onSubmit={save}
-                submitLabel={saving ? "Saving" : "Save"}
-                submitDisabled={!draft.company.trim() || saving}
+                cancelLabel={viewing ? "Close" : "Cancel"}
+                submit={
+                    viewing
+                        ? undefined
+                        : {
+                              label: saving ? "Saving" : "Save",
+                              disabled: !draft.company.trim() || saving,
+                              onSubmit: save,
+                          }
+                }
             />
         </>
     );

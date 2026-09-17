@@ -12,7 +12,10 @@ import {
 // pagination bar are rendered, so swapping to real content doesn't resize the
 // page or shift the layout.
 
-const SkeletonRow = () => (
+// `viewing` drops the same action cells and New list button that ListsIndex
+// leaves out while an admin is viewing another account, so nothing moves when
+// the placeholder is swapped for the real page.
+const SkeletonRow = ({ viewing }: { viewing: boolean }) => (
     <li className="flex items-stretch border-b border-faint last:border-b-0">
         <div className={LIST_ROW_MAIN}>
             <div className="min-w-0 flex-1">
@@ -29,12 +32,16 @@ const SkeletonRow = () => (
                 <span className="skeleton h-3.5 w-28 justify-self-end" />
             </div>
         </div>
-        <div className={LIST_ROW_ACTION}>
-            <span className="skeleton size-4" />
-        </div>
-        <div className={LIST_ROW_ACTION}>
-            <span className="skeleton size-4" />
-        </div>
+        {viewing ? null : (
+            <>
+                <div className={LIST_ROW_ACTION}>
+                    <span className="skeleton size-4" />
+                </div>
+                <div className={LIST_ROW_ACTION}>
+                    <span className="skeleton size-4" />
+                </div>
+            </>
+        )}
         <div className={LIST_ROW_PIN_ACTION}>
             <span className="skeleton size-4" />
         </div>
@@ -43,13 +50,15 @@ const SkeletonRow = () => (
 
 export const ListRowsSkeleton = ({
     rows = LIST_PAGE_SIZE,
+    viewing = false,
 }: {
     rows?: number;
+    viewing?: boolean;
 }) => (
     <div aria-hidden="true">
         <ul className="border border-hairline bg-background">
             {Array.from({ length: rows }, (_, index) => (
-                <SkeletonRow key={index} />
+                <SkeletonRow key={index} viewing={viewing} />
             ))}
         </ul>
         <div className="mt-4 flex items-center justify-between">
@@ -64,8 +73,10 @@ export const ListRowsSkeleton = ({
 
 export const ListsPageSkeleton = ({
     hasInboxSync,
+    viewing = false,
 }: {
     hasInboxSync: boolean;
+    viewing?: boolean;
 }) => (
     <div className="mx-auto w-full max-w-7xl flex-1 px-6 py-10 sm:px-10">
         <div className="flex flex-wrap items-end justify-between gap-4">
@@ -82,15 +93,17 @@ export const ListsPageSkeleton = ({
                 <div className="flex items-center gap-3">
                     <span className="skeleton h-8 w-44" />
                     {hasInboxSync ? <EmailSyncSkeleton /> : null}
-                    <span className="skeleton inline-flex h-8 shrink-0 items-center gap-1.5 px-3 text-sm font-medium whitespace-nowrap">
-                        <span className="size-4 shrink-0" />
-                        <span className="invisible">New list</span>
-                    </span>
+                    {viewing ? null : (
+                        <span className="skeleton inline-flex h-8 shrink-0 items-center gap-1.5 px-3 text-sm font-medium whitespace-nowrap">
+                            <span className="size-4 shrink-0" />
+                            <span className="invisible">New list</span>
+                        </span>
+                    )}
                 </div>
             </div>
         </div>
         <div className="mt-8">
-            <ListRowsSkeleton />
+            <ListRowsSkeleton viewing={viewing} />
         </div>
     </div>
 );

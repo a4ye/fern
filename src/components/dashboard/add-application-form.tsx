@@ -801,9 +801,11 @@ export const AddApplicationForm = ({
                     )
                 }
                 onCancel={dismiss}
-                onSubmit={save}
-                submitLabel={saving ? "Adding" : "Add"}
-                submitDisabled={!draft.company.trim() || fetching || saving}
+                submit={{
+                    label: saving ? "Adding" : "Add",
+                    disabled: !draft.company.trim() || fetching || saving,
+                    onSubmit: save,
+                }}
             />
             {installOpen && (
                 <ExtensionInstallDialog onClose={() => setInstallOpen(false)} />

@@ -22,6 +22,7 @@ import {
     ghostButtonClass,
     primaryButtonClass,
 } from "@/components/dashboard/table-controls";
+import { useViewing } from "@/components/dashboard/viewing";
 import type { ListHistoryPage } from "@/db/history";
 import { LIST_DESCRIPTION_MAX, LIST_NAME_MAX } from "@/lib/constraints";
 import { parseListUpdate } from "@/lib/list-input";
@@ -86,6 +87,7 @@ export const ListHeader = ({
     defaultCurrency: string;
 }) => {
     const router = useRouter();
+    const viewing = useViewing();
     const [isEditing, setIsEditing] = useState(false);
     const [showingHistory, setShowingHistory] = useState(false);
     const [history, setHistory] = useState<ListHistoryPage | null>(null);
@@ -244,21 +246,29 @@ export const ListHeader = ({
                 <div className="flex min-h-10 shrink-0 items-center justify-end">
                     {!isEditing && (
                         <>
-                            <button
-                                type="button"
-                                onClick={openShare}
-                                aria-haspopup="dialog"
-                                aria-expanded={showingShare}
-                                aria-label="Share this list"
-                                title="Share"
-                                className="inline-flex h-10 min-w-10 cursor-pointer items-center justify-center gap-2 pr-2.5 pl-2 text-sm text-muted transition-[color,scale] duration-150 ease-out hover:text-ink active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                            >
-                                <span
-                                    aria-hidden="true"
-                                    className="icon-[lucide--share-2] block size-4"
-                                />
-                                <span className="hidden sm:inline">Share</span>
-                            </button>
+                            {/* Sharing is a panel of switches and nothing else,
+                                so it goes rather than being opened onto controls
+                                that would all refuse. History stays: it is a
+                                record to read, and only its undo buttons go. */}
+                            {viewing ? null : (
+                                <button
+                                    type="button"
+                                    onClick={openShare}
+                                    aria-haspopup="dialog"
+                                    aria-expanded={showingShare}
+                                    aria-label="Share this list"
+                                    title="Share"
+                                    className="inline-flex h-10 min-w-10 cursor-pointer items-center justify-center gap-2 pr-2.5 pl-2 text-sm text-muted transition-[color,scale] duration-150 ease-out hover:text-ink active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                                >
+                                    <span
+                                        aria-hidden="true"
+                                        className="icon-[lucide--share-2] block size-4"
+                                    />
+                                    <span className="hidden sm:inline">
+                                        Share
+                                    </span>
+                                </button>
+                            )}
                             <button
                                 type="button"
                                 onClick={openHistory}
@@ -276,30 +286,36 @@ export const ListHeader = ({
                                     History
                                 </span>
                             </button>
-                            <button
-                                type="button"
-                                onClick={startEdit}
-                                aria-label="Edit list details"
-                                title="Edit list details"
-                                className="flex size-10 cursor-pointer items-center justify-center text-muted transition-[color,scale] duration-150 ease-out hover:text-ink active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                            >
-                                <span
-                                    aria-hidden="true"
-                                    className="icon-[lucide--pencil] block size-4"
-                                />
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setConfirmingDelete(true)}
-                                aria-label="Delete list"
-                                title="Delete list"
-                                className="flex size-10 cursor-pointer items-center justify-center text-muted transition-[color,scale] duration-150 ease-out hover:text-ink active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                            >
-                                <span
-                                    aria-hidden="true"
-                                    className="icon-[lucide--trash-2] block size-4"
-                                />
-                            </button>
+                            {viewing ? null : (
+                                <>
+                                    <button
+                                        type="button"
+                                        onClick={startEdit}
+                                        aria-label="Edit list details"
+                                        title="Edit list details"
+                                        className="flex size-10 cursor-pointer items-center justify-center text-muted transition-[color,scale] duration-150 ease-out hover:text-ink active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                                    >
+                                        <span
+                                            aria-hidden="true"
+                                            className="icon-[lucide--pencil] block size-4"
+                                        />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            setConfirmingDelete(true)
+                                        }
+                                        aria-label="Delete list"
+                                        title="Delete list"
+                                        className="flex size-10 cursor-pointer items-center justify-center text-muted transition-[color,scale] duration-150 ease-out hover:text-ink active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                                    >
+                                        <span
+                                            aria-hidden="true"
+                                            className="icon-[lucide--trash-2] block size-4"
+                                        />
+                                    </button>
+                                </>
+                            )}
                         </>
                     )}
                 </div>

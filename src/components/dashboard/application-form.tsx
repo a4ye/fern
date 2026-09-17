@@ -384,28 +384,30 @@ export const DrawerHeader = ({
 export const DrawerFooter = ({
     note,
     onCancel,
-    onSubmit,
-    submitLabel,
-    submitDisabled,
+    cancelLabel = "Cancel",
+    submit,
 }: {
     note?: ReactNode;
     onCancel: () => void;
-    onSubmit: () => void;
-    submitLabel: string;
-    submitDisabled: boolean;
+    cancelLabel?: string;
+    // Left out by a drawer that is only being read, so the footer keeps its
+    // height and its way out without offering a save that would refuse.
+    submit?: { label: string; disabled: boolean; onSubmit: () => void };
 }) => (
     <footer className="flex shrink-0 items-center justify-end gap-1 border-t border-hairline px-5 py-3">
         {note}
         <button type="button" onClick={onCancel} className={ghostButtonClass}>
-            Cancel
+            {cancelLabel}
         </button>
-        <button
-            type="button"
-            onClick={onSubmit}
-            disabled={submitDisabled}
-            className={primaryButtonClass}
-        >
-            {submitLabel}
-        </button>
+        {submit && (
+            <button
+                type="button"
+                onClick={submit.onSubmit}
+                disabled={submit.disabled}
+                className={primaryButtonClass}
+            >
+                {submit.label}
+            </button>
+        )}
     </footer>
 );

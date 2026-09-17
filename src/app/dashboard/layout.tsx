@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { getRequestSession, getViewAs, isAdminRequest } from "@/lib/auth";
 import { AppToaster } from "@/components/dashboard/app-toaster";
 import { DashboardTopBar } from "@/components/dashboard/top-bar";
+import { ViewingProvider } from "@/components/dashboard/viewing";
 
 const DashboardLayout = async ({ children }: { children: ReactNode }) => {
     const [session, viewAs, admin] = await Promise.all([
@@ -13,21 +14,23 @@ const DashboardLayout = async ({ children }: { children: ReactNode }) => {
     const image = session?.user.image ?? null;
 
     return (
-        <main className="flex flex-1 flex-col bg-surface">
-            <DashboardTopBar
-                name={name}
-                image={image}
-                isAdmin={admin}
-                viewingAs={
-                    viewAs && {
-                        name: viewAs.user.name,
-                        email: viewAs.user.email,
+        <ViewingProvider viewing={Boolean(viewAs)}>
+            <main className="flex flex-1 flex-col bg-surface">
+                <DashboardTopBar
+                    name={name}
+                    image={image}
+                    isAdmin={admin}
+                    viewingAs={
+                        viewAs && {
+                            name: viewAs.user.name,
+                            email: viewAs.user.email,
+                        }
                     }
-                }
-            />
-            {children}
-            <AppToaster />
-        </main>
+                />
+                {children}
+                <AppToaster />
+            </main>
+        </ViewingProvider>
     );
 };
 export default DashboardLayout;

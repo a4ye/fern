@@ -1,4 +1,61 @@
+import * as Sentry from "@sentry/nextjs";
 import { Pool, type PoolClient } from "@neondatabase/serverless";
+
+// Generated statements head themselves with `-- name: UpdateApplication :one`,
+// which names a span better than the SQL beneath it would. Anything else falls
+// back to the verb it opens with.
+const STATEMENT_NAME = /^\s*--\s*name:\s*(\S+)/;
+
+export const statementName = (sql: string) =>
+    sql.match(STATEMENT_NAME)?.[1] ??
+    (sql.trim().split(/\s+/)[0] || "query").toLowerCase();
+
+type Queryable = { query: (...args: unknown[]) => unknown };
+
+// The pool lends the same client object out again on the next checkout, so this
+// has to be idempotent. Wrapping twice would time a statement inside its own
+// span.
+const traced = new WeakSet<object>();
+
+// Without this a slow trace says only that a handler was slow, and the time
+// inside it goes unaccounted for. A span per statement says which one.
+const traceQueries = <Target extends object>(target: Target): Target => {
+    if (traced.has(target)) return target;
+    traced.add(target);
+
+    const queryable = target as unknown as Queryable;
+    const run = queryable.query.bind(queryable);
+
+    queryable.query = (...args: unknown[]) => {
+        const first = args[0];
+        const sql =
+            typeof first === "string"
+                ? first
+                : typeof (first as { text?: unknown })?.text === "string"
+                  ? (first as { text: string }).text
+                  : null;
+        // The callback form answers through its callback rather than a promise,
+        // so there would be nothing for a span to close over.
+        if (sql === null || typeof args.at(-1) === "function") {
+            return run(...args);
+        }
+
+        return Sentry.startSpan(
+            {
+                op: "db.query",
+                name: statementName(sql),
+                attributes: {
+                    "db.system": "postgresql",
+                    // The statement is parameterised and carries no user data.
+                    // The values it runs with do, and stay off the span.
+                    "db.statement": sql,
+                },
+            },
+            () => run(...args),
+        );
+    };
+    return target;
+};
 
 let pool: Pool | undefined;
 
@@ -32,6 +89,7 @@ export function getPool(): Pool {
         // reach here, already evicted from the pool, so no query was affected
         // and there is nothing to do but let the pool open a fresh one.
         pool.on("error", () => {});
+        traceQueries(pool);
     }
     return pool;
 }
@@ -42,7 +100,7 @@ export function getPool(): Pool {
 export const withTransaction = async <Result>(
     operation: (client: PoolClient) => Promise<Result>,
 ): Promise<Result> => {
-    const client = await getPool().connect();
+    const client = traceQueries(await getPool().connect());
     let discardClient = false;
     // The pool takes its own error listener off a client while that client is
     // checked out, so for the length of the transaction this is the only one.

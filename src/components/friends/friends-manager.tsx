@@ -15,6 +15,7 @@ import {
     primaryButtonClass,
     quietButtonClass,
 } from "@/components/dashboard/table-controls";
+import { useViewing } from "@/components/dashboard/viewing";
 import type { Friend, FriendsPage } from "@/db/friends";
 
 const Avatar = ({ image }: { image: string | null }) =>
@@ -82,6 +83,7 @@ export const FriendsManager = ({
     username: string | null;
 }) => {
     const router = useRouter();
+    const viewing = useViewing();
     const [handle, setHandle] = useState("");
     const [error, setError] = useState<string | null>(null);
     const [removing, setRemoving] = useState<Friend | null>(null);
@@ -138,87 +140,95 @@ export const FriendsManager = ({
 
     return (
         <>
-            <section className="mt-8">
-                <h2 className="text-xs font-medium text-muted">Add a friend</h2>
-                <p className="mt-1 text-pretty text-xs leading-5 text-sub">
-                    Add friends to share lists with each other without creating
-                    a public link.
-                    {username && (
-                        <>
-                            {" "}
-                            Your GitHub username is{" "}
-                            <span className="bg-hairline px-1.5 py-0.5 text-xs font-medium text-ink">
-                                {username}
-                            </span>
-                            .
-                        </>
-                    )}
-                </p>
-                <div className="mt-3 flex flex-wrap items-start gap-2">
-                    <div className="min-w-0 flex-1 sm:max-w-xs">
-                        <input
-                            value={handle}
-                            onChange={(event) => {
-                                setHandle(event.target.value);
-                                setError(null);
-                            }}
-                            onKeyDown={(event) => {
-                                if (event.key === "Enter") {
-                                    event.preventDefault();
-                                    add();
-                                }
-                            }}
-                            placeholder="GitHub username"
-                            aria-label="GitHub username"
-                            autoComplete="off"
-                            spellCheck={false}
-                            maxLength={39}
-                            // h-8 and text-sm to match the button beside it.
-                            // formInputClass takes its height from its padding
-                            // and sets text-xs, so the two did not line up.
-                            className="focus-frame h-8 w-full border border-hairline bg-background px-2.5 text-sm text-ink transition-colors placeholder:text-muted hover:border-tile-border"
-                        />
-                        {/* Held below the field rather than beside it, so a
+            {viewing ? null : (
+                <section className="mt-8">
+                    <h2 className="text-xs font-medium text-muted">
+                        Add a friend
+                    </h2>
+                    <p className="mt-1 text-pretty text-xs leading-5 text-sub">
+                        Add friends to share lists with each other without
+                        creating a public link.
+                        {username && (
+                            <>
+                                {" "}
+                                Your GitHub username is{" "}
+                                <span className="bg-hairline px-1.5 py-0.5 text-xs font-medium text-ink">
+                                    {username}
+                                </span>
+                                .
+                            </>
+                        )}
+                    </p>
+                    <div className="mt-3 flex flex-wrap items-start gap-2">
+                        <div className="min-w-0 flex-1 sm:max-w-xs">
+                            <input
+                                value={handle}
+                                onChange={(event) => {
+                                    setHandle(event.target.value);
+                                    setError(null);
+                                }}
+                                onKeyDown={(event) => {
+                                    if (event.key === "Enter") {
+                                        event.preventDefault();
+                                        add();
+                                    }
+                                }}
+                                placeholder="GitHub username"
+                                aria-label="GitHub username"
+                                autoComplete="off"
+                                spellCheck={false}
+                                maxLength={39}
+                                // h-8 and text-sm to match the button beside it.
+                                // formInputClass takes its height from its padding
+                                // and sets text-xs, so the two did not line up.
+                                className="focus-frame h-8 w-full border border-hairline bg-background px-2.5 text-sm text-ink transition-colors placeholder:text-muted hover:border-tile-border"
+                            />
+                            {/* Held below the field rather than beside it, so a
                             long message does not push the button off the line
                             it shares with the input. */}
-                        <p className="mt-1.5 h-4 truncate text-xs text-rose">
-                            {error}
-                        </p>
+                            <p className="mt-1.5 h-4 truncate text-xs text-rose">
+                                {error}
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={add}
+                            disabled={!handle.trim() || sending}
+                            // Held at the width of the longer of its two labels, so
+                            // pressing it does not shrink it.
+                            className={`${primaryButtonClass} w-32 justify-center`}
+                        >
+                            {sending ? "Sending" : "Send request"}
+                        </button>
                     </div>
-                    <button
-                        type="button"
-                        onClick={add}
-                        disabled={!handle.trim() || sending}
-                        // Held at the width of the longer of its two labels, so
-                        // pressing it does not shrink it.
-                        className={`${primaryButtonClass} w-32 justify-center`}
-                    >
-                        {sending ? "Sending" : "Send request"}
-                    </button>
-                </div>
-            </section>
+                </section>
+            )}
 
             <Group title="Requests received" count={page.incoming.length}>
                 {page.incoming.map((friend) => (
                     <Row key={friend.friendshipId} friend={friend}>
-                        <button
-                            type="button"
-                            onClick={() =>
-                                drop(friend, `Declined ${friend.name}.`)
-                            }
-                            disabled={answering}
-                            className={ghostButtonClass}
-                        >
-                            Decline
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => accept(friend)}
-                            disabled={answering}
-                            className={primaryButtonClass}
-                        >
-                            Accept
-                        </button>
+                        {viewing ? null : (
+                            <>
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        drop(friend, `Declined ${friend.name}.`)
+                                    }
+                                    disabled={answering}
+                                    className={ghostButtonClass}
+                                >
+                                    Decline
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => accept(friend)}
+                                    disabled={answering}
+                                    className={primaryButtonClass}
+                                >
+                                    Accept
+                                </button>
+                            </>
+                        )}
                     </Row>
                 ))}
             </Group>
@@ -227,16 +237,18 @@ export const FriendsManager = ({
                 {page.outgoing.map((friend) => (
                     <Row key={friend.friendshipId} friend={friend}>
                         <span className="text-xs text-muted">Waiting</span>
-                        <button
-                            type="button"
-                            onClick={() =>
-                                drop(friend, `Cancelled the request.`)
-                            }
-                            disabled={answering}
-                            className={`${quietButtonClass} ml-2 hover:text-rose`}
-                        >
-                            Cancel
-                        </button>
+                        {viewing ? null : (
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    drop(friend, `Cancelled the request.`)
+                                }
+                                disabled={answering}
+                                className={`${quietButtonClass} ml-2 hover:text-rose`}
+                            >
+                                Cancel
+                            </button>
+                        )}
                     </Row>
                 ))}
             </Group>
@@ -244,14 +256,16 @@ export const FriendsManager = ({
             <Group title="Friends" count={page.friends.length}>
                 {page.friends.map((friend) => (
                     <Row key={friend.friendshipId} friend={friend}>
-                        <button
-                            type="button"
-                            onClick={() => setRemoving(friend)}
-                            disabled={answering}
-                            className={`${quietButtonClass} hover:text-rose`}
-                        >
-                            Remove
-                        </button>
+                        {viewing ? null : (
+                            <button
+                                type="button"
+                                onClick={() => setRemoving(friend)}
+                                disabled={answering}
+                                className={`${quietButtonClass} hover:text-rose`}
+                            >
+                                Remove
+                            </button>
+                        )}
                     </Row>
                 ))}
             </Group>

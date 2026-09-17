@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { completeOnboarding } from "@/app/dashboard/settings-actions";
 import { useModalDialog } from "@/components/dashboard/use-modal-dialog";
+import { useViewing } from "@/components/dashboard/viewing";
 import { APP_NAME } from "@/lib/site";
 
 const BUTTON_CLASS =
@@ -62,12 +63,13 @@ const Stepper = ({ at }: { at: number }) => (
 
 const WelcomeDialog = ({ onClose }: { onClose: () => void }) => {
     const { ref: dialogRef, close } = useModalDialog();
+    const viewing = useViewing();
     const [at, setAt] = useState(0);
 
     // Reaching the end and skipping are the same outcome, so both record the
     // welcome as seen. The result is not awaited: see completeOnboarding.
     const dismiss = () => {
-        void completeOnboarding();
+        if (!viewing) void completeOnboarding();
         close(onClose);
     };
 
@@ -185,7 +187,11 @@ const WelcomeDialog = ({ onClose }: { onClose: () => void }) => {
 // Opens itself on a first visit, and stays reachable afterwards from the
 // button. Bottom left because toasts occupy the opposite corner.
 export const Welcome = ({ due }: { due: boolean }) => {
-    const [open, setOpen] = useState(due);
+    // Dismissing records the welcome as seen for whoever the page belongs to,
+    // which an admin viewing the account cannot do and should not do on their
+    // behalf. So it never opens itself at them; the button still reaches it.
+    const viewing = useViewing();
+    const [open, setOpen] = useState(due && !viewing);
 
     return (
         <>

@@ -39,6 +39,7 @@ import {
     ghostButtonClass,
     primaryButtonClass,
 } from "@/components/dashboard/table-controls";
+import { useViewing } from "@/components/dashboard/viewing";
 import { LIST_DESCRIPTION_MAX, LIST_NAME_MAX } from "@/lib/constraints";
 import { parseListInput, parseListUpdate } from "@/lib/list-input";
 import type { ActionResult } from "@/lib/validation";
@@ -76,15 +77,32 @@ const StatusPlate = ({ status }: { status: ListStatus }) => {
     );
 };
 
+const PinMark = ({ pinned }: { pinned: boolean }) => (
+    <span
+        aria-hidden="true"
+        className={`icon-[lucide--pin] size-4 transition-opacity ${
+            pinned
+                ? "text-accent"
+                : "text-muted opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+        }`}
+    />
+);
+
 const ListRow = ({
     list,
     href,
+    viewing,
     onTogglePin,
     onEdit,
     onDelete,
 }: {
     list: ListSummary;
     href: string;
+    // Editing, deleting and pinning all refuse while an admin is viewing this
+    // account, so their buttons come off the row. The pin stays as a plain mark
+    // rather than going with them: it is the only thing on the page that says
+    // why a list sorted above the rest.
+    viewing: boolean;
     onTogglePin: (list: ListSummary) => void;
     onEdit: (list: ListSummary) => void;
     onDelete: (list: ListSummary) => void;
@@ -121,47 +139,58 @@ const ListRow = ({
                 </span>
             </div>
         </Link>
-        <button
-            type="button"
-            onClick={() => onEdit(list)}
-            aria-label="Edit list"
-            title="Edit list"
-            className={`${LIST_ROW_ACTION} cursor-pointer transition-colors hover:bg-surface`}
-        >
-            <span
-                aria-hidden="true"
-                className="icon-[lucide--pencil] size-4 text-muted transition-colors group-hover:text-sub"
-            />
-        </button>
-        <button
-            type="button"
-            onClick={() => onDelete(list)}
-            aria-label="Delete list"
-            title="Delete list"
-            className={`${LIST_ROW_ACTION} cursor-pointer transition-colors hover:bg-surface`}
-        >
-            <span
-                aria-hidden="true"
-                className="icon-[lucide--trash-2] size-4 text-muted transition-colors group-hover:text-sub"
-            />
-        </button>
-        <button
-            type="button"
-            onClick={() => onTogglePin(list)}
-            aria-pressed={list.pinned}
-            aria-label={list.pinned ? "Unpin list" : "Pin list"}
-            title={list.pinned ? "Unpin list" : "Pin list"}
-            className={`${LIST_ROW_PIN_ACTION} cursor-pointer transition-colors hover:bg-surface`}
-        >
-            <span
-                aria-hidden="true"
-                className={`icon-[lucide--pin] size-4 transition-opacity ${
-                    list.pinned
-                        ? "text-accent"
-                        : "text-muted opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
-                }`}
-            />
-        </button>
+        {viewing ? (
+            // Only a pinned row draws anything. The unpinned mark exists to
+            // offer the press on hover, and there is no press here.
+            <span className={LIST_ROW_PIN_ACTION}>
+                {list.pinned && (
+                    <>
+                        <span
+                            aria-hidden="true"
+                            className="icon-[lucide--pin] size-4 text-accent"
+                        />
+                        <span className="sr-only">Pinned</span>
+                    </>
+                )}
+            </span>
+        ) : (
+            <>
+                <button
+                    type="button"
+                    onClick={() => onEdit(list)}
+                    aria-label="Edit list"
+                    title="Edit list"
+                    className={`${LIST_ROW_ACTION} cursor-pointer transition-colors hover:bg-surface`}
+                >
+                    <span
+                        aria-hidden="true"
+                        className="icon-[lucide--pencil] size-4 text-muted transition-colors group-hover:text-sub"
+                    />
+                </button>
+                <button
+                    type="button"
+                    onClick={() => onDelete(list)}
+                    aria-label="Delete list"
+                    title="Delete list"
+                    className={`${LIST_ROW_ACTION} cursor-pointer transition-colors hover:bg-surface`}
+                >
+                    <span
+                        aria-hidden="true"
+                        className="icon-[lucide--trash-2] size-4 text-muted transition-colors group-hover:text-sub"
+                    />
+                </button>
+                <button
+                    type="button"
+                    onClick={() => onTogglePin(list)}
+                    aria-pressed={list.pinned}
+                    aria-label={list.pinned ? "Unpin list" : "Pin list"}
+                    title={list.pinned ? "Unpin list" : "Pin list"}
+                    className={`${LIST_ROW_PIN_ACTION} cursor-pointer transition-colors hover:bg-surface`}
+                >
+                    <PinMark pinned={list.pinned} />
+                </button>
+            </>
+        )}
     </li>
 );
 
@@ -529,6 +558,7 @@ export const ListsIndex = ({
 }) => {
     const router = useRouter();
     const pathname = usePathname();
+    const viewing = useViewing();
     // Navigation (search/sort/paging) drives the loading skeleton; mutations
     // (pin, create) have their own transition so an optimistic update never
     // flashes the whole list.
@@ -732,31 +762,35 @@ export const ListsIndex = ({
                         {emailPanel ? (
                             <EmailSyncMenu panel={emailPanel} />
                         ) : null}
-                        <button
-                            type="button"
-                            onClick={() => setIsComposing(true)}
-                            className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 bg-accent px-3 text-sm font-medium whitespace-nowrap text-background transition-colors hover:bg-accent-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                        >
-                            <span
-                                aria-hidden="true"
-                                className="icon-[lucide--plus] size-4 shrink-0"
-                            />
-                            New list
-                        </button>
+                        {viewing ? null : (
+                            <button
+                                type="button"
+                                onClick={() => setIsComposing(true)}
+                                className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 bg-accent px-3 text-sm font-medium whitespace-nowrap text-background transition-colors hover:bg-accent-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                            >
+                                <span
+                                    aria-hidden="true"
+                                    className="icon-[lucide--plus] size-4 shrink-0"
+                                />
+                                New list
+                            </button>
+                        )}
                     </div>
                 </div>
             </div>
 
             {isNavigating ? (
                 <div className="mt-8">
-                    <ListRowsSkeleton />
+                    <ListRowsSkeleton viewing={viewing} />
                 </div>
             ) : total === 0 && !isComposing ? (
                 <div className="mt-8 border border-hairline bg-background px-5 py-16 text-center">
                     <p className="text-sm text-sub">
                         {search
                             ? `No lists match "${search}".`
-                            : "No lists yet. Create one to start tracking applications."}
+                            : viewing
+                              ? "No lists yet."
+                              : "No lists yet. Create one to start tracking applications."}
                     </p>
                 </div>
             ) : (
@@ -795,6 +829,7 @@ export const ListsIndex = ({
                                     key={list.id}
                                     list={list}
                                     href={detailHref(list.id)}
+                                    viewing={viewing}
                                     onTogglePin={onTogglePin}
                                     onEdit={() => setEditingId(list.id)}
                                     onDelete={() => setDeletingId(list.id)}

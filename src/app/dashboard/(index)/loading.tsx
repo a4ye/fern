@@ -11,6 +11,7 @@ const DashboardLoading = async () => {
     return (
         <ListsPageSkeleton
             hasInboxSync={!viewAs && isEmailSyncApproved(session?.user.email)}
+            viewing={Boolean(viewAs)}
         />
     );
 };

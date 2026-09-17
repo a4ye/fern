@@ -9,7 +9,7 @@ process.env.POSTGRES_URL ??= "postgres://user:pass@localhost:5432/test";
 // module identity, so this file gets the real one. The pool it builds never
 // opens a connection: nothing here reaches past pool.connect, which is stubbed.
 const unmocked = "@/db/client?real";
-const { getPool, withTransaction } = (await import(
+const { getPool, withTransaction, statementName } = (await import(
     unmocked
 )) as typeof import("@/db/client");
 
@@ -63,6 +63,21 @@ describe("getPool", () => {
         getPool();
         const pool = getPool() as unknown as EventEmitter;
         expect(pool.listenerCount("error")).toBe(1);
+    });
+});
+
+describe("statementName", () => {
+    test("names a span after the generated statement", () => {
+        expect(
+            statementName(
+                "-- name: UpdateApplication :exec\nupdate applications a\nset company_name = $1",
+            ),
+        ).toBe("UpdateApplication");
+    });
+
+    test("falls back to the verb for statements nothing generated", () => {
+        expect(statementName("begin")).toBe("begin");
+        expect(statementName('SELECT 1 from "user"')).toBe("select");
     });
 });
 

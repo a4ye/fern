@@ -49,11 +49,11 @@ const ControlSkeleton = ({
 
 const STAT_LABELS = ["Total", "Active", "Interviewing", "Offers"];
 
-const ApplicationRowSkeleton = () => (
+const ApplicationRowSkeleton = ({ viewing }: { viewing: boolean }) => (
     <li
         className={`${APPLICATION_COLUMNS} ${ROW_HEIGHT} border-b border-faint px-5 last:border-b-0`}
     >
-        <span className="skeleton size-3.5" />
+        {viewing ? <span /> : <span className="skeleton size-3.5" />}
         <Cell width="w-28" />
         <Cell width="w-36" />
         {/* Status renders as a filled plate in the real row, so the placeholder
@@ -68,7 +68,13 @@ const ApplicationRowSkeleton = () => (
     </li>
 );
 
-export const SeasonPageSkeleton = () => (
+// `viewing` drops the same controls the real page leaves out while an admin is
+// viewing another account, so the toolbar is the same length either way.
+export const SeasonPageSkeleton = ({
+    viewing = false,
+}: {
+    viewing?: boolean;
+}) => (
     <div className="mx-auto w-full max-w-[88rem] flex-1 px-6 py-10 sm:px-10">
         <Link
             href="/dashboard"
@@ -90,24 +96,30 @@ export const SeasonPageSkeleton = () => (
                     </span>
                 </div>
                 <div className="flex min-h-10 shrink-0 items-center justify-end">
-                    <span className="inline-flex h-10 min-w-10 items-center gap-2 pr-2.5 pl-2">
-                        <span className="skeleton size-4 shrink-0" />
-                        <TextBar className="hidden text-sm sm:inline-flex">
-                            Share
-                        </TextBar>
-                    </span>
+                    {viewing ? null : (
+                        <span className="inline-flex h-10 min-w-10 items-center gap-2 pr-2.5 pl-2">
+                            <span className="skeleton size-4 shrink-0" />
+                            <TextBar className="hidden text-sm sm:inline-flex">
+                                Share
+                            </TextBar>
+                        </span>
+                    )}
                     <span className="inline-flex h-10 min-w-10 items-center gap-2 pr-2.5 pl-2">
                         <span className="skeleton size-4 shrink-0" />
                         <TextBar className="hidden text-sm sm:inline-flex">
                             History
                         </TextBar>
                     </span>
-                    <span className="flex size-10 items-center justify-center">
-                        <span className="skeleton size-4" />
-                    </span>
-                    <span className="flex size-10 items-center justify-center">
-                        <span className="skeleton size-4" />
-                    </span>
+                    {viewing ? null : (
+                        <>
+                            <span className="flex size-10 items-center justify-center">
+                                <span className="skeleton size-4" />
+                            </span>
+                            <span className="flex size-10 items-center justify-center">
+                                <span className="skeleton size-4" />
+                            </span>
+                        </>
+                    )}
                 </div>
             </div>
             <div className="mt-2 flex h-8 items-center">
@@ -168,27 +180,41 @@ export const SeasonPageSkeleton = () => (
                         label="Pay currency"
                         className="max-sm:grow sm:w-44"
                     />
-                    <ControlSkeleton label="Edit all" className="max-sm:grow" />
+                    {viewing ? null : (
+                        <ControlSkeleton
+                            label="Edit all"
+                            className="max-sm:grow"
+                        />
+                    )}
                     <ControlSkeleton label="Export" className="max-sm:grow" />
-                    <ControlSkeleton label="Import" className="max-sm:grow" />
-                    <ControlSkeleton
-                        label="Add application"
-                        className="font-medium max-sm:grow"
-                    />
+                    {viewing ? null : (
+                        <>
+                            <ControlSkeleton
+                                label="Import"
+                                className="max-sm:grow"
+                            />
+                            <ControlSkeleton
+                                label="Add application"
+                                className="font-medium max-sm:grow"
+                            />
+                        </>
+                    )}
                 </div>
             </div>
             <div className="max-h-[70vh] overflow-auto">
                 <ApplicationsHeaderRow
                     selectAll={
-                        <span
-                            aria-hidden="true"
-                            className="skeleton size-3.5"
-                        />
+                        viewing ? null : (
+                            <span
+                                aria-hidden="true"
+                                className="skeleton size-3.5"
+                            />
+                        )
                     }
                 />
                 <ul aria-hidden="true">
                     {Array.from({ length: 10 }, (_, index) => (
-                        <ApplicationRowSkeleton key={index} />
+                        <ApplicationRowSkeleton key={index} viewing={viewing} />
                     ))}
                 </ul>
             </div>
