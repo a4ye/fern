@@ -4,7 +4,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getRealSession, isAdminRequest } from "@/lib/auth";
 import { getUserById } from "@/db/admin";
-import { clearViewAsTarget, setViewAsTarget } from "@/lib/view-as";
+import {
+    clearViewAsTarget,
+    setViewAsTarget,
+    viewAsTarget,
+} from "@/lib/view-as";
 
 export const startViewAs = async (formData: FormData): Promise<void> => {
     const real = await getRealSession();
@@ -35,8 +39,19 @@ export const startViewAs = async (formData: FormData): Promise<void> => {
     redirect("/dashboard");
 };
 
+// An exported action is an address anybody can post to, and this one used to
+// answer every caller. Clearing a cookie only ever affected whoever sent it,
+// but the revalidate did not: an anonymous caller in a loop emptied the render
+// cache for the whole dashboard, for everyone, as often as it liked. So the
+// session is required, and the cache is only dropped when there was in fact a
+// viewing to stop.
 export const stopViewAs = async (): Promise<void> => {
+    const real = await getRealSession();
+    if (!real) return;
+
+    const viewing = Boolean(await viewAsTarget(real.user.id));
     await clearViewAsTarget();
-    revalidatePath("/dashboard", "layout");
+    if (viewing) revalidatePath("/dashboard", "layout");
+
     redirect("/dashboard/admin");
 };

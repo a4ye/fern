@@ -18,7 +18,12 @@ import {
 } from "@/lib/limits";
 import { readSheet, type SheetResult } from "@/lib/import/sheet";
 import type { ImportDraft } from "@/lib/import/rows";
-import { importRowSchema, timeZoneSchema, firstIssue } from "@/lib/validation";
+import {
+    applicationIdSchema,
+    importRowSchema,
+    timeZoneSchema,
+    firstIssue,
+} from "@/lib/validation";
 
 const NOT_SIGNED_IN = "You are not signed in." as const;
 
@@ -69,6 +74,12 @@ export const commitImport = async (
     const session = await getRequestSession();
     if (!session) return { ok: false, error: NOT_SIGNED_IN };
     if (await getViewAs()) return { ok: false, error: VIEW_ONLY };
+    // lists.id is a uuid column, so an id of another shape raises in Postgres
+    // rather than matching nothing, and the import would fail as a broken
+    // request instead of saying which list it could not find.
+    if (!applicationIdSchema.safeParse(listId).success) {
+        return { ok: false, error: "That list is no longer available." };
+    }
 
     if (drafts.length === 0) {
         return { ok: false, error: "There is nothing to import." };

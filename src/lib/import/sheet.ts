@@ -6,10 +6,13 @@
 import Papa from "papaparse";
 import { readSheet as readXlsxSheet } from "read-excel-file/node";
 import type { Sheet } from "@/lib/import/rows";
+import { unpackedSize } from "@/lib/import/archive";
 import {
     FILE_TOO_LARGE,
+    FILE_UNPACKS_TOO_LARGE,
     MAX_IMPORT_BYTES,
     MAX_IMPORT_ROWS,
+    MAX_IMPORT_UNPACKED_BYTES,
 } from "@/lib/limits";
 
 export type SheetResult =
@@ -74,7 +77,19 @@ const parseCsv = (bytes: ArrayBuffer): SheetResult => {
     );
 };
 
+const UNREADABLE =
+    "That file could not be read. Check that it opens in a spreadsheet." as const;
+
 const parseXlsx = async (bytes: ArrayBuffer): Promise<SheetResult> => {
+    // Asked before the parser is handed the file, because the parser builds the
+    // whole sheet before `toSheet` gets to count its rows: by the time the row
+    // limit could refuse a file, the memory it wanted has already been taken.
+    const unpacked = unpackedSize(bytes);
+    if (unpacked === null) return { ok: false, error: UNREADABLE };
+    if (unpacked > MAX_IMPORT_UNPACKED_BYTES) {
+        return { ok: false, error: FILE_UNPACKS_TOO_LARGE };
+    }
+
     const grid = await readXlsxSheet(Buffer.from(bytes));
     return toSheet(grid.map((row) => row.map((cell) => clean(cellText(cell)))));
 };
@@ -100,9 +115,6 @@ export const readSheet = async (
     } catch {
         // The parsers throw on a file that is not the shape its name claims,
         // which is a fact about the upload rather than a fault worth logging.
-        return {
-            ok: false,
-            error: "That file could not be read. Check that it opens in a spreadsheet.",
-        };
+        return { ok: false, error: UNREADABLE };
     }
 };

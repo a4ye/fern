@@ -25,6 +25,13 @@ export function getPool(): Pool {
             idleTimeoutMillis: 10_000,
             query_timeout: 15_000,
         });
+        // An idle connection can be closed from the far side, and on a frozen
+        // serverless instance idleTimeoutMillis never fires to close it first.
+        // The pool reports that as an `error` event, which Node escalates to a
+        // fatal uncaught exception when nothing listens. Only idle connections
+        // reach here, already evicted from the pool, so no query was affected
+        // and there is nothing to do but let the pool open a fresh one.
+        pool.on("error", () => {});
     }
     return pool;
 }
@@ -37,6 +44,17 @@ export const withTransaction = async <Result>(
 ): Promise<Result> => {
     const client = await getPool().connect();
     let discardClient = false;
+    // The pool takes its own error listener off a client while that client is
+    // checked out, so for the length of the transaction this is the only one.
+    // Without it a connection that dies here raises an `error` event with
+    // nothing listening, and Node escalates that to a fatal uncaught
+    // exception. The failure itself still reaches the caller, because the same
+    // error rejects the in-flight query, so all this has to do is keep the
+    // process alive and keep the dead connection out of the pool.
+    const onClientError = () => {
+        discardClient = true;
+    };
+    client.on("error", onClientError);
 
     try {
         await client.query("begin");
@@ -52,6 +70,9 @@ export const withTransaction = async <Result>(
         }
         throw error;
     } finally {
+        // The pool reuses the same client object, so leaving this attached
+        // would stack up a listener per checkout.
+        client.removeListener("error", onClientError);
         client.release(discardClient);
     }
 };

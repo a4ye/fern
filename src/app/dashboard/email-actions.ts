@@ -19,7 +19,11 @@ import { recordMetrics } from "@/db/metrics";
 import { withinBudget } from "@/db/rate-limit";
 import { INBOX_SCAN, INBOX_SUGGESTION, record } from "@/lib/metrics";
 import { TOO_MANY_REQUESTS } from "@/lib/limits";
-import { timeZoneSchema, type ActionResult } from "@/lib/validation";
+import {
+    applicationIdSchema,
+    timeZoneSchema,
+    type ActionResult,
+} from "@/lib/validation";
 import { isEmailSyncApproved } from "@/lib/email/access";
 
 export type SyncResult =
@@ -165,6 +169,11 @@ export const acceptSuggestion = async (
 ): Promise<ActionResult> => {
     const writer = await resolvingUser();
     if (!writer.ok) return writer;
+    // The suggestion id reaches a uuid column, where a value of another shape
+    // raises rather than matching nothing.
+    if (!applicationIdSchema.safeParse(suggestionId).success) {
+        return { ok: false, error: EMAIL_SYNC_COPY.suggestionGone };
+    }
 
     const parsedTimeZone = timeZoneSchema.safeParse(timeZone);
     if (!parsedTimeZone.success) {
@@ -193,6 +202,9 @@ export const dismissSuggestionAction = async (
 ): Promise<ActionResult> => {
     const writer = await resolvingUser();
     if (!writer.ok) return writer;
+    if (!applicationIdSchema.safeParse(suggestionId).success) {
+        return { ok: false, error: EMAIL_SYNC_COPY.suggestionGone };
+    }
 
     await dismissSuggestion(writer.userId, suggestionId);
     after(() => recordMetrics([record(INBOX_SUGGESTION, "dismissed")]));

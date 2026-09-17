@@ -39,26 +39,32 @@ export async function applicationQuotaUsage(client: Client, args: ApplicationQuo
 }
 
 export const countApplicationEventsQuery = `-- name: CountApplicationEvents :one
-select count(*)::int as total
+select
+    count(*)::int as total,
+    count(*) filter (
+        where e.id = any($1::uuid[])
+    )::int as removing
 from application_events e
 join applications a on a.id = e.application_id
 join lists l on l.id = a.list_id
-where e.application_id = $1
-    and l.user_id = $2`;
+where e.application_id = $2
+    and l.user_id = $3`;
 
 export interface CountApplicationEventsArgs {
+    removedEventIds: string[];
     applicationId: string;
     userId: string;
 }
 
 export interface CountApplicationEventsRow {
     total: number;
+    removing: number;
 }
 
 export async function countApplicationEvents(client: Client, args: CountApplicationEventsArgs): Promise<CountApplicationEventsRow | null> {
     const result = await client.query({
         text: countApplicationEventsQuery,
-        values: [args.applicationId, args.userId],
+        values: [args.removedEventIds, args.applicationId, args.userId],
         rowMode: "array"
     });
     if (result.rows.length !== 1) {
@@ -66,7 +72,8 @@ export async function countApplicationEvents(client: Client, args: CountApplicat
     }
     const row = result.rows[0];
     return {
-        total: row[0]
+        total: row[0],
+        removing: row[1]
     };
 }
 

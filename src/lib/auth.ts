@@ -8,6 +8,7 @@ import { getPool } from "@/db/client";
 import { getUserById } from "@/db/admin";
 import { isAdmin } from "@/lib/admin";
 import { isEmailSyncApproved } from "@/lib/email/access";
+import { DEFAULT_SCOPE, FERN_SCOPES } from "@/lib/mcp/scopes";
 import { viewAsTarget } from "@/lib/view-as";
 
 const requiredEnv = (name: string): string => {
@@ -84,6 +85,33 @@ export const auth = betterAuth({
     },
     hooks: {
         before: createAuthMiddleware(async (context) => {
+            // better-auth asks for consent only when the client requests it:
+            // authorize records `requireConsent: query.prompt === "consent"`
+            // and otherwise redirects straight back with the code. Anyone may
+            // register a client here, so one that leaves the parameter out
+            // would be handed a signed-in visitor's account on a single click
+            // with no page shown. Whether consent is asked for is this app's to
+            // decide, so the request is sent back carrying it.
+            //
+            // Sent back rather than edited in place: a hook is handed its own
+            // context, and a query rewritten on it does not reach the endpoint.
+            // The second request is the one that counts, and it is also what a
+            // visitor who has still to sign in leaves behind, since authorize
+            // stores the query it was actually called with to resume from after
+            // the login. Both ways in therefore arrive with consent asked for.
+            if (context.path === "/mcp/authorize" && context.request) {
+                const url = new URL(context.request.url);
+                if (url.searchParams.get("prompt") !== "consent") {
+                    url.searchParams.set("prompt", "consent");
+                    // Path and query only. Behind a proxy the host on the
+                    // incoming request is the one the platform routed to, not
+                    // the one the browser asked for, and sending that back
+                    // would point the visitor at an address of ours they
+                    // cannot reach.
+                    throw context.redirect(`${url.pathname}${url.search}`);
+                }
+            }
+
             const isGoogleCallback =
                 context.path === `/callback/${GOOGLE_PROVIDER_ID}`;
             if (
@@ -158,6 +186,13 @@ export const auth = betterAuth({
                 allowDynamicClientRegistration: true,
                 requirePKCE: true,
                 consentPage: "/oauth/authorize",
+                // Reading and changing are asked for separately, so a
+                // connection can be given one without the other and the consent
+                // screen can say which it is. A client that names no scope gets
+                // the default below, which is both, so nothing that connected
+                // before these existed is narrowed by them.
+                scopes: [...FERN_SCOPES],
+                defaultScope: DEFAULT_SCOPE,
             },
         }),
         nextCookies(),
@@ -185,11 +220,7 @@ const resolveRequest = cache(
         // than when the viewing started, so removing an address from
         // ADMIN_EMAILS ends any viewing it was doing on the next page load.
         const targetId = await viewAsTarget(real.user.id);
-        if (
-            !targetId ||
-            targetId === real.user.id ||
-            !isAdmin(real.user.email)
-        ) {
+        if (!targetId || targetId === real.user.id || !isAdmin(real.user)) {
             return { session: real, viewedBy: null };
         }
 
@@ -215,7 +246,7 @@ export const getRealSession = async (): Promise<Session | null> => {
 };
 
 export const isAdminRequest = async (): Promise<boolean> =>
-    isAdmin((await getRealSession())?.user.email);
+    isAdmin((await getRealSession())?.user);
 
 // The admin and the account they are looking at, or null when the request is
 // somebody working on their own data. Writes refuse while this is set, and the

@@ -158,6 +158,20 @@ export const MAX_IMPORT_BYTES = 5 * 1024 * 1024;
 
 export const FILE_TOO_LARGE = "That file is larger than 5 MB.";
 
+// The ceiling above is on what arrives. An .xlsx is a zip, so what arrives and
+// what has to be held are different numbers, and the ratio between them is
+// whoever made the file's to choose: five compressed megabytes of repeated
+// bytes unpack into gigabytes, and the parser used here builds the whole sheet
+// in memory before any row limit is applied to it.
+//
+// 10,000 rows of a real export unpack to roughly 20 MB of spreadsheet XML, so
+// this leaves generous room above anything a person is actually importing while
+// staying far below what would exhaust the instance.
+export const MAX_IMPORT_UNPACKED_BYTES = 64 * 1024 * 1024;
+
+export const FILE_UNPACKS_TOO_LARGE =
+    "That file unpacks to more than 64 MB. Export a smaller range of rows.";
+
 // What a caller is told when a budget above is spent. Deliberately vague about
 // the window: the number is ours to tune, and someone who has met it is either
 // automating or has hit a bug worth hearing about.

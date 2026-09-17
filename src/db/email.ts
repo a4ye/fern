@@ -216,6 +216,8 @@ export const applySuggestion = async (
         const events = await gen.countApplicationEvents(client, {
             applicationId: suggestion.applicationId,
             userId,
+            // Applying a suggestion records a move and drops none.
+            removedEventIds: [],
         });
         const hasRoom = (events?.total ?? 0) < MAX_EVENTS_PER_APPLICATION;
 

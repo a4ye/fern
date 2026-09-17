@@ -138,6 +138,10 @@ const {
 
 const SIGNED_OUT = { ok: false, error: "You are not signed in." };
 const APPLICATION_ID = "00000000-0000-4000-8000-000000000001";
+
+// lists.id is a uuid column, so a list id has to be one the database could
+// actually hold: the actions turn anything else away before they reach it.
+const LIST_ID = "00000000-0000-4000-8000-0000000000aa";
 const revalidated = () => revalidatePath.mock.calls.flat();
 
 beforeEach(() => {
@@ -303,18 +307,18 @@ describe("updateList", () => {
 
     it("refuses to write when signed out", async () => {
         session = null;
-        expect(await updateList("list-1", edit)).toEqual(SIGNED_OUT);
+        expect(await updateList(LIST_ID, edit)).toEqual(SIGNED_OUT);
         expect(db.updateList).not.toHaveBeenCalled();
     });
 
     it("saves under the session user and revalidates both views", async () => {
-        expect(await updateList("list-1", edit)).toEqual({ ok: true });
-        expect(db.updateList.mock.calls[0]).toEqual(["user-1", "list-1", edit]);
-        expect(revalidated()).toEqual(["/dashboard/list-1", "/dashboard"]);
+        expect(await updateList(LIST_ID, edit)).toEqual({ ok: true });
+        expect(db.updateList.mock.calls[0]).toEqual(["user-1", LIST_ID, edit]);
+        expect(revalidated()).toEqual([`/dashboard/${LIST_ID}`, "/dashboard"]);
     });
 
     it("reports an unknown status without writing", async () => {
-        const result = await updateList("list-1", {
+        const result = await updateList(LIST_ID, {
             ...edit,
             status: "deleted" as never,
         });
@@ -488,14 +492,14 @@ describe("loadListHistoryChanges", () => {
 describe("deleteList", () => {
     it("refuses to write when signed out", async () => {
         session = null;
-        await deleteList("list-1");
+        await deleteList(LIST_ID);
         expect(db.deleteList).not.toHaveBeenCalled();
         expect(revalidatePath).not.toHaveBeenCalled();
     });
 
     it("deletes under the session user", async () => {
-        await deleteList("list-1");
-        expect(db.deleteList.mock.calls[0]).toEqual(["user-1", "list-1"]);
+        await deleteList(LIST_ID);
+        expect(db.deleteList.mock.calls[0]).toEqual(["user-1", LIST_ID]);
         expect(revalidated()).toContain("/dashboard");
     });
 });
@@ -503,16 +507,16 @@ describe("deleteList", () => {
 describe("togglePin", () => {
     it("refuses to write when signed out", async () => {
         session = null;
-        await togglePin("list-1", true);
+        await togglePin(LIST_ID, true);
         expect(db.setListPinned).not.toHaveBeenCalled();
     });
 
     it("pins and unpins under the session user", async () => {
-        await togglePin("list-1", true);
-        await togglePin("list-1", false);
+        await togglePin(LIST_ID, true);
+        await togglePin(LIST_ID, false);
         expect(db.setListPinned.mock.calls).toEqual([
-            ["user-1", "list-1", true],
-            ["user-1", "list-1", false],
+            ["user-1", LIST_ID, true],
+            ["user-1", LIST_ID, false],
         ]);
         expect(revalidated()).toEqual(["/dashboard", "/dashboard"]);
     });
@@ -521,7 +525,7 @@ describe("togglePin", () => {
 describe("setApplicationsStatus", () => {
     it("passes a validated browser time zone to the status write", async () => {
         await setApplicationsStatus(
-            "list-1",
+            LIST_ID,
             [APPLICATION_ID],
             "applied",
             "America/Toronto",
@@ -533,12 +537,12 @@ describe("setApplicationsStatus", () => {
             "applied",
             "America/Toronto",
         ]);
-        expect(revalidated()).toEqual(["/dashboard/list-1", "/dashboard"]);
+        expect(revalidated()).toEqual([`/dashboard/${LIST_ID}`, "/dashboard"]);
     });
 
     it("rejects an invalid time zone before writing", async () => {
         await setApplicationsStatus(
-            "list-1",
+            LIST_ID,
             [APPLICATION_ID],
             "applied",
             "Moon/Sea_of_Tranquility",
@@ -552,7 +556,7 @@ describe("setApplicationsStatus", () => {
         const other = "00000000-0000-4000-8000-000000000002";
         atEventCap = new Set([other]);
         await setApplicationsStatus(
-            "list-1",
+            LIST_ID,
             [APPLICATION_ID, other],
             "applied",
             "America/Toronto",
@@ -566,7 +570,7 @@ describe("setApplicationsStatus", () => {
     it("says why when every application is at its cap", async () => {
         atEventCap = new Set([APPLICATION_ID]);
         const result = await setApplicationsStatus(
-            "list-1",
+            LIST_ID,
             [APPLICATION_ID],
             "applied",
             "America/Toronto",
@@ -584,7 +588,7 @@ describe("setApplicationsStatus", () => {
         writeBudget = false;
         expect(
             await setApplicationsStatus(
-                "list-1",
+                LIST_ID,
                 [APPLICATION_ID],
                 "applied",
                 "America/Toronto",
@@ -603,8 +607,8 @@ describe("viewing another account", () => {
         const refusal = { ok: false, error: VIEW_ONLY };
         expect(await createList("Fall 2026", null)).toEqual(refusal);
         expect(await clearListHistory(APPLICATION_ID)).toEqual(refusal);
-        await togglePin("list-1", true);
-        await deleteList("list-1");
+        await togglePin(LIST_ID, true);
+        await deleteList(LIST_ID);
 
         expect(db.createList).not.toHaveBeenCalled();
         expect(clearListHistoryDb).not.toHaveBeenCalled();
@@ -673,39 +677,39 @@ describe("application write revalidation", () => {
 
     it("refreshes the list detail and overview after creating an application", async () => {
         await addApplication(
-            "list-1",
+            LIST_ID,
             { ...detailEdit, status: "not_applied" },
             "America/Toronto",
         );
 
-        expect(revalidated()).toEqual(["/dashboard/list-1", "/dashboard"]);
+        expect(revalidated()).toEqual([`/dashboard/${LIST_ID}`, "/dashboard"]);
     });
 
     it("refreshes the list detail and overview after bulk editing applications", async () => {
         await updateApplicationsBulk(
-            "list-1",
+            LIST_ID,
             [{ id: APPLICATION_ID, input: quickEdit, payTyped: false }],
             "America/Toronto",
         );
 
-        expect(revalidated()).toEqual(["/dashboard/list-1", "/dashboard"]);
+        expect(revalidated()).toEqual([`/dashboard/${LIST_ID}`, "/dashboard"]);
     });
 
     it("refreshes the list detail and overview after editing application details", async () => {
         await saveApplicationDetail(
-            "list-1",
-            "app-1",
+            LIST_ID,
+            APPLICATION_ID,
             detailEdit,
             { removed: [], added: [] },
             "America/Toronto",
         );
 
-        expect(revalidated()).toEqual(["/dashboard/list-1", "/dashboard"]);
+        expect(revalidated()).toEqual([`/dashboard/${LIST_ID}`, "/dashboard"]);
     });
 
     it("refreshes the list detail and overview after changing arrangement", async () => {
-        await setApplicationsArrangement("list-1", [APPLICATION_ID], "remote");
+        await setApplicationsArrangement(LIST_ID, [APPLICATION_ID], "remote");
 
-        expect(revalidated()).toEqual(["/dashboard/list-1", "/dashboard"]);
+        expect(revalidated()).toEqual([`/dashboard/${LIST_ID}`, "/dashboard"]);
     });
 });

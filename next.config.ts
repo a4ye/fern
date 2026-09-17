@@ -20,6 +20,43 @@ const nextConfig: NextConfig = {
         // import actually needs.
         serverActions: { bodySizeLimit: "8mb" },
     },
+    // Sent with every response rather than on the pages that need them, so a
+    // route added later is covered without anybody remembering to.
+    //
+    // `frame-ancestors` is the one with an attack behind it: the consent screen
+    // at /oauth/authorize turns a single click into an agent holding an
+    // account, and a page that can be framed can have that click aimed at it
+    // from a site the reader thinks they are on. X-Frame-Options says the same
+    // thing to browsers that predate CSP.
+    //
+    // This is not a full policy. Restricting `script-src` needs a nonce
+    // threaded through the proxy, and shipping one unverified would be a way to
+    // find out in production which of the app's scripts it broke.
+    headers: async () => [
+        {
+            source: "/:path*",
+            headers: [
+                {
+                    key: "Content-Security-Policy",
+                    value: "frame-ancestors 'none'",
+                },
+                { key: "X-Frame-Options", value: "DENY" },
+                { key: "X-Content-Type-Options", value: "nosniff" },
+                // Same-origin requests still carry the whole address, which is
+                // what the app's own navigation needs. A share link is a
+                // credential in a path, and the page that holds one asks for
+                // `no-referrer` itself rather than relying on this.
+                {
+                    key: "Referrer-Policy",
+                    value: "strict-origin-when-cross-origin",
+                },
+                {
+                    key: "Permissions-Policy",
+                    value: "camera=(), microphone=(), geolocation=(), payment=()",
+                },
+            ],
+        },
+    ],
     // An MCP client discovers how to authenticate by reading two documents at
     // fixed .well-known addresses. Next leaves dot-prefixed directories out of
     // the app router, so the handlers live under /api and are reached here.

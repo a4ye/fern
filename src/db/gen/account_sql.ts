@@ -20,24 +20,38 @@ export async function deleteUser(client: Client, args: DeleteUserArgs): Promise<
     });
 }
 
-export const oAuthClientForConsentQuery = `-- name: OAuthClientForConsent :one
-select "name", "icon"
-from "oauthApplication"
-where "clientId" = $1 and "disabled" = false`;
+export const oAuthConsentRequestQuery = `-- name: OAuthConsentRequest :one
+select
+    a."name",
+    a."icon",
+    v."value"::jsonb ->> 'userId' as user_id,
+    v."value"::jsonb ->> 'redirectURI' as redirect_uri,
+    -- A JSON array, handed back as its text so the page can say whether this
+    -- grant is read only rather than listing what every grant can do.
+    v."value"::jsonb ->> 'scope' as scope
+from "verification" v
+join "oauthApplication" a
+    on a."clientId" = v."value"::jsonb ->> 'clientId'
+where v."identifier" = $1
+    and v."expiresAt" > now()
+    and a."disabled" = false`;
 
-export interface OAuthClientForConsentArgs {
-    clientId: string;
+export interface OAuthConsentRequestArgs {
+    consentCode: string;
 }
 
-export interface OAuthClientForConsentRow {
+export interface OAuthConsentRequestRow {
     name: string;
     icon: string | null;
+    userId: string | null;
+    redirectUri: string | null;
+    scope: string | null;
 }
 
-export async function oAuthClientForConsent(client: Client, args: OAuthClientForConsentArgs): Promise<OAuthClientForConsentRow | null> {
+export async function oAuthConsentRequest(client: Client, args: OAuthConsentRequestArgs): Promise<OAuthConsentRequestRow | null> {
     const result = await client.query({
-        text: oAuthClientForConsentQuery,
-        values: [args.clientId],
+        text: oAuthConsentRequestQuery,
+        values: [args.consentCode],
         rowMode: "array"
     });
     if (result.rows.length !== 1) {
@@ -46,7 +60,10 @@ export async function oAuthClientForConsent(client: Client, args: OAuthClientFor
     const row = result.rows[0];
     return {
         name: row[0],
-        icon: row[1]
+        icon: row[1],
+        userId: row[2],
+        redirectUri: row[3],
+        scope: row[4]
     };
 }
 

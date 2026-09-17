@@ -343,8 +343,13 @@ export const saveApplicationDetail = async (
 // How a company and role are compared when deciding whether two applications
 // are the same one. The database folds and trims the same way, so a key built
 // here matches a row matched there.
+//
+// The separator is written as an escape and must stay one. Held as a raw byte
+// it made this whole file binary to anything that checks: ripgrep, grep and
+// secret scanners all skipped it in silence, which is the kind of gap that is
+// only found by someone looking for something else.
 export const applicationKey = (company: string, role: string | null): string =>
-    `${company.trim().toLowerCase()} ${(role ?? "").trim().toLowerCase()}`;
+    `${company.trim().toLowerCase()}\u0000${(role ?? "").trim().toLowerCase()}`;
 
 export type DuplicateMatch = {
     key: string;

@@ -57,17 +57,24 @@ export const applicationQuota = async (
     return OK;
 };
 
-// `adding` counts the steps a save is about to record.
+// `adding` counts the steps a save is about to record, and `removedEventIds`
+// the ones it says it is dropping. Only the ids the application actually holds
+// make room: the delete matches by id, so anything else in that list is a claim
+// the save cannot back, and subtracting it would be how the cap gets walked
+// past a hundred at a time.
 export const statusEventQuota = async (
     userId: string,
     applicationId: string,
     adding: number,
+    removedEventIds: string[] = [],
 ): Promise<QuotaCheck> => {
     const row = await gen.countApplicationEvents(getPool(), {
         userId,
         applicationId,
+        removedEventIds,
     });
-    if ((row?.total ?? 0) + adding <= MAX_EVENTS_PER_APPLICATION) return OK;
+    const after = (row?.total ?? 0) - (row?.removing ?? 0) + adding;
+    if (after <= MAX_EVENTS_PER_APPLICATION) return OK;
     return {
         ok: false,
         error: `This application has recorded ${MAX_EVENTS_PER_APPLICATION} status changes, which is as many as it keeps.`,

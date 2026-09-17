@@ -120,6 +120,13 @@ export const urlSchema = optionalText("Link", URL_MAX).refine(
     "Link must be a http:// or https:// address.",
 );
 
+// An address pasted into the import drawer, bounded before anything reads it.
+// Which hosts are actually fetched is decided afterwards, by the allowlist in
+// job-scrape; all this settles is that a string arrived and that its length is
+// one a URL could have. Unbounded, it would be parsed, used as a cache key, and
+// written to an indexed column, all at whatever size the caller chose to send.
+export const importUrlSchema = z.string().max(URL_MAX);
+
 // A date column takes real days only, so a shape check on its own would leave
 // 2026-02-31 to fail on the write. Reading the parts back proves the day exists,
 // since Date rolls an overflowing one into the month after.

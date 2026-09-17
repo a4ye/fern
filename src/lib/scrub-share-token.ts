@@ -16,8 +16,10 @@ const REDACTED = "/s/[token]";
 const scrub = (value: string): string => value.replace(SHARE_PATH, REDACTED);
 
 // Sentry sends the same address in several shapes: the request URL, the name of
-// the transaction, every breadcrumb that recorded a navigation, and, because
-// local variables are captured on the server, the `token` binding itself.
+// the transaction, and every breadcrumb that recorded a navigation. Stack frame
+// variables are swept too. No runtime is configured to capture them now, and
+// this stays because the cost of sweeping an empty frame is nothing and the
+// cost of turning capture back on without it is a live link in an issue.
 export const scrubShareToken = (
     event: ErrorEvent,
     _hint?: EventHint,

@@ -9,8 +9,18 @@ from applications a
 join lists l on l.id = a.list_id
 where l.user_id = sqlc.arg(user_id);
 
+-- How many moves an application has recorded, and how many of the ones a save
+-- is dropping it actually holds. The second is counted here rather than taken
+-- from the length of what was asked, because a save states which events it
+-- drops and the delete matches them by id: an id this application does not hold
+-- removes nothing, so counting the request rather than the match would let a
+-- save claim room it is not making and record past the cap.
 -- name: CountApplicationEvents :one
-select count(*)::int as total
+select
+    count(*)::int as total,
+    count(*) filter (
+        where e.id = any(sqlc.arg(removed_event_ids)::uuid[])
+    )::int as removing
 from application_events e
 join applications a on a.id = e.application_id
 join lists l on l.id = a.list_id

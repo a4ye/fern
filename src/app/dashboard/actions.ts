@@ -79,6 +79,7 @@ import {
     applicationIdSchema,
     applicationSchema,
     firstIssue,
+    importUrlSchema,
     listCreateSchema,
     listUpdateSchema,
     stepEditsSchema,
@@ -92,6 +93,8 @@ const NOT_SIGNED_IN = "You are not signed in." as const;
 // The table sends the rows it is showing, so a selection it cannot make sense
 // of means the two have drifted apart rather than that the user did anything.
 const INVALID_SELECTION = "Those applications are no longer there." as const;
+
+const LIST_GONE = "That list is no longer available." as const;
 
 // Everything below answers for one signed-in account, and every write it makes
 // is counted against that account's budget. The two go together, so they are
@@ -111,9 +114,16 @@ const writingUser = async (): Promise<Writer> => {
     return { ok: true, userId: session.user.id };
 };
 
+// Every id here names a uuid column. One of any other shape makes Postgres
+// raise rather than match nothing, so a caller sending a word where an id goes
+// gets a failed request instead of an answer, and gets it after the write
+// budget has already been spent. Checked on the way in so the refusal is the
+// ordinary one the caller can read.
+const validId = (id: string): boolean =>
+    applicationIdSchema.safeParse(id).success;
+
 const validApplicationIds = (ids: string[]): boolean =>
-    ids.length <= MAX_APPLICATION_BATCH &&
-    ids.every((id) => applicationIdSchema.safeParse(id).success);
+    ids.length <= MAX_APPLICATION_BATCH && ids.every(validId);
 
 const validHistoryActionId = (id: string): boolean => /^\d{1,19}$/.test(id);
 
@@ -124,7 +134,7 @@ export const loadApplicationExtras = async (
     applicationId: string,
 ): Promise<ApplicationExtras | null> => {
     const session = await getRequestSession();
-    if (!session) return null;
+    if (!session || !validId(applicationId)) return null;
     return getApplicationExtras(session.user.id, applicationId);
 };
 
@@ -339,8 +349,20 @@ export const suggestFromUrl = async (
     // provider that had nothing to offer.
     if (await getViewAs()) return { status: "missed", posting: EMPTY_POSTING };
 
-    const normalizedUrl = normalizeImportUrl(url.trim());
-    const providerHost = serverImportHost(url.trim());
+    // An action is reachable by anyone who can post to it, and the type above
+    // is gone by the time it runs. Checked before `url` is touched: a caller
+    // sending something that is not a string reaches `.trim()` and throws, and
+    // one sending megabytes of it gets that much parsed, looked up as a cache
+    // key, and written to a column that will not take it.
+    const parsedUrl = importUrlSchema.safeParse(url);
+    if (!parsedUrl.success) {
+        after(() => recordMetrics([record(POSTING_FALLBACK, "unsupported")]));
+        return { status: "unsupported", posting: EMPTY_POSTING };
+    }
+    const trimmedUrl = parsedUrl.data.trim();
+
+    const normalizedUrl = normalizeImportUrl(trimmedUrl);
+    const providerHost = serverImportHost(trimmedUrl);
     if (!normalizedUrl || !providerHost) {
         after(() => recordMetrics([record(POSTING_FALLBACK, "unsupported")]));
         return { status: "unsupported", posting: EMPTY_POSTING };
@@ -481,6 +503,7 @@ export const addApplication = async (
 ): Promise<ActionResult> => {
     const writer = await writingUser();
     if (!writer.ok) return writer;
+    if (!validId(listId)) return { ok: false, error: LIST_GONE };
 
     const parsedTimeZone = timeZoneSchema.safeParse(timeZone);
     if (!parsedTimeZone.success) {
@@ -517,6 +540,7 @@ export const updateApplicationsBulk = async (
 ): Promise<ActionResult> => {
     const writer = await writingUser();
     if (!writer.ok) return writer;
+    if (!validId(listId)) return { ok: false, error: LIST_GONE };
     if (rows.length > MAX_APPLICATION_BATCH) {
         return {
             ok: false,
@@ -574,6 +598,9 @@ export const saveApplicationDetail = async (
 ): Promise<ActionResult> => {
     const writer = await writingUser();
     if (!writer.ok) return writer;
+    if (!validId(listId) || !validId(applicationId)) {
+        return { ok: false, error: LIST_GONE };
+    }
 
     const parsedTimeZone = timeZoneSchema.safeParse(timeZone);
     if (!parsedTimeZone.success) {
@@ -590,14 +617,16 @@ export const saveApplicationDetail = async (
         return { ok: false, error: firstIssue(parsedSteps.error) };
     }
 
-    // Dropped steps make room, so only what the save adds beyond them counts.
-    const recording =
-        parsedSteps.data.added.length - parsedSteps.data.removed.length;
-    if (recording > 0) {
+    // Dropped steps make room, but only the ones this application actually
+    // holds, which is the database's to answer rather than the caller's. Asked
+    // on every save that records a step: a save whose removals are all invented
+    // makes no room and is refused at the cap like any other.
+    if (parsedSteps.data.added.length > 0) {
         const room = await statusEventQuota(
             writer.userId,
             applicationId,
-            recording,
+            parsedSteps.data.added.length,
+            parsedSteps.data.removed,
         );
         if (!room.ok) return room;
     }
@@ -622,6 +651,7 @@ export const setApplicationsStatus = async (
 ): Promise<ActionResult> => {
     const writer = await writingUser();
     if (!writer.ok) return writer;
+    if (!validId(listId)) return { ok: false, error: LIST_GONE };
     if (applicationIds.length === 0 || !validApplicationIds(applicationIds)) {
         return { ok: false, error: INVALID_SELECTION };
     }
@@ -663,6 +693,7 @@ export const setApplicationsArrangement = async (
 ): Promise<ActionResult> => {
     const writer = await writingUser();
     if (!writer.ok) return writer;
+    if (!validId(listId)) return { ok: false, error: LIST_GONE };
     if (applicationIds.length === 0 || !validApplicationIds(applicationIds)) {
         return { ok: false, error: INVALID_SELECTION };
     }
@@ -683,6 +714,9 @@ export const removeApplication = async (
 ): Promise<ActionResult> => {
     const writer = await writingUser();
     if (!writer.ok) return writer;
+    if (!validId(listId) || !validId(applicationId)) {
+        return { ok: false, error: INVALID_SELECTION };
+    }
 
     await deleteApplicationDb(writer.userId, applicationId);
     revalidatePath(`/dashboard/${listId}`);
@@ -696,6 +730,7 @@ export const removeApplications = async (
 ): Promise<ActionResult> => {
     const writer = await writingUser();
     if (!writer.ok) return writer;
+    if (!validId(listId)) return { ok: false, error: LIST_GONE };
     if (applicationIds.length === 0 || !validApplicationIds(applicationIds)) {
         return { ok: false, error: INVALID_SELECTION };
     }
@@ -712,6 +747,7 @@ export const updateList = async (
 ): Promise<ActionResult> => {
     const writer = await writingUser();
     if (!writer.ok) return writer;
+    if (!validId(listId)) return { ok: false, error: LIST_GONE };
 
     const parsed = listUpdateSchema.safeParse(input);
     if (!parsed.success) {
@@ -730,7 +766,7 @@ export const updateList = async (
 
 export const deleteList = async (listId: string): Promise<void> => {
     const writer = await writingUser();
-    if (!writer.ok) return;
+    if (!writer.ok || !validId(listId)) return;
 
     await deleteListDb(writer.userId, listId);
     revalidatePath("/dashboard");
@@ -741,7 +777,7 @@ export const togglePin = async (
     pinned: boolean,
 ): Promise<void> => {
     const writer = await writingUser();
-    if (!writer.ok) return;
+    if (!writer.ok || !validId(listId) || typeof pinned !== "boolean") return;
 
     await setListPinned(writer.userId, listId, pinned);
     revalidatePath("/dashboard");

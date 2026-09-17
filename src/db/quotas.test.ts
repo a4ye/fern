@@ -10,10 +10,21 @@ let lists = 0;
 let inList = 0;
 let total = 0;
 let events = 0;
+let existingEventIds: string[] = [];
 
 const countListsForUser = mock(async () => ({ total: lists }));
 const applicationQuotaUsage = mock(async () => ({ inList, total }));
-const countApplicationEvents = mock(async () => ({ total: events }));
+// Stands in for the `filter (where e.id = any(...))` in the real query, which
+// counts the rows it matched rather than the ids it was handed. A test that
+// counted the request instead would agree with the bug it is here to catch.
+const countApplicationEvents = mock(
+    async (_client: unknown, args: { removedEventIds: string[] }) => ({
+        total: events,
+        removing: args.removedEventIds.filter((id) =>
+            existingEventIds.includes(id),
+        ).length,
+    }),
+);
 const applicationsUnderEventCap = mock(async () => [{ id: "a" }]);
 
 // mock.module replaces the module for every test file in the run, so the shape
@@ -38,6 +49,7 @@ beforeEach(() => {
     inList = 0;
     total = 0;
     events = 0;
+    existingEventIds = [];
 });
 
 describe("listQuota", () => {
@@ -95,5 +107,24 @@ describe("statusEventQuota", () => {
         expect(await statusEventQuota("user-1", "app-1", 3)).toMatchObject({
             ok: false,
         });
+    });
+
+    test("counts a dropped step as room once it is really dropped", async () => {
+        events = MAX_EVENTS_PER_APPLICATION;
+        existingEventIds = ["event-1"];
+        expect(
+            await statusEventQuota("user-1", "app-1", 1, ["event-1"]),
+        ).toMatchObject({ ok: true });
+    });
+
+    // The delete matches removals by id, so an id this application does not
+    // hold drops nothing. Subtracting it anyway is what let a save at the cap
+    // add a hundred more by naming a hundred ids that were never there.
+    test("gives no room for removals the application does not hold", async () => {
+        events = MAX_EVENTS_PER_APPLICATION;
+        existingEventIds = [];
+        expect(
+            await statusEventQuota("user-1", "app-1", 1, ["not-a-real-event"]),
+        ).toMatchObject({ ok: false });
     });
 });

@@ -33,6 +33,7 @@ import {
 } from "@/db/quotas";
 import { withinBudget } from "@/db/rate-limit";
 import { MAX_APPLICATION_BATCH, TOO_MANY_REQUESTS } from "@/lib/limits";
+import { READ_ONLY_TOKEN, allowsWrite } from "@/lib/mcp/scopes";
 import {
     APPLICATION_STATUSES,
     ARRANGEMENTS,
@@ -83,11 +84,31 @@ const accountOf = (context: ServerContext): string => {
     return userId;
 };
 
-// Every write spends from the same budget the browser does, so an agent left
-// looping is stopped by the ceiling already set for the account rather than by
-// one written for this entry point.
-const canWrite = async (userId: string): Promise<boolean> =>
-    withinBudget(userId, "write");
+// What the token was issued for. Absent on one predating the scopes, which
+// `allowsWrite` reads as the full grant such a token was actually given.
+const scopesOf = (context: ServerContext): string[] =>
+    context.http?.authInfo?.scopes ?? [];
+
+// What stops a write, or null when nothing does. Every write tool below starts
+// here, which is what keeps the two checks from drifting apart: one added later
+// gets both by asking the same question, and neither can be forgotten on its
+// own.
+//
+// The scope is read first because it is a fact already on the token and costs
+// nothing, while taking the budget is itself a write. A connection that may not
+// write at all should not spend one to be told so.
+//
+// The budget is the same one the browser spends, so an agent left looping is
+// stopped by the ceiling already set for the account rather than by one written
+// for this entry point.
+const writeRefusal = async (
+    context: ServerContext,
+    userId: string,
+): Promise<string | null> => {
+    if (!allowsWrite(scopesOf(context))) return READ_ONLY_TOKEN;
+    if (!(await withinBudget(userId, "write"))) return TOO_MANY_REQUESTS;
+    return null;
+};
 
 const NOT_FOUND = "That is no longer available.";
 
@@ -256,7 +277,8 @@ export const registerFernTools = (server: McpServer): void => {
             context,
         ) => {
             const userId = accountOf(context);
-            if (!(await canWrite(userId))) return refuse(TOO_MANY_REQUESTS);
+            const denied = await writeRefusal(context, userId);
+            if (denied) return refuse(denied);
 
             let rows = applications;
             const skipped: {
@@ -330,7 +352,8 @@ export const registerFernTools = (server: McpServer): void => {
         },
         async ({ applicationId, changes }, context) => {
             const userId = accountOf(context);
-            if (!(await canWrite(userId))) return refuse(TOO_MANY_REQUESTS);
+            const denied = await writeRefusal(context, userId);
+            if (denied) return refuse(denied);
 
             const parsed = applicationPatch(changes);
             if (!parsed.ok) return refuse(parsed.error);
@@ -381,7 +404,8 @@ export const registerFernTools = (server: McpServer): void => {
         },
         async ({ applicationIds, status, timeZone }, context) => {
             const userId = accountOf(context);
-            if (!(await canWrite(userId))) return refuse(TOO_MANY_REQUESTS);
+            const denied = await writeRefusal(context, userId);
+            if (denied) return refuse(denied);
 
             if (applicationIds.length === 1) {
                 const room = await statusEventQuota(
@@ -413,7 +437,8 @@ export const registerFernTools = (server: McpServer): void => {
         },
         async ({ applicationIds, arrangement }, context) => {
             const userId = accountOf(context);
-            if (!(await canWrite(userId))) return refuse(TOO_MANY_REQUESTS);
+            const denied = await writeRefusal(context, userId);
+            if (denied) return refuse(denied);
             await setApplicationsArrangement(
                 userId,
                 applicationIds,
@@ -434,7 +459,8 @@ export const registerFernTools = (server: McpServer): void => {
         },
         async ({ applicationIds }, context) => {
             const userId = accountOf(context);
-            if (!(await canWrite(userId))) return refuse(TOO_MANY_REQUESTS);
+            const denied = await writeRefusal(context, userId);
+            if (denied) return refuse(denied);
             await deleteApplications(userId, applicationIds);
             return reply({ deleted: applicationIds.length });
         },
@@ -452,7 +478,8 @@ export const registerFernTools = (server: McpServer): void => {
         },
         async (input, context) => {
             const userId = accountOf(context);
-            if (!(await canWrite(userId))) return refuse(TOO_MANY_REQUESTS);
+            const denied = await writeRefusal(context, userId);
+            if (denied) return refuse(denied);
 
             const parsed = listCreateSchema.safeParse(input);
             if (!parsed.success) return refuse(firstIssue(parsed.error));
@@ -486,7 +513,8 @@ export const registerFernTools = (server: McpServer): void => {
         },
         async ({ listId, pinned, ...changes }, context) => {
             const userId = accountOf(context);
-            if (!(await canWrite(userId))) return refuse(TOO_MANY_REQUESTS);
+            const denied = await writeRefusal(context, userId);
+            if (denied) return refuse(denied);
 
             const stored = await getList(userId, listId);
             if (!stored) return refuse(NOT_FOUND);
@@ -523,7 +551,8 @@ export const registerFernTools = (server: McpServer): void => {
         },
         async ({ listId }, context) => {
             const userId = accountOf(context);
-            if (!(await canWrite(userId))) return refuse(TOO_MANY_REQUESTS);
+            const denied = await writeRefusal(context, userId);
+            if (denied) return refuse(denied);
             await deleteList(userId, listId);
             return reply({ deleted: listId });
         },
@@ -544,7 +573,8 @@ export const registerFernTools = (server: McpServer): void => {
         },
         async (changes, context) => {
             const userId = accountOf(context);
-            if (!(await canWrite(userId))) return refuse(TOO_MANY_REQUESTS);
+            const denied = await writeRefusal(context, userId);
+            if (denied) return refuse(denied);
 
             const current = await getUserSettings(userId);
             const merged = {
@@ -600,7 +630,8 @@ export const registerFernTools = (server: McpServer): void => {
         },
         async ({ listId, actionId }, context) => {
             const userId = accountOf(context);
-            if (!(await canWrite(userId))) return refuse(TOO_MANY_REQUESTS);
+            const denied = await writeRefusal(context, userId);
+            if (denied) return refuse(denied);
             const result = await undoHistoryAction(userId, listId, actionId);
             return result.ok
                 ? reply({ undone: actionId })
@@ -622,7 +653,8 @@ export const registerFernTools = (server: McpServer): void => {
         },
         async ({ listId, actionId }, context) => {
             const userId = accountOf(context);
-            if (!(await canWrite(userId))) return refuse(TOO_MANY_REQUESTS);
+            const denied = await writeRefusal(context, userId);
+            if (denied) return refuse(denied);
             const result = await restoreHistoryVersion(
                 userId,
                 listId,
