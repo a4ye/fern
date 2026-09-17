@@ -2,6 +2,7 @@
     "name": "job-tracker",
     "version": "0.1.0",
     "private": true,
+    "license": "AGPL-3.0-only",
     "scripts": {
         "dev": "next dev",
         "build": "bun run extension:build && bun run map:build && next build",

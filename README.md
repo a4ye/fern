@@ -179,3 +179,8 @@ The unpacked builds land in `extension/dist/`. See
 ## Data attribution
 
 The city index is built from GeoNames data. See [`NOTICE.md`](NOTICE.md).
+
+## License
+
+Fern is licensed under the GNU Affero General Public License, version 3. The
+full terms are in [`LICENSE`](LICENSE).
