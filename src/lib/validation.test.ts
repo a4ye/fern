@@ -1,12 +1,14 @@
 import { describe, expect, it } from "bun:test";
 import type { z } from "zod";
 import { toDateInput } from "@/components/dashboard/data";
+import { applicationKey } from "@/db/dashboard";
 import {
     APPLIED_MIN,
     APPLIED_MIN_YEAR,
     LIST_DESCRIPTION_MAX,
     LIST_NAME_MAX,
     applicationDetailSchema,
+    applicationPatch,
     firstIssue,
     githubUsernameSchema,
     listCreateSchema,
@@ -212,5 +214,77 @@ describe("githubUsernameSchema", () => {
         ]) {
             expect(name(attempt).success).toBe(false);
         }
+    });
+});
+
+describe("applicationPatch", () => {
+    it("keeps only the fields the caller sent", () => {
+        expect(applicationPatch({ role: "  Backend Engineer  " })).toEqual({
+            ok: true,
+            patch: { role: "Backend Engineer" },
+        });
+    });
+
+    // The detail form sends every field every time, so an absent one means
+    // "clear this". A patch means the opposite, and confusing the two would let
+    // a role rename wipe the notes beside it.
+    it("reads an omitted field as unchanged rather than cleared", () => {
+        const result = applicationPatch({ company: "Vercel" });
+        if (!result.ok) throw new Error(result.error);
+        expect(Object.keys(result.patch)).toEqual(["company"]);
+    });
+
+    it("clears a field the caller sent as null", () => {
+        const result = applicationPatch({ notes: null });
+        if (!result.ok) throw new Error(result.error);
+        expect(result.patch).toEqual({ notes: null });
+    });
+
+    it("clears a field the caller sent as blank text", () => {
+        const result = applicationPatch({ payNote: "   " });
+        if (!result.ok) throw new Error(result.error);
+        expect(result.patch).toEqual({ payNote: null });
+    });
+
+    it("reads a patch naming nothing as no change at all", () => {
+        expect(applicationPatch({})).toEqual({ ok: true, patch: {} });
+    });
+
+    it("turns away a link that is not http", () => {
+        expect(applicationPatch({ url: "javascript:alert(1)" }).ok).toBe(false);
+    });
+
+    it("turns away a pay figure that is not a number", () => {
+        expect(applicationPatch({ payMin: "about ninety" }).ok).toBe(false);
+    });
+
+    // Pay ordering is checked against the merged row rather than the patch, so
+    // one end of the range arriving alone has to get past the schema to be
+    // compared with the end already stored.
+    it("takes one end of a pay range on its own", () => {
+        expect(applicationPatch({ payMax: "90000" })).toEqual({
+            ok: true,
+            patch: { payMax: "90000" },
+        });
+    });
+});
+
+describe("applicationKey", () => {
+    it("reads the same job typed two ways as one key", () => {
+        expect(applicationKey("  Stripe ", "Backend Engineer")).toBe(
+            applicationKey("stripe", "  backend engineer  "),
+        );
+    });
+
+    it("reads a missing role and an empty one as the same key", () => {
+        expect(applicationKey("Stripe", null)).toBe(
+            applicationKey("Stripe", "   "),
+        );
+    });
+
+    it("keeps two roles at one company apart", () => {
+        expect(applicationKey("Stripe", "Backend")).not.toBe(
+            applicationKey("Stripe", "Frontend"),
+        );
     });
 });

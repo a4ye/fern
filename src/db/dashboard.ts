@@ -340,6 +340,140 @@ export const saveApplicationDetail = async (
             ),
     });
 
+// How a company and role are compared when deciding whether two applications
+// are the same one. The database folds and trims the same way, so a key built
+// here matches a row matched there.
+export const applicationKey = (company: string, role: string | null): string =>
+    `${company.trim().toLowerCase()} ${(role ?? "").trim().toLowerCase()}`;
+
+export type DuplicateMatch = {
+    key: string;
+    existingId: string;
+    company: string;
+    role: string | null;
+};
+
+// The rows among `keys` that the list already holds. Asked before a batch is
+// written so a caller adding the same jobs twice is told which ones it already
+// had, rather than leaving the list with each of them twice over.
+export const findDuplicateApplications = async (
+    userId: string,
+    listId: string,
+    keys: { company: string; role: string | null }[],
+): Promise<DuplicateMatch[]> => {
+    if (keys.length === 0) return [];
+    const rows = await gen.matchApplicationKeysInList(getPool(), {
+        listId,
+        userId,
+        keys: JSON.stringify(keys),
+    });
+    return rows.map((row) => ({
+        key: applicationKey(row.companyName, row.roleTitle),
+        existingId: row.id,
+        company: row.companyName,
+        role: row.roleTitle,
+    }));
+};
+
+// One application with everything it stores, for a caller reading a single row
+// rather than drawing a table. The list it belongs to comes back with it so the
+// caller can reach the rest of the list without a search.
+export const getApplication = async (
+    userId: string,
+    applicationId: string,
+): Promise<
+    | (ApplicationDetail & {
+          id: string;
+          listId: string;
+          status: ApplicationStatus;
+      })
+    | null
+> => {
+    const row = await gen.applicationForUser(getPool(), {
+        applicationId,
+        userId,
+    });
+    if (!row) return null;
+    return {
+        id: row.id,
+        listId: row.listId,
+        status: row.status as ApplicationStatus,
+        company: row.companyName,
+        role: row.roleTitle,
+        location: row.location,
+        arrangement: row.arrangement as Arrangement | null,
+        appliedAt: row.appliedAt ? toDateInput(row.appliedAt) : null,
+        url: row.url,
+        payMin: row.payMin,
+        payMax: row.payMax,
+        payCurrency: row.payCurrency,
+        payPeriod: row.payPeriod as PayPeriod | null,
+        bonus: row.bonusAmount,
+        payNote: row.payNote,
+        notes: row.notes,
+    };
+};
+
+export type DetailPatchResult =
+    | { ok: true }
+    | { ok: false; reason: "missing" }
+    | { ok: false; reason: "invalid"; error: string };
+
+// A detail edit that names only the fields it changes. `merge` is handed the
+// stored row and returns the whole of what to write, which is where the caller
+// applies its patch and validates the result: a pay minimum sent on its own
+// still has to be checked against the maximum already in the row.
+//
+// The read happens inside the transaction that writes, and takes a row lock, so
+// two edits arriving together are applied one after the other rather than each
+// overwriting a row built from what the other replaced.
+export const saveApplicationDetailPatch = async (
+    userId: string,
+    applicationId: string,
+    merge: (
+        stored: ApplicationDetail,
+    ) => { ok: true; detail: ApplicationDetail } | { ok: false; error: string },
+): Promise<DetailPatchResult> =>
+    recordApplicationChange({
+        userId,
+        applicationIds: [applicationId],
+        kind: HISTORY_KIND.edit,
+        mutation: async (client): Promise<DetailPatchResult> => {
+            const row = await gen.applicationRowForUpdate(client, {
+                applicationId,
+                userId,
+            });
+            if (!row) return { ok: false, reason: "missing" };
+
+            const merged = merge({
+                company: row.companyName,
+                role: row.roleTitle,
+                location: row.location,
+                arrangement: row.arrangement as Arrangement | null,
+                appliedAt: row.appliedAt ? toDateInput(row.appliedAt) : null,
+                url: row.url,
+                payMin: row.payMin,
+                payMax: row.payMax,
+                payCurrency: row.payCurrency,
+                payPeriod: row.payPeriod as PayPeriod | null,
+                bonus: row.bonusAmount,
+                payNote: row.payNote,
+                notes: row.notes,
+            });
+            if (!merged.ok) {
+                return { ok: false, reason: "invalid", error: merged.error };
+            }
+
+            await saveApplicationDetailWithClient(
+                client,
+                userId,
+                applicationId,
+                merged.detail,
+            );
+            return { ok: true };
+        },
+    });
+
 // Records a step in the history and leaves the application sitting at it. The
 // status it already holds is a valid step: that is how a second interview is
 // logged, and the chart draws it as a round of its own.
@@ -669,6 +803,28 @@ export const getListDetail = async (
         status: list.status as ListStatus,
         stats: listStats(applications),
         applications,
+    };
+};
+
+// A list's own columns, without the applications under it. What an edit that
+// names only some of them merges into, and far less to read than the whole list
+// when the rows are not what is wanted.
+export const getList = async (
+    userId: string,
+    listId: string,
+): Promise<{
+    id: string;
+    name: string;
+    description: string | null;
+    status: ListStatus;
+} | null> => {
+    const list = await gen.getListForUser(getPool(), { id: listId, userId });
+    if (!list) return null;
+    return {
+        id: list.id,
+        name: list.name,
+        description: list.description,
+        status: list.status as ListStatus,
     };
 };
 

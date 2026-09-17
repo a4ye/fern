@@ -825,3 +825,204 @@ export async function setApplicationStatus(client: Client, args: SetApplicationS
     });
 }
 
+export const applicationRowForUpdateQuery = `-- name: ApplicationRowForUpdate :one
+select
+    a.id,
+    a.list_id,
+    a.company_name,
+    a.role_title,
+    a.status,
+    a.url,
+    a.location,
+    a.arrangement,
+    a.applied_at,
+    a.pay_min,
+    a.pay_max,
+    a.pay_currency,
+    a.pay_period,
+    a.bonus_amount,
+    a.pay_note,
+    a.notes
+from applications a
+join lists l on l.id = a.list_id
+where a.id = $1 and l.user_id = $2
+for update of a`;
+
+export interface ApplicationRowForUpdateArgs {
+    applicationId: string;
+    userId: string;
+}
+
+export interface ApplicationRowForUpdateRow {
+    id: string;
+    listId: string;
+    companyName: string;
+    roleTitle: string | null;
+    status: string;
+    url: string | null;
+    location: string | null;
+    arrangement: string | null;
+    appliedAt: Date | null;
+    payMin: string | null;
+    payMax: string | null;
+    payCurrency: string;
+    payPeriod: string | null;
+    bonusAmount: string | null;
+    payNote: string | null;
+    notes: string | null;
+}
+
+export async function applicationRowForUpdate(client: Client, args: ApplicationRowForUpdateArgs): Promise<ApplicationRowForUpdateRow | null> {
+    const result = await client.query({
+        text: applicationRowForUpdateQuery,
+        values: [args.applicationId, args.userId],
+        rowMode: "array"
+    });
+    if (result.rows.length !== 1) {
+        return null;
+    }
+    const row = result.rows[0];
+    return {
+        id: row[0],
+        listId: row[1],
+        companyName: row[2],
+        roleTitle: row[3],
+        status: row[4],
+        url: row[5],
+        location: row[6],
+        arrangement: row[7],
+        appliedAt: row[8],
+        payMin: row[9],
+        payMax: row[10],
+        payCurrency: row[11],
+        payPeriod: row[12],
+        bonusAmount: row[13],
+        payNote: row[14],
+        notes: row[15]
+    };
+}
+
+export const matchApplicationKeysInListQuery = `-- name: MatchApplicationKeysInList :many
+with wanted as (
+    select
+        lower(btrim(input.company)) as company,
+        lower(btrim(coalesce(input.role, ''))) as role
+    from jsonb_to_recordset($3::jsonb) as input(company text, role text)
+)
+select
+    a.id,
+    a.company_name,
+    a.role_title
+from applications a
+join lists l on l.id = a.list_id
+join wanted w
+    on w.company = lower(btrim(a.company_name))
+    and w.role = lower(btrim(coalesce(a.role_title, '')))
+where a.list_id = $1 and l.user_id = $2`;
+
+export interface MatchApplicationKeysInListArgs {
+    listId: string;
+    userId: string;
+    keys: any;
+}
+
+export interface MatchApplicationKeysInListRow {
+    id: string;
+    companyName: string;
+    roleTitle: string | null;
+}
+
+export async function matchApplicationKeysInList(client: Client, args: MatchApplicationKeysInListArgs): Promise<MatchApplicationKeysInListRow[]> {
+    const result = await client.query({
+        text: matchApplicationKeysInListQuery,
+        values: [args.listId, args.userId, args.keys],
+        rowMode: "array"
+    });
+    return result.rows.map(row => {
+        return {
+            id: row[0],
+            companyName: row[1],
+            roleTitle: row[2]
+        };
+    });
+}
+
+export const applicationForUserQuery = `-- name: ApplicationForUser :one
+select
+    a.id,
+    a.list_id,
+    a.company_name,
+    a.role_title,
+    a.status,
+    a.url,
+    a.location,
+    a.arrangement,
+    a.applied_at,
+    a.pay_min,
+    a.pay_max,
+    a.pay_currency,
+    a.pay_period,
+    a.bonus_amount,
+    a.pay_note,
+    a.notes,
+    a.updated_at
+from applications a
+join lists l on l.id = a.list_id
+where a.id = $1 and l.user_id = $2`;
+
+export interface ApplicationForUserArgs {
+    applicationId: string;
+    userId: string;
+}
+
+export interface ApplicationForUserRow {
+    id: string;
+    listId: string;
+    companyName: string;
+    roleTitle: string | null;
+    status: string;
+    url: string | null;
+    location: string | null;
+    arrangement: string | null;
+    appliedAt: Date | null;
+    payMin: string | null;
+    payMax: string | null;
+    payCurrency: string;
+    payPeriod: string | null;
+    bonusAmount: string | null;
+    payNote: string | null;
+    notes: string | null;
+    updatedAt: Date;
+}
+
+export async function applicationForUser(client: Client, args: ApplicationForUserArgs): Promise<ApplicationForUserRow | null> {
+    const result = await client.query({
+        text: applicationForUserQuery,
+        values: [args.applicationId, args.userId],
+        rowMode: "array"
+    });
+    if (result.rows.length !== 1) {
+        return null;
+    }
+    const row = result.rows[0];
+    return {
+        id: row[0],
+        listId: row[1],
+        companyName: row[2],
+        roleTitle: row[3],
+        status: row[4],
+        url: row[5],
+        location: row[6],
+        arrangement: row[7],
+        appliedAt: row[8],
+        payMin: row[9],
+        payMax: row[10],
+        payCurrency: row[11],
+        payPeriod: row[12],
+        bonusAmount: row[13],
+        payNote: row[14],
+        notes: row[15],
+        updatedAt: row[16]
+    };
+}
+

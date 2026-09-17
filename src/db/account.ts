@@ -10,3 +10,12 @@ import * as gen from "@/db/gen/account_sql";
 export const deleteAccount = async (userId: string): Promise<void> => {
     await gen.deleteUser(getPool(), { id: userId });
 };
+
+// What to call the application asking for access, so the consent screen names
+// something the person recognises rather than the client id it arrived as.
+export const oauthClientName = async (
+    clientId: string,
+): Promise<string | null> => {
+    const row = await gen.oAuthClientForConsent(getPool(), { clientId });
+    return row?.name ?? null;
+};

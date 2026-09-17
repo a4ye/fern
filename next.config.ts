@@ -20,6 +20,25 @@ const nextConfig: NextConfig = {
         // import actually needs.
         serverActions: { bodySizeLimit: "8mb" },
     },
+    // An MCP client discovers how to authenticate by reading two documents at
+    // fixed .well-known addresses. Next leaves dot-prefixed directories out of
+    // the app router, so the handlers live under /api and are reached here.
+    // RFC 9728 lets a client append the resource path to the second one, so
+    // every path below it answers as well as the bare address.
+    rewrites: async () => [
+        {
+            source: "/.well-known/oauth-authorization-server",
+            destination: "/api/well-known/oauth-authorization-server",
+        },
+        {
+            source: "/.well-known/oauth-protected-resource",
+            destination: "/api/well-known/oauth-protected-resource",
+        },
+        {
+            source: "/.well-known/oauth-protected-resource/:path*",
+            destination: "/api/well-known/oauth-protected-resource",
+        },
+    ],
     images: {
         remotePatterns: [
             {

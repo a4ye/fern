@@ -1,5 +1,6 @@
 import { APIError, betterAuth } from "better-auth";
 import { createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
+import { mcp } from "better-auth/plugins";
 import { nextCookies } from "better-auth/next-js";
 import { cache } from "react";
 import { headers } from "next/headers";
@@ -135,9 +136,32 @@ export const auth = betterAuth({
             // to make the app open connections on its behalf.
             "/sign-in/social": { window: 60, max: 60 },
             "/callback/*": { window: 60, max: 60 },
+
+            // Registering a client and trading a code for a token are both
+            // reachable without a session, and registration writes a row. A
+            // client does each once per connection.
+            "/oauth2/*": { window: 60, max: 60 },
+            "/mcp/*": { window: 60, max: 60 },
         },
     },
-    plugins: [nextCookies()],
+    plugins: [
+        // An agent connecting over MCP holds a token for one account and can do
+        // what that account can do in the browser. Clients are not known ahead
+        // of time, so they register themselves and are told to use PKCE: the
+        // ones that connect here run on someone's own machine and cannot keep a
+        // secret. Consent is asked for on a page of this app's own rather than
+        // the library's default markup.
+        mcp({
+            loginPage: "/login",
+            oidcConfig: {
+                loginPage: "/login",
+                allowDynamicClientRegistration: true,
+                requirePKCE: true,
+                consentPage: "/oauth/authorize",
+            },
+        }),
+        nextCookies(),
+    ],
 });
 
 type Session = NonNullable<Awaited<ReturnType<typeof auth.api.getSession>>>;

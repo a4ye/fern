@@ -217,7 +217,7 @@ export const currencySchema = z
 // Every column an application has, which is more than the table's own row
 // exposes. Status is not among them: the detail panel moves it by recording a
 // step, and the create form below adds it back as the one it starts at.
-const applicationDetailFields = z.object({
+export const applicationDetailFields = z.object({
     company: z
         .string()
         .trim()
@@ -261,6 +261,34 @@ export const applicationDetailSchema = applicationDetailFields.refine(
 export const applicationCreateSchema = applicationDetailFields
     .extend({ status: z.enum(APPLICATION_STATUSES, "Choose a valid status.") })
     .refine(payOrdered, PAY_ORDER_MESSAGE);
+
+// The same fields for a caller that sends only the ones it is changing. Pay
+// ordering is deliberately not checked here: a maximum sent on its own has
+// nothing in the patch to compare against, so the check belongs to whoever
+// merges the patch into the stored row.
+export const applicationPatchSchema = applicationDetailFields.partial();
+
+// Every optional field above reads a missing value as an instruction to clear,
+// which is what the detail form means by one: it sends the whole row every time,
+// so an absent field is an emptied field. A patch means the opposite, and the
+// difference is the whole point of sending one. Dropping the keys the caller
+// left out is what keeps `{ role: "..." }` from also erasing the notes.
+export const definedFields = <T extends object>(patch: T): Partial<T> =>
+    Object.fromEntries(
+        Object.entries(patch).filter(([, value]) => value !== undefined),
+    ) as Partial<T>;
+
+export const applicationPatch = (
+    input: unknown,
+):
+    | { ok: true; patch: Partial<ApplicationDetailInput> }
+    | { ok: false; error: string } => {
+    const parsed = applicationPatchSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: firstIssue(parsed.error) };
+    return { ok: true, patch: definedFields(parsed.data) };
+};
+
+export type ApplicationDetailInput = z.infer<typeof applicationDetailFields>;
 
 // The detail panel stages its history edits and sends them with the form, so
 // the steps it drops and the ones it records arrive as part of the same save.

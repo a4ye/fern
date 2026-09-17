@@ -20,3 +20,33 @@ export async function deleteUser(client: Client, args: DeleteUserArgs): Promise<
     });
 }
 
+export const oAuthClientForConsentQuery = `-- name: OAuthClientForConsent :one
+select "name", "icon"
+from "oauthApplication"
+where "clientId" = $1 and "disabled" = false`;
+
+export interface OAuthClientForConsentArgs {
+    clientId: string;
+}
+
+export interface OAuthClientForConsentRow {
+    name: string;
+    icon: string | null;
+}
+
+export async function oAuthClientForConsent(client: Client, args: OAuthClientForConsentArgs): Promise<OAuthClientForConsentRow | null> {
+    const result = await client.query({
+        text: oAuthClientForConsentQuery,
+        values: [args.clientId],
+        rowMode: "array"
+    });
+    if (result.rows.length !== 1) {
+        return null;
+    }
+    const row = result.rows[0];
+    return {
+        name: row[0],
+        icon: row[1]
+    };
+}
+

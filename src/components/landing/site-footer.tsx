@@ -10,6 +10,7 @@ const FOOTER_COLUMNS: { title: string; links: FooterLink[] }[] = [
         links: [
             { label: "How it works", href: "/#how" },
             { label: "Browser extension", href: "/extension" },
+            { label: "MCP server", href: "/mcp" },
             { label: "Sign in", href: "/login" },
         ],
     },

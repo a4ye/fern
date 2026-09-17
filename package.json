@@ -30,6 +30,7 @@
     },
     "dependencies": {
         "@ai-sdk/google": "^4.0.23",
+        "@modelcontextprotocol/server": "^2.0.0",
         "@neondatabase/serverless": "^1.1.0",
         "@nivo/bar": "^0.99.0",
         "@nivo/core": "^0.99.0",
@@ -43,6 +44,7 @@
         "better-auth": "^1.6.23",
         "d3-geo": "^3.1.1",
         "html-to-image": "^1.11.13",
+        "mcp-handler": "^2.1.1",
         "next": "16.2.10",
         "papaparse": "^5.6.0",
         "react": "19.2.4",

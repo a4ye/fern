@@ -445,3 +445,79 @@ from lists l
 where a.list_id = l.id
     and a.id = @application_id
     and l.user_id = @user_id;
+
+-- Every column a partial update may merge into, locked for the transaction that
+-- reads it. An agent sends only the fields it means to change, so the stored row
+-- supplies the rest; taking the lock with the read is what stops two edits
+-- arriving together from each writing a row built on what the other replaced.
+-- name: ApplicationRowForUpdate :one
+select
+    a.id,
+    a.list_id,
+    a.company_name,
+    a.role_title,
+    a.status,
+    a.url,
+    a.location,
+    a.arrangement,
+    a.applied_at,
+    a.pay_min,
+    a.pay_max,
+    a.pay_currency,
+    a.pay_period,
+    a.bonus_amount,
+    a.pay_note,
+    a.notes
+from applications a
+join lists l on l.id = a.list_id
+where a.id = @application_id and l.user_id = @user_id
+for update of a;
+
+-- Which of the rows a caller is about to add are already in the list. Company
+-- and role are compared folded and trimmed, because the same job typed twice is
+-- rarely typed identically twice. Matching happens in the database against a
+-- prepared key set so the comparison is a hash join rather than a scan of the
+-- list per incoming row.
+-- name: MatchApplicationKeysInList :many
+with wanted as (
+    select
+        lower(btrim(input.company)) as company,
+        lower(btrim(coalesce(input.role, ''))) as role
+    from jsonb_to_recordset(@keys::jsonb) as input(company text, role text)
+)
+select
+    a.id,
+    a.company_name,
+    a.role_title
+from applications a
+join lists l on l.id = a.list_id
+join wanted w
+    on w.company = lower(btrim(a.company_name))
+    and w.role = lower(btrim(coalesce(a.role_title, '')))
+where a.list_id = @list_id and l.user_id = @user_id;
+
+-- One application as a reader sees it, which is every column the detail panel
+-- holds. ApplicationRowForUpdate selects the same list and takes a row lock with
+-- it; this one is for callers that are only looking.
+-- name: ApplicationForUser :one
+select
+    a.id,
+    a.list_id,
+    a.company_name,
+    a.role_title,
+    a.status,
+    a.url,
+    a.location,
+    a.arrangement,
+    a.applied_at,
+    a.pay_min,
+    a.pay_max,
+    a.pay_currency,
+    a.pay_period,
+    a.bonus_amount,
+    a.pay_note,
+    a.notes,
+    a.updated_at
+from applications a
+join lists l on l.id = a.list_id
+where a.id = @application_id and l.user_id = @user_id;
