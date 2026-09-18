@@ -90,6 +90,15 @@ const wordsIn = (email: NormalizedEmail): string[] =>
         `${email.from} ${email.subject} ${email.snippet} ${email.body}`,
     ).split(" ");
 
+// The labels of the sending domain, less the suffix, which names a registry
+// rather than a company.
+const domainWordsIn = (from: string): string[] => {
+    const at = from.lastIndexOf("@");
+    if (at < 0) return [];
+    const labels = normalize(from.slice(at + 1)).split(" ");
+    return labels.slice(0, -1);
+};
+
 // The names are indexed once and each email is then read once against the
 // index. Comparing every application against every email instead meant scanning
 // a whole message body once per tracked company, which for a list in the
@@ -200,6 +209,14 @@ export const candidatesFor = <T extends { company: string }>(
         // name meets a domain that runs it together or drops its last word, and
         // how "Point 72" meets a row reading "Point72".
         walkGlued(index.glued, words.join(""), keep);
+
+        // One part is enough in the sending domain, where a company is saying
+        // who it is rather than mentioning someone. A row reading "Slash
+        // Financial" is written to from slash.com, and the second word appears
+        // nowhere in the mail.
+        for (const label of domainWordsIn(email.from)) {
+            for (const at of index.byPart.get(label) ?? []) keep(at);
+        }
 
         // How many distinct parts of each name the email writes out as words.
         const present = new Map<number, number>();

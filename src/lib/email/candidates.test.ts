@@ -82,6 +82,34 @@ describe("candidatesFor", () => {
         ).toEqual([]);
     });
 
+    // A company drops its own trailing words when it writes, so the one word
+    // its domain does carry has to be enough on that side alone.
+    test("keeps a long name the sender's domain names in one word", () => {
+        expect(
+            keptFor(
+                ["Slash Financial", "Stripe"],
+                email({
+                    from: "Simar Boparai <simar@slash.com>",
+                    subject: "Slash Winter 2027 Software Engineer Internship",
+                }),
+            ),
+        ).toEqual(["Slash Financial"]);
+    });
+
+    // The domain is only the company's own word for itself. An ATS sends on
+    // behalf of everybody, so its name must not vouch for a tracked row.
+    test("will not match a long name on one word from the body", () => {
+        expect(
+            keptFor(
+                ["Slash Financial"],
+                email({
+                    from: "no-reply@greenhouse.io",
+                    body: "Read the terms at the slash in the URL",
+                }),
+            ),
+        ).toEqual([]);
+    });
+
     // Companies put a shortened form of their name in their own domain.
     test("keeps a name the sender's domain runs together and cuts short", () => {
         expect(
