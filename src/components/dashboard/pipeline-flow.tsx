@@ -249,27 +249,50 @@ const STAGE = new Map(
     APPLICATION_STATUSES.map((status, index) => [status, index]),
 );
 
+// How many pairs of ribbons cross, counted over an order of the nodes. Two
+// ribbons cross when the order of their two ends disagrees. This is what the
+// sweep below is trying to reduce, which it only ever does indirectly, so it
+// is also the only honest way to tell two of its answers apart.
+const crossings = (order: string[], links: FlowLink[]) => {
+    const at = new Map(order.map((id, index) => [id, index]));
+    let total = 0;
+    for (const [index, one] of links.entries()) {
+        for (const two of links.slice(index + 1)) {
+            const source =
+                (at.get(one.source) ?? 0) - (at.get(two.source) ?? 0);
+            const target =
+                (at.get(one.target) ?? 0) - (at.get(two.target) ?? 0);
+            if (source * target < 0) total += 1;
+        }
+    }
+    return total;
+};
+
 // Order the nodes in each column so that ribbons run as flat as they can.
 // Repeatedly moving every node to the average height of whatever it connects
 // to, forwards then backwards, is the usual way to pull crossings out of a
 // layered graph. The chart relaxes the exact heights afterwards, but it starts
 // from the order given here, so a tidy order in means a tidy drawing out.
+//
+// The sweep settles on an order that no single move improves, which need not be
+// the tidiest one. A column whose nodes all come from the same one node has no
+// average to sort on and falls through to its tie-break, and whatever order
+// that lands on is what every column after it is then ordered around. So the
+// sweep is run from both directions and every order either one passes through
+// is scored, rather than trusting where they stop.
 const sweptOrder = (
     placed: Map<string, Placed>,
     depth: Map<string, number>,
     links: FlowLink[],
 ) => {
-    const columns = new Map<number, string[]>();
-    const seeded = [...placed.entries()].sort(
-        ([a, one], [b, two]) =>
-            (STAGE.get(one.step) ?? 0) - (STAGE.get(two.step) ?? 0) ||
-            one.round - two.round ||
-            a.localeCompare(b),
-    );
-    for (const [id] of seeded) {
-        const at = depth.get(id) ?? 0;
-        columns.set(at, [...(columns.get(at) ?? []), id]);
-    }
+    const seeded = [...placed.entries()]
+        .sort(
+            ([a, one], [b, two]) =>
+                (STAGE.get(one.step) ?? 0) - (STAGE.get(two.step) ?? 0) ||
+                one.round - two.round ||
+                a.localeCompare(b),
+        )
+        .map(([id]) => id);
 
     const before = new Map<string, [string, number][]>();
     const after = new Map<string, [string, number][]>();
@@ -284,41 +307,72 @@ const sweptOrder = (
         ]);
     }
 
-    const at = new Map<string, number>();
-    const reindex = (column: string[]) =>
-        column.forEach((id, index) => at.set(id, index));
-    for (const column of columns.values()) reindex(column);
-
-    const depths = [...columns.keys()].sort((a, b) => a - b);
-    const sweep = (order: number[], neighbours: typeof before) => {
-        for (const level of order) {
-            const column = columns.get(level) as string[];
-            const pull = new Map(
-                column.map((id) => {
-                    const near = neighbours.get(id) ?? [];
-                    const weight = near.reduce((sum, [, on]) => sum + on, 0);
-                    if (weight === 0) return [id, at.get(id) ?? 0];
-                    const total = near.reduce(
-                        (sum, [other, on]) => sum + (at.get(other) ?? 0) * on,
-                        0,
-                    );
-                    return [id, total / weight];
-                }),
-            );
-            column.sort(
-                (a, b) =>
-                    (pull.get(a) as number) - (pull.get(b) as number) ||
-                    a.localeCompare(b),
-            );
-            reindex(column);
+    const settle = (first: "forwards" | "backwards") => {
+        const columns = new Map<number, string[]>();
+        for (const id of seeded) {
+            const level = depth.get(id) ?? 0;
+            columns.set(level, [...(columns.get(level) ?? []), id]);
         }
+
+        const at = new Map<string, number>();
+        const reindex = (column: string[]) =>
+            column.forEach((id, index) => at.set(id, index));
+        for (const column of columns.values()) reindex(column);
+
+        const depths = [...columns.keys()].sort((a, b) => a - b);
+        const sweep = (order: number[], neighbours: typeof before) => {
+            for (const level of order) {
+                const column = columns.get(level) as string[];
+                const pull = new Map(
+                    column.map((id) => {
+                        const near = neighbours.get(id) ?? [];
+                        const weight = near.reduce(
+                            (sum, [, on]) => sum + on,
+                            0,
+                        );
+                        if (weight === 0) return [id, at.get(id) ?? 0];
+                        const total = near.reduce(
+                            (sum, [other, on]) =>
+                                sum + (at.get(other) ?? 0) * on,
+                            0,
+                        );
+                        return [id, total / weight];
+                    }),
+                );
+                column.sort(
+                    (a, b) =>
+                        (pull.get(a) as number) - (pull.get(b) as number) ||
+                        a.localeCompare(b),
+                );
+                reindex(column);
+            }
+        };
+
+        const order = () =>
+            depths.flatMap((level) => columns.get(level) as string[]);
+        const passes = [
+            () => sweep(depths.slice(1), before),
+            () => sweep([...depths].reverse().slice(1), after),
+        ];
+        if (first === "backwards") passes.reverse();
+
+        let best = order();
+        let fewest = crossings(best, links);
+        for (let pass = 0; pass < SWEEPS; pass += 1) {
+            for (const run of passes) {
+                run();
+                const settled = order();
+                const crossed = crossings(settled, links);
+                if (crossed < fewest) [best, fewest] = [settled, crossed];
+            }
+        }
+        return { best, fewest };
     };
 
-    for (let pass = 0; pass < SWEEPS; pass += 1) {
-        sweep(depths.slice(1), before);
-        sweep([...depths].reverse().slice(1), after);
-    }
-    return depths.flatMap((level) => columns.get(level) as string[]);
+    const [tidiest] = [settle("forwards"), settle("backwards")].sort(
+        (one, two) => one.fewest - two.fewest,
+    );
+    return tidiest.best;
 };
 
 // How far from the opening column each node sits, counted along the longest
@@ -745,11 +799,48 @@ const Labels: SankeyCustomLayer<FlowNode, FlowLink> = ({
     </g>
 );
 
+// Only the parts of a node and a ribbon that the stacking below needs, so it
+// can be read and tested on its own rather than through the chart's own types.
+type Stacked = { id: string; y0: number; y1: number };
+type Joining = { source: Stacked; target: Stacked; thickness: number };
+
+// Where every ribbon meets a node, as the centre line of its end. The chart
+// works this out for itself while it is still settling the node heights, so a
+// node that moves afterwards keeps the stacking order it had beforehand, and
+// two ribbons leaving together are drawn crossing when the layout has them
+// running apart. Stacking each node's ribbons by where their far ends finally
+// landed cannot do that: ribbons leave in the order they arrive.
+export const ribbonEnds = (
+    nodes: readonly Stacked[],
+    links: readonly Joining[],
+) => {
+    const middle = (node: Stacked) => (node.y0 + node.y1) / 2;
+    const stack = (end: "source" | "target", far: "source" | "target") => {
+        const centres = new Map<Joining, number>();
+        for (const node of nodes) {
+            let y = node.y0;
+            const joined = links
+                .filter((link) => link[end].id === node.id)
+                .sort((one, two) => middle(one[far]) - middle(two[far]));
+            for (const link of joined) {
+                centres.set(link, y + link.thickness / 2);
+                y += link.thickness;
+            }
+        }
+        return centres;
+    };
+    return {
+        leaving: stack("source", "target"),
+        arriving: stack("target", "source"),
+    };
+};
+
 // Replacing the built-in link layer means its hover handling goes with it, so
 // the ribbons wire up their own; without this only nodes would have a tooltip.
 const Ribbons: SankeyCustomLayer<FlowNode, FlowLink> = ({ links, nodes }) => {
     const { showTooltipFromEvent, hideTooltip } = useTooltip();
     const ends = new Map(nodes.map((node) => [node.id, node]));
+    const { leaving, arriving } = ribbonEnds(nodes, links);
 
     // Gather the pieces a threaded ribbon was cut into and follow them across,
     // taking a point where it leaves each column, so the whole run can be drawn
@@ -764,12 +855,12 @@ const Ribbons: SankeyCustomLayer<FlowNode, FlowLink> = ({ links, nodes }) => {
         const run = [...pieces].sort((a, b) => a.source.x1 - b.source.x1);
         const last = run[run.length - 1];
         const points: Waypoint[] = [
-            { x: run[0].source.x1 - BLEED, y: run[0].pos0 },
+            { x: run[0].source.x1 - BLEED, y: leaving.get(run[0]) as number },
             ...run.slice(0, -1).map((piece) => ({
                 x: (piece.target.x0 + piece.target.x1) / 2,
-                y: piece.pos1,
+                y: arriving.get(piece) as number,
             })),
-            { x: last.target.x0 + BLEED, y: last.pos1 },
+            { x: last.target.x0 + BLEED, y: arriving.get(last) as number },
         ];
         return {
             link: run[0],
@@ -828,6 +919,13 @@ const CHART_PROPS: Omit<
     // from the left rather than pushing whatever stops early over to the right
     // edge.
     align: "start",
+    // Left to itself the chart reorders each column by the heights it relaxes
+    // to, which undoes the ordering the graph was built with and puts crossings
+    // back. The heights still relax; only the order is held. This says the same
+    // thing as the chart's own "input", which cannot be used: that also stops it
+    // stacking the ribbons at each node by where they land, leaving them in the
+    // order the applications came out of the database.
+    sort: (one, two) => one.index - two.index,
     margin: MARGIN,
     colors: (node) => node.fill,
     layers: [Ribbons, Nodes, Labels],

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { graphFrom } from "@/components/dashboard/pipeline-flow";
+import { graphFrom, ribbonEnds } from "@/components/dashboard/pipeline-flow";
 import type { ApplicationStatus, FlowEntry } from "@/components/dashboard/data";
 
 const entry = (...history: ApplicationStatus[]): FlowEntry => ({
@@ -259,6 +259,40 @@ describe("graphFrom", () => {
         expect(crossings(graph, swept)).toBeLessThan(crossings(graph, raw) / 2);
     });
 
+    test("what leaves one node stays together in the next column", () => {
+        // A real season: almost everything waiting, a few OAs and a few
+        // interviews, and a pile of straight rejections. The OA's take-home
+        // used to settle below both of the interview's endings, which crosses
+        // two ribbons for nothing. Every node in the middle column here comes
+        // from Applied and from nothing else, so the sweep has no average to
+        // order them by and used to fall through to its tie-break.
+        const many = (count: number, ...history: ApplicationStatus[]) =>
+            Array.from({ length: count }, () => entry(...history));
+        const graph = graphFrom([
+            ...many(66, "not_applied", "applied"),
+            ...many(7, "not_applied", "applied", "rejected"),
+            ...many(2, "not_applied", "applied", "online_assessment"),
+            ...many(
+                1,
+                "not_applied",
+                "applied",
+                "online_assessment",
+                "takehome",
+            ),
+            ...many(1, "not_applied", "applied", "interviewing"),
+            ...many(
+                1,
+                "not_applied",
+                "applied",
+                "interviewing",
+                "offer_in_progress",
+            ),
+            ...many(1, "not_applied", "applied", "interviewing", "rejected"),
+        ]);
+        const order = graph.nodes.map((node) => node.id);
+        expect(crossings(graph, order)).toBe(0);
+    });
+
     test("no ribbon skips over a column", () => {
         // A ribbon spanning more than one column has nothing keeping it clear
         // of the nodes underneath, so every one should be threaded through an
@@ -342,6 +376,38 @@ describe("graphFrom", () => {
         ]);
         // One move each, straight from applied to where it ended.
         expect(graph.links).toHaveLength(5);
+    });
+
+    test("ribbons leave a node stacked by where they land", () => {
+        // The chart stacks these while it is still settling the heights, so a
+        // node it moves afterwards is handed back with its ribbons in an order
+        // its own layout has moved past, and two of them draw as a cross.
+        // Here the offer is listed first but lands lowest.
+        const interview = { id: "interview", y0: 0, y1: 30 };
+        const offer = { id: "offer", y0: 200, y1: 210 };
+        const resting = { id: "resting", y0: 100, y1: 120 };
+        const links = [
+            { source: interview, target: offer, thickness: 10 },
+            { source: interview, target: resting, thickness: 20 },
+        ];
+
+        const { leaving } = ribbonEnds([interview, offer, resting], links);
+        expect(leaving.get(links[1])).toBe(10);
+        expect(leaving.get(links[0])).toBe(25);
+    });
+
+    test("ribbons arrive at a node in the order they left", () => {
+        const top = { id: "top", y0: 0, y1: 10 };
+        const bottom = { id: "bottom", y0: 100, y1: 110 };
+        const rejected = { id: "rejected", y0: 50, y1: 70 };
+        const links = [
+            { source: bottom, target: rejected, thickness: 10 },
+            { source: top, target: rejected, thickness: 10 },
+        ];
+
+        const { arriving } = ribbonEnds([top, bottom, rejected], links);
+        expect(arriving.get(links[1])).toBe(55);
+        expect(arriving.get(links[0])).toBe(65);
     });
 
     test("a status others carried on from keeps its resting node", () => {
