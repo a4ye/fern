@@ -237,7 +237,10 @@ select
     count(*) filter (where f.status = 'accepted')::int as friends,
     count(*) filter (
         where f.status = 'pending' and f.requester_id = $1
-    )::int as sent
+    )::int as sent,
+    count(*) filter (
+        where f.status = 'pending' and f.addressee_id = $1
+    )::int as received
 from friendships f
 where f.requester_id = $1
     or f.addressee_id = $1`;
@@ -249,6 +252,7 @@ export interface CountFriendshipsArgs {
 export interface CountFriendshipsRow {
     friends: number;
     sent: number;
+    received: number;
 }
 
 export async function countFriendships(client: Client, args: CountFriendshipsArgs): Promise<CountFriendshipsRow | null> {
@@ -263,7 +267,8 @@ export async function countFriendships(client: Client, args: CountFriendshipsArg
     const row = result.rows[0];
     return {
         friends: row[0],
-        sent: row[1]
+        sent: row[1],
+        received: row[2]
     };
 }
 

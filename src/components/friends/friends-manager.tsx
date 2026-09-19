@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { startTransition, useOptimistic, useState, useTransition } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -15,7 +15,9 @@ import {
     primaryButtonClass,
     quietButtonClass,
 } from "@/components/dashboard/table-controls";
+import { usePendingRequests } from "@/components/dashboard/pending-requests";
 import { useViewing } from "@/components/dashboard/viewing";
+import { answered, type Answer } from "@/components/friends/answered";
 import type { Friend, FriendsPage } from "@/db/friends";
 
 const Avatar = ({ image }: { image: string | null }) =>
@@ -87,17 +89,28 @@ export const FriendsManager = ({
     const [handle, setHandle] = useState("");
     const [error, setError] = useState<string | null>(null);
     const [removing, setRemoving] = useState<Friend | null>(null);
-    // Two transitions rather than one. Sharing a single pending flag put the
-    // Send request button back into "Sending..." whenever a row below it was
-    // answered, which reads as the form having restarted on its own.
+    // Answering a row has no pending flag of its own: the row it acts on leaves
+    // its group on the press, so there is nothing left to show as busy. Sending
+    // still needs one, since the form stays put while GitHub is looked up.
     const [sending, startSending] = useTransition();
-    const [answering, startAnswering] = useTransition();
 
-    // Every change here moves a person between the three groups, and which
-    // group they land in is the server's answer rather than a guess worth
-    // making. So none of this is optimistic: the action revalidates and the
-    // page is re-read, which is also what keeps two browsers from disagreeing
-    // about a request that was answered in one of them.
+    // Rows move on the press rather than on the answer. Which group a row lands
+    // in is the one thing about this page worth guessing at, because it follows
+    // from the button that was pressed, and the guess is dropped for the
+    // server's own answer the moment the action revalidates. The actions stay
+    // scoped to their friendship, so a request answered in another browser is
+    // still settled by the server rather than by what was drawn here.
+    const [shown, answer] = useOptimistic(page, answered);
+    const { showPending } = usePendingRequests();
+
+    // Both guesses are made together. The friends icon in the top bar counts the
+    // same requests this page lists, so leaving it on the server's number would
+    // have it contradict the group heading right below it for the length of the
+    // round trip.
+    const guess = (action: Answer) => {
+        answer(action);
+        showPending(answered(shown, action).incoming.length);
+    };
 
     const add = () => {
         const trimmed = handle.trim();
@@ -116,7 +129,8 @@ export const FriendsManager = ({
     };
 
     const accept = (friend: Friend) => {
-        startAnswering(async () => {
+        startTransition(async () => {
+            guess({ kind: "accept", friendshipId: friend.friendshipId });
             const result = await acceptFriendRequest(friend.friendshipId);
             if (!result.ok) {
                 toast.error(result.error);
@@ -127,7 +141,8 @@ export const FriendsManager = ({
     };
 
     const drop = (friend: Friend, message: string) => {
-        startAnswering(async () => {
+        startTransition(async () => {
+            guess({ kind: "remove", friendshipId: friend.friendshipId });
             const result = await removeFriend(friend.friendshipId);
             if (!result.ok) {
                 toast.error(result.error);
@@ -204,8 +219,8 @@ export const FriendsManager = ({
                 </section>
             )}
 
-            <Group title="Requests received" count={page.incoming.length}>
-                {page.incoming.map((friend) => (
+            <Group title="Requests received" count={shown.incoming.length}>
+                {shown.incoming.map((friend) => (
                     <Row key={friend.friendshipId} friend={friend}>
                         {viewing ? null : (
                             <>
@@ -214,7 +229,6 @@ export const FriendsManager = ({
                                     onClick={() =>
                                         drop(friend, `Declined ${friend.name}.`)
                                     }
-                                    disabled={answering}
                                     className={ghostButtonClass}
                                 >
                                     Decline
@@ -222,7 +236,6 @@ export const FriendsManager = ({
                                 <button
                                     type="button"
                                     onClick={() => accept(friend)}
-                                    disabled={answering}
                                     className={primaryButtonClass}
                                 >
                                     Accept
@@ -233,8 +246,8 @@ export const FriendsManager = ({
                 ))}
             </Group>
 
-            <Group title="Requests sent" count={page.outgoing.length}>
-                {page.outgoing.map((friend) => (
+            <Group title="Requests sent" count={shown.outgoing.length}>
+                {shown.outgoing.map((friend) => (
                     <Row key={friend.friendshipId} friend={friend}>
                         <span className="text-xs text-muted">Waiting</span>
                         {viewing ? null : (
@@ -243,7 +256,6 @@ export const FriendsManager = ({
                                 onClick={() =>
                                     drop(friend, `Cancelled the request.`)
                                 }
-                                disabled={answering}
                                 className={`${quietButtonClass} ml-2 hover:text-rose`}
                             >
                                 Cancel
@@ -253,14 +265,13 @@ export const FriendsManager = ({
                 ))}
             </Group>
 
-            <Group title="Friends" count={page.friends.length}>
-                {page.friends.map((friend) => (
+            <Group title="Friends" count={shown.friends.length}>
+                {shown.friends.map((friend) => (
                     <Row key={friend.friendshipId} friend={friend}>
                         {viewing ? null : (
                             <button
                                 type="button"
                                 onClick={() => setRemoving(friend)}
-                                disabled={answering}
                                 className={`${quietButtonClass} hover:text-rose`}
                             >
                                 Remove
@@ -270,9 +281,9 @@ export const FriendsManager = ({
                 ))}
             </Group>
 
-            {page.friends.length === 0 &&
-                page.incoming.length === 0 &&
-                page.outgoing.length === 0 && (
+            {shown.friends.length === 0 &&
+                shown.incoming.length === 0 &&
+                shown.outgoing.length === 0 && (
                     <p className="mt-8 border border-hairline bg-background px-5 py-16 text-center text-sm text-sub">
                         You have no friends yet :(
                     </p>

@@ -66,6 +66,12 @@ export const getFriendsPage = async (userId: string): Promise<FriendsPage> => {
     };
 };
 
+// How many requests are waiting on this user to answer. Drawn on the friends
+// icon in the top bar, which is on every dashboard page, so it is a count rather
+// than the rows themselves.
+export const countIncomingRequests = async (userId: string): Promise<number> =>
+    (await gen.countFriendships(getPool(), { userId }))?.received ?? 0;
+
 export const listFriends = async (userId: string): Promise<Friend[]> =>
     toFriends(
         await gen.listFriends(getPool(), {

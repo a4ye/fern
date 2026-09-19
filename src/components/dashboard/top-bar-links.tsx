@@ -8,6 +8,7 @@ import {
     FRIENDS_PATH,
     SETTINGS_PATH,
 } from "@/components/dashboard/data";
+import { usePendingRequests } from "@/components/dashboard/pending-requests";
 import { useViewing } from "@/components/dashboard/viewing";
 
 const ICON_LINK_CLASS =
@@ -49,6 +50,7 @@ export const TopBarLinks = ({
     // dashboard, so the avatar stops being a link and stays only as the mark of
     // whose pages these are.
     const viewing = useViewing();
+    const { pending } = usePendingRequests();
 
     // Every page behind these links has a back button, so each link carries the
     // address it was clicked from. Already on the page a link opens, the way
@@ -62,6 +64,10 @@ export const TopBarLinks = ({
     };
 
     const initial = name.trim().charAt(0).toUpperCase() || "U";
+    const friendsLabel =
+        pending > 0
+            ? `Friends, ${pending} request${pending === 1 ? "" : "s"} waiting`
+            : "Friends";
 
     return (
         <>
@@ -81,14 +87,25 @@ export const TopBarLinks = ({
 
             <Link
                 href={hrefTo(FRIENDS_PATH)}
-                aria-label="Friends"
-                title="Friends"
-                className={ICON_LINK_CLASS}
+                aria-label={friendsLabel}
+                title={friendsLabel}
+                className={`${ICON_LINK_CLASS} relative`}
             >
                 <span
                     aria-hidden="true"
                     className="icon-[lucide--users] size-4"
                 />
+                {pending > 0 ? (
+                    // Over the icon rather than beside it, so the count
+                    // appearing does not push the avatar along. The label
+                    // already says the number, so this is decoration.
+                    <span
+                        aria-hidden="true"
+                        className="absolute -top-2 -right-2 flex h-3.5 min-w-3.5 items-center justify-center bg-accent px-1 text-xs leading-none font-medium tabular-nums text-background"
+                    >
+                        {pending}
+                    </span>
+                ) : null}
             </Link>
 
             {viewing ? (

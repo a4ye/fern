@@ -70,13 +70,19 @@ where least(f.requester_id, f.addressee_id)
     and greatest(f.requester_id, f.addressee_id)
         = greatest(sqlc.arg(user_id), sqlc.arg(other_id));
 
--- Counted against the per-account ceilings before a request is sent.
+-- The first two are counted against the per-account ceilings before a request is
+-- sent. `received` is not a ceiling: it is the number the top bar puts on the
+-- friends icon, counted here rather than read off the rows so drawing every
+-- dashboard page does not cost a list of people nobody has opened yet.
 -- name: CountFriendships :one
 select
     count(*) filter (where f.status = 'accepted')::int as friends,
     count(*) filter (
         where f.status = 'pending' and f.requester_id = sqlc.arg(user_id)
-    )::int as sent
+    )::int as sent,
+    count(*) filter (
+        where f.status = 'pending' and f.addressee_id = sqlc.arg(user_id)
+    )::int as received
 from friendships f
 where f.requester_id = sqlc.arg(user_id)
     or f.addressee_id = sqlc.arg(user_id);
