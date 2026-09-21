@@ -7,6 +7,9 @@ const entry = (...history: ApplicationStatus[]): FlowEntry => ({
     history,
 });
 
+const many = (count: number, ...history: ApplicationStatus[]) =>
+    Array.from({ length: count }, () => entry(...history));
+
 const nameOf = (graph: ReturnType<typeof graphFrom>, id: string) =>
     graph.nodes.find((node) => node.id === id)?.name;
 
@@ -27,6 +30,23 @@ const reaches = (
         }
     }
     return false;
+};
+
+// Which column each node sits in, counted along the longest route to it, which
+// is how the chart lays them out.
+const depthsOf = (graph: ReturnType<typeof graphFrom>) => {
+    const depth = new Map<string, number>();
+    for (;;) {
+        let moved = false;
+        for (const link of graph.links) {
+            const next = (depth.get(link.source) ?? 0) + 1;
+            if (next > (depth.get(link.target) ?? 0)) {
+                depth.set(link.target, next);
+                moved = true;
+            }
+        }
+        if (!moved) return depth;
+    }
 };
 
 // Two ribbons cross when the order of their two ends disagrees. Counting that
@@ -72,6 +92,27 @@ const SEASON: FlowEntry[] = [
     ),
     entry("not_applied", "applied", "interviewing", "not_applied", "applied"),
     entry("not_applied", "applied", "takehome", "interviewing", "ghosted"),
+];
+
+// A real season: almost everything still waiting, a few OAs and a few
+// interviews, a pile of straight rejections, and one interview that ended in
+// one. Every node in the middle column comes from Applied and from nothing
+// else, so the sweep has no average to order them by.
+const LATE_REJECTION: FlowEntry[] = [
+    ...many(63, "not_applied", "applied"),
+    ...many(7, "not_applied", "applied", "rejected"),
+    ...many(3, "not_applied", "applied", "online_assessment"),
+    ...many(1, "not_applied", "applied", "online_assessment", "takehome"),
+    ...many(4, "not_applied", "applied", "interviewing"),
+    ...many(
+        1,
+        "not_applied",
+        "applied",
+        "interviewing",
+        "offer_in_progress",
+        "offer_declined",
+    ),
+    ...many(1, "not_applied", "applied", "interviewing", "rejected"),
 ];
 
 describe("graphFrom", () => {
@@ -266,8 +307,6 @@ describe("graphFrom", () => {
         // two ribbons for nothing. Every node in the middle column here comes
         // from Applied and from nothing else, so the sweep has no average to
         // order them by and used to fall through to its tie-break.
-        const many = (count: number, ...history: ApplicationStatus[]) =>
-            Array.from({ length: count }, () => entry(...history));
         const graph = graphFrom([
             ...many(66, "not_applied", "applied"),
             ...many(7, "not_applied", "applied", "rejected"),
@@ -293,24 +332,78 @@ describe("graphFrom", () => {
         expect(crossings(graph, order)).toBe(0);
     });
 
+    test("two columns move together to undo the last crossings", () => {
+        // The interview's rejection used to dive past both of the OA's endings,
+        // because straightening it needs the OA to drop below the ribbon
+        // carrying the straight rejections and the rejected node to rise above
+        // the OA's, and neither move wins anything on its own.
+        const graph = graphFrom(LATE_REJECTION);
+        const order = graph.nodes.map((node) => node.id);
+        expect(crossings(graph, order)).toBe(0);
+    });
+
+    test("a dead end sinks under the flow that carries on", () => {
+        // "Awaiting reply" is most of a season and stops where it stands, so
+        // leaving it mid-column splits the ribbons that do carry on and sends
+        // one of them across the whole figure to land. It meets no other ribbon
+        // on that trip, so crossings score both orders the same and cannot ask
+        // for this on their own.
+        const graph = graphFrom(LATE_REJECTION);
+        const depth = depthsOf(graph);
+        const waiting = graph.nodes.find(
+            (node) => node.name === "Awaiting reply",
+        );
+        if (!waiting) throw new Error("no awaiting reply node");
+
+        const column = graph.nodes.filter(
+            (node) => depth.get(node.id) === depth.get(waiting.id),
+        );
+        expect(column.length).toBeGreaterThan(1);
+        expect(column[column.length - 1].id).toBe(waiting.id);
+    });
+
+    test("a dead end stays put when sinking it would cross ribbons", () => {
+        // The rule ranks below crossings, so a column that still reads out of
+        // order is one where tidying it would cost a ribbon.
+        const graph = graphFrom(SEASON);
+        const depth = depthsOf(graph);
+        const carries = new Set(graph.links.map((link) => link.source));
+
+        const columns = new Map<number, string[]>();
+        for (const node of graph.nodes) {
+            const level = depth.get(node.id) ?? 0;
+            columns.set(level, [...(columns.get(level) ?? []), node.id]);
+        }
+        const levels = [...columns.keys()].sort((a, b) => a - b);
+        const order = () =>
+            levels.flatMap((level) => columns.get(level) as string[]);
+
+        let checked = 0;
+        for (const level of levels) {
+            const column = columns.get(level) as string[];
+            const going = column.filter((id) => carries.has(id));
+            const sinking = [
+                ...going,
+                ...column.filter((id) => !carries.has(id)),
+            ];
+            if (going.length === 0 || sinking.join() === column.join())
+                continue;
+
+            const before = crossings(graph, order());
+            columns.set(level, sinking);
+            expect(crossings(graph, order())).toBeGreaterThan(before);
+            columns.set(level, column);
+            checked += 1;
+        }
+        expect(checked).toBeGreaterThan(0);
+    });
+
     test("no ribbon skips over a column", () => {
         // A ribbon spanning more than one column has nothing keeping it clear
         // of the nodes underneath, so every one should be threaded through an
         // invisible node in each column it crosses.
         const graph = graphFrom(SEASON);
-        const depth = new Map<string, number>();
-        const settle = () => {
-            let moved = false;
-            for (const link of graph.links) {
-                const next = (depth.get(link.source) ?? 0) + 1;
-                if (next > (depth.get(link.target) ?? 0)) {
-                    depth.set(link.target, next);
-                    moved = true;
-                }
-            }
-            return moved;
-        };
-        while (settle());
+        const depth = depthsOf(graph);
 
         for (const link of graph.links) {
             const span =

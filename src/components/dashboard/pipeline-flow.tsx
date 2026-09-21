@@ -2,6 +2,7 @@
 
 import {
     useEffect,
+    useMemo,
     useRef,
     useState,
     type MouseEvent,
@@ -249,12 +250,11 @@ const STAGE = new Map(
     APPLICATION_STATUSES.map((status, index) => [status, index]),
 );
 
-// How many pairs of ribbons cross, counted over an order of the nodes. Two
-// ribbons cross when the order of their two ends disagrees. This is what the
-// sweep below is trying to reduce, which it only ever does indirectly, so it
-// is also the only honest way to tell two of its answers apart.
-const crossings = (order: string[], links: FlowLink[]) => {
-    const at = new Map(order.map((id, index) => [id, index]));
+// How many pairs of ribbons cross. Two cross when the order of their two ends
+// disagrees, so counting them needs nothing but where each end sits. `at` has
+// to rank both ends of every link given, which a whole order always does and a
+// single gap's own column positions do for the links across that gap.
+const tangles = (links: FlowLink[], at: Map<string, number>) => {
     let total = 0;
     for (const [index, one] of links.entries()) {
         for (const two of links.slice(index + 1)) {
@@ -266,6 +266,187 @@ const crossings = (order: string[], links: FlowLink[]) => {
         }
     }
     return total;
+};
+
+// Crossings over a whole order of the nodes. This is what the sweep below is
+// trying to reduce, which it only ever does indirectly, so it is also the only
+// honest way to tell two of its answers apart.
+const crossings = (order: string[], links: FlowLink[]) =>
+    tangles(links, new Map(order.map((id, index) => [id, index])));
+
+// What the pass below will take on. It is there to pick out the last crossings
+// the sweep cannot reach, so a gap already crossed more times than SNARLS is
+// left alone: no order is going to read as untangled, and searching one costs
+// the chart a redraw.
+const SNARLS = 4;
+
+// And a ceiling on the search for the gaps it does take, counted in the ribbon
+// comparisons it would come to: arrangements to try, times the pairs of ribbons
+// each one is scored over. Counting only the arrangements would let a gap of a
+// hundred ribbons through, where scoring even a few is far too slow.
+const EFFORT = 500_000;
+
+// Every order reachable by lifting one of `loose` out of the column and
+// dropping it back somewhere else, the column itself first so that a pair of
+// columns can be searched with only one of the two moving.
+const relocations = (column: string[], loose: Set<string>) => {
+    const moved = [column];
+    for (const [from, id] of column.entries()) {
+        if (!loose.has(id)) continue;
+        const rest = [...column.slice(0, from), ...column.slice(from + 1)];
+        for (let to = 0; to <= rest.length; to += 1) {
+            if (to === from) continue;
+            moved.push([...rest.slice(0, to), id, ...rest.slice(to)]);
+        }
+    }
+    return moved;
+};
+
+// The nodes a crossing ribbon ends on. Moving anything else cannot undo one.
+const caughtIn = (gap: FlowLink[], at: Map<string, number>) => {
+    const caught = new Set<string>();
+    for (const [index, one] of gap.entries()) {
+        for (const two of gap.slice(index + 1)) {
+            const source =
+                (at.get(one.source) ?? 0) - (at.get(two.source) ?? 0);
+            const target =
+                (at.get(one.target) ?? 0) - (at.get(two.target) ?? 0);
+            if (source * target >= 0) continue;
+            for (const id of [one.source, two.source, one.target, two.target]) {
+                caught.add(id);
+            }
+        }
+    }
+    return caught;
+};
+
+// The sweep stops where no one column can be bettered on its own, which is not
+// always the tidiest order: the last crossings can need two columns to move at
+// once, with neither move paying off alone. A ribbon only stops crossing its
+// neighbours once both the bar it leaves and the bar it lands on have shifted,
+// so moving either one first scores no better and is never taken. Take each
+// neighbouring pair of columns and move a node in both together.
+//
+// Only three gaps can change: the one between the pair, and the one outside
+// each of them. Ribbons run between neighbouring columns only, so every other
+// gap holds the same crossings whatever this pair does, and scoring them again
+// would say nothing.
+const untangled = (
+    order: string[],
+    depth: Map<string, number>,
+    links: FlowLink[],
+) => {
+    const columns = new Map<number, string[]>();
+    const gaps = new Map<number, FlowLink[]>();
+    for (const id of order) {
+        const level = depth.get(id) ?? 0;
+        columns.set(level, [...(columns.get(level) ?? []), id]);
+    }
+    for (const link of links) {
+        const level = depth.get(link.source) ?? 0;
+        gaps.set(level, [...(gaps.get(level) ?? []), link]);
+    }
+
+    const at = new Map<string, number>();
+    const reindex = (column: string[]) =>
+        column.forEach((id, index) => at.set(id, index));
+    for (const column of columns.values()) reindex(column);
+
+    const depths = [...columns.keys()].sort((a, b) => a - b);
+
+    for (let pass = 0; pass < SWEEPS; pass += 1) {
+        let improved = false;
+        for (const [index, right] of depths.slice(1).entries()) {
+            const left = depths[index];
+            const middle = gaps.get(left) ?? [];
+            const snarled = tangles(middle, at);
+            if (snarled === 0 || snarled > SNARLS) continue;
+
+            const nearby = [middle, gaps.get(left - 1), gaps.get(right)].filter(
+                (gap): gap is FlowLink[] => !!gap?.length,
+            );
+            const score = () =>
+                nearby.reduce((sum, gap) => sum + tangles(gap, at), 0);
+
+            const caught = caughtIn(middle, at);
+            const [wasLeft, wasRight] = [
+                columns.get(left) as string[],
+                columns.get(right) as string[],
+            ];
+            const [ones, twos] = [
+                relocations(wasLeft, caught),
+                relocations(wasRight, caught),
+            ];
+            const each = nearby.reduce((sum, gap) => sum + gap.length ** 2, 0);
+            if (ones.length * twos.length * each > EFFORT) continue;
+
+            let best = [wasLeft, wasRight];
+            let fewest = score();
+            for (const one of ones) {
+                reindex(one);
+                for (const two of twos) {
+                    reindex(two);
+                    const crossed = score();
+                    if (crossed < fewest) {
+                        [best, fewest, improved] = [[one, two], crossed, true];
+                    }
+                }
+            }
+            columns.set(left, best[0]);
+            columns.set(right, best[1]);
+            reindex(best[0]);
+            reindex(best[1]);
+        }
+        if (!improved) break;
+    }
+    return depths.flatMap((level) => columns.get(level) as string[]);
+};
+
+// A node with nothing leaving it is a dead end, and one sitting in the middle
+// of a column splits the flow carrying on either side of it. Crossings cannot
+// see this: a ribbon running past a dead end never meets another ribbon, so
+// every order here scores the same and the sweep picks between them on nothing.
+// What it costs is travel. Most of a season is usually still awaiting a reply,
+// so that one node is most of its column, and leaving it in the middle pushes
+// the ribbons that do carry on to opposite ends and makes one of them sweep the
+// height of the figure to land.
+//
+// So sink the dead ends under the flow that continues, which leaves the ribbons
+// that carry on next to each other, and only where it costs no crossings. The
+// closing column is all dead ends and has nothing to separate.
+const sunk = (
+    order: string[],
+    depth: Map<string, number>,
+    links: FlowLink[],
+) => {
+    const carries = new Set(links.map((link) => link.source));
+    const columns = new Map<number, string[]>();
+    for (const id of order) {
+        const level = depth.get(id) ?? 0;
+        columns.set(level, [...(columns.get(level) ?? []), id]);
+    }
+
+    const depths = [...columns.keys()].sort((a, b) => a - b);
+    const flat = () =>
+        depths.flatMap((level) => columns.get(level) as string[]);
+
+    let fewest = crossings(order, links);
+    for (const level of depths) {
+        const column = columns.get(level) as string[];
+        const going = column.filter((id) => carries.has(id));
+        if (going.length === 0 || going.length === column.length) continue;
+
+        // A stable partition, so whatever the sweep settled on within each of
+        // the two groups is left alone.
+        columns.set(level, [
+            ...going,
+            ...column.filter((id) => !carries.has(id)),
+        ]);
+        const crossed = crossings(flat(), links);
+        if (crossed <= fewest) fewest = crossed;
+        else columns.set(level, column);
+    }
+    return flat();
 };
 
 // Order the nodes in each column so that ribbons run as flat as they can.
@@ -372,7 +553,7 @@ const sweptOrder = (
     const [tidiest] = [settle("forwards"), settle("backwards")].sort(
         (one, two) => one.fewest - two.fewest,
     );
-    return tidiest.best;
+    return sunk(untangled(tidiest.best, depth, links), depth, links);
 };
 
 // How far from the opening column each node sits, counted along the longest
@@ -1124,7 +1305,9 @@ export const PipelineFlow = ({
     const exportRef = useRef<HTMLDivElement>(null);
     const [pending, setPending] = useState<ExportFormat | null>(null);
     const [expanded, setExpanded] = useState(false);
-    const { columns, ...graph } = graphFrom(flow);
+    // Hovering a bar re-renders, and untangling the order is far too much work
+    // to redo for it.
+    const { columns, ...graph } = useMemo(() => graphFrom(flow), [flow]);
     const chartable = graph.links.length > 0;
 
     useEffect(() => {
