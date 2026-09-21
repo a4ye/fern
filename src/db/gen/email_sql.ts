@@ -18,7 +18,7 @@ select
 from applications a
 join lists l on l.id = a.list_id
 where a.id = $11 and l.user_id = $1
-on conflict ("application_id", "message_id") do nothing
+on conflict do nothing
 returning id`;
 
 export interface InsertEmailSuggestionArgs {
@@ -91,7 +91,7 @@ select
     eligible.confidence,
     eligible.reasoning
 from eligible
-on conflict ("application_id", "message_id") do nothing
+on conflict do nothing
 returning id`;
 
 export interface InsertEmailSuggestionsArgs {
@@ -127,7 +127,26 @@ select
     s.message_id,
     s.email_subject,
     s.current_status,
-    s.suggested_status
+    s.suggested_status,
+    -- Which time round this would be, counted only where the suggestion keeps
+    -- the status it was raised against. The application already holds that
+    -- status, so this is the second arrival at worst even if the trail lost
+    -- the first.
+    -- Which visit to the suggested status this would be. A suggestion that
+    -- keeps the status the application already holds is the second arrival at
+    -- worst, so it floors at one earlier arrival: 56 of this database's rows
+    -- sit at a status their trail never records reaching.
+    (
+        greatest(
+            (
+                select count(*)
+                from application_events e
+                where e.application_id = s.application_id
+                    and e.to_status = s.suggested_status
+            ),
+            case when s.current_status = s.suggested_status then 1 else 0 end
+        ) + 1
+    )::int as round_number
 from email_suggestions s
 join applications a on a.id = s.application_id
 join lists l on l.id = a.list_id
@@ -150,6 +169,7 @@ export interface ListPendingSuggestionsRow {
     emailSubject: string;
     currentStatus: string;
     suggestedStatus: string;
+    roundNumber: number;
 }
 
 export async function listPendingSuggestions(client: Client, args: ListPendingSuggestionsArgs): Promise<ListPendingSuggestionsRow[]> {
@@ -169,7 +189,8 @@ export async function listPendingSuggestions(client: Client, args: ListPendingSu
             messageId: row[6],
             emailSubject: row[7],
             currentStatus: row[8],
-            suggestedStatus: row[9]
+            suggestedStatus: row[9],
+            roundNumber: row[10]
         };
     });
 }

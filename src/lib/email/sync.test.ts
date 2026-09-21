@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, mock } from "bun:test";
 import { MAX_EMAILS_PER_SYNC } from "@/lib/limits";
+import type { UserApplication } from "@/db/email";
+import type { EmailMatch } from "./classify";
 import type { EmailProvider, NormalizedEmail } from "./types";
 import { EmailHistoryExpiredError } from "./types";
 
@@ -19,22 +21,23 @@ const listPendingEmailSyncMessageIds = mock(
     async (..._args: [string, number]) => pendingBatches.shift() ?? [],
 );
 const countPendingEmailSyncMessages = mock(async () => remaining);
-const getApplicationsForUser = mock(async () => [
+const getApplicationsForUser = mock(async (): Promise<UserApplication[]> => [
     {
         id: "application-1",
         company: "Acme",
         role: "Engineer",
-        status: "applied" as const,
+        status: "applied",
     },
 ]);
 const completeEmailSyncMessages = mock(
     async (..._args: [string, string[], unknown[]]) => 1,
 );
-const classifyEmails = mock(async () => [
+const classifyEmails = mock(async (): Promise<EmailMatch[]> => [
     {
         emailIndex: 0,
         applicationIndex: 0,
-        suggestedStatus: "interviewing" as const,
+        suggestedStatus: "interviewing",
+        newRound: false,
         confidence: 0.9,
         reasoning: "The recruiter requested an interview.",
     },
@@ -211,6 +214,121 @@ describe("syncEmailInbox", () => {
         );
         expect(result.found).toBe(0);
         expect(result.scanned).toBe(1);
+    });
+
+    // A company announces one decision several times: the invitation, the
+    // calendar note, the reminder. Each is a separate email, and all of them
+    // say the same thing about the application.
+    it("asks once when several emails announce the same move", async () => {
+        pendingBatches = [["m-1", "m-2"]];
+        classifyEmails.mockImplementationOnce(async () => [
+            {
+                emailIndex: 0,
+                applicationIndex: 0,
+                suggestedStatus: "interviewing",
+                newRound: false,
+                confidence: 0.6,
+                reasoning: "The email mentions an interview.",
+            },
+            {
+                emailIndex: 1,
+                applicationIndex: 0,
+                suggestedStatus: "interviewing",
+                newRound: false,
+                confidence: 0.95,
+                reasoning: "The recruiter requested an interview.",
+            },
+        ]);
+
+        await syncEmailInbox("user-1", provider(["m-1", "m-2"]));
+
+        const suggestions = completeEmailSyncMessages.mock.calls[0]?.[2];
+        expect(suggestions).toHaveLength(1);
+        // The plainest of the two, not whichever was read first.
+        expect(suggestions?.[0]).toMatchObject({
+            messageId: "m-2",
+            suggestedStatus: "interviewing",
+        });
+    });
+
+    it("keeps two different moves on one application apart", async () => {
+        pendingBatches = [["m-1", "m-2"]];
+        classifyEmails.mockImplementationOnce(async () => [
+            {
+                emailIndex: 0,
+                applicationIndex: 0,
+                suggestedStatus: "interviewing",
+                newRound: false,
+                confidence: 0.9,
+                reasoning: "The recruiter requested an interview.",
+            },
+            {
+                emailIndex: 1,
+                applicationIndex: 0,
+                suggestedStatus: "rejected",
+                newRound: false,
+                confidence: 0.8,
+                reasoning: "The company is moving ahead with others.",
+            },
+        ]);
+
+        await syncEmailInbox("user-1", provider(["m-1", "m-2"]));
+
+        expect(completeEmailSyncMessages.mock.calls[0]?.[2]).toHaveLength(2);
+    });
+
+    it("suggests a further round at the status already held", async () => {
+        getApplicationsForUser.mockImplementationOnce(async () => [
+            {
+                id: "application-1",
+                company: "Acme",
+                role: "Engineer",
+                status: "interviewing",
+            },
+        ]);
+        pendingBatches = [["m-1"]];
+        classifyEmails.mockImplementationOnce(async () => [
+            {
+                emailIndex: 0,
+                applicationIndex: 0,
+                suggestedStatus: "interviewing",
+                newRound: true,
+                confidence: 0.9,
+                reasoning: "The recruiter invited a second round.",
+            },
+        ]);
+
+        await syncEmailInbox("user-1", provider(["m-1"]));
+
+        expect(completeEmailSyncMessages.mock.calls[0]?.[2]).toHaveLength(1);
+    });
+
+    // Without the flag this is a reminder about the round already arranged,
+    // which reports no change at all.
+    it("ignores a repeat of the current status that is not a new round", async () => {
+        getApplicationsForUser.mockImplementationOnce(async () => [
+            {
+                id: "application-1",
+                company: "Acme",
+                role: "Engineer",
+                status: "interviewing",
+            },
+        ]);
+        pendingBatches = [["m-1"]];
+        classifyEmails.mockImplementationOnce(async () => [
+            {
+                emailIndex: 0,
+                applicationIndex: 0,
+                suggestedStatus: "interviewing",
+                newRound: false,
+                confidence: 0.9,
+                reasoning: "The email confirms the interview time.",
+            },
+        ]);
+
+        await syncEmailInbox("user-1", provider(["m-1"]));
+
+        expect(completeEmailSyncMessages.mock.calls[0]?.[2]).toEqual([]);
     });
 
     // The model is the only part of a sync that costs money per call, and most

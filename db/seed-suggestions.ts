@@ -5,6 +5,7 @@
 //   bun run db:seed-suggestions 8            # a different count
 //   bun run db:seed-suggestions 8 you@example.com
 //   bun run db:seed-suggestions --list="My list"  # only that list's applications
+//   bun run db:seed-suggestions --repeat     # only "another round" suggestions
 //   bun run db:seed-suggestions --clear      # remove every seeded suggestion
 //
 // Seeded rows carry a "seed-" message id, which is what --clear matches on, so
@@ -23,14 +24,16 @@ import type { ApplicationStatus } from "../src/components/dashboard/data";
 const SEED_PREFIX = "seed-";
 
 // Terminal statuses are left out: an email that moves an application backwards
-// out of "rejected" is not a suggestion the panel would ever make.
+// out of "rejected" is not a suggestion the panel would ever make. A status
+// lists itself where a second round is a real step, so seeding also produces
+// the repeat rows the panel draws without an arrow.
 const NEXT_STATUSES: Partial<Record<ApplicationStatus, ApplicationStatus[]>> = {
     not_applied: ["applied"],
     applied: ["online_assessment", "takehome", "interviewing", "rejected"],
-    online_assessment: ["interviewing", "rejected"],
-    takehome: ["interviewing", "rejected"],
-    interviewing: ["onsite", "offer_in_progress", "rejected"],
-    onsite: ["offer_in_progress", "rejected"],
+    online_assessment: ["online_assessment", "interviewing", "rejected"],
+    takehome: ["takehome", "interviewing", "rejected"],
+    interviewing: ["interviewing", "onsite", "offer_in_progress", "rejected"],
+    onsite: ["onsite", "offer_in_progress", "rejected"],
     offer_in_progress: ["offer_accepted", "offer_declined"],
 };
 
@@ -109,6 +112,14 @@ const TEMPLATES: Record<ApplicationStatus, Template> = {
     },
 };
 
+// Used in place of the status template when the suggestion repeats the status
+// the application already holds.
+const REPEAT_TEMPLATE: Template = {
+    subject: (company, role) => `Second round for ${role} at ${company}`,
+    snippet: (company) =>
+        `Thanks for the first conversation. The team at ${company} would like to meet you again for a second round.`,
+};
+
 const senderDomain = (company: string): string =>
     `${company.toLowerCase().replace(/[^a-z0-9]+/g, "") || "employer"}.com`;
 
@@ -124,16 +135,23 @@ const shuffle = <T>(values: T[]): T[] => {
     return copy;
 };
 
+// Few applications sit at a status that can repeat, so a random draw across a
+// real list almost never produces one. `repeatOnly` asks for nothing else.
 const buildSuggestion = (
     application: UserApplication,
     index: number,
+    repeatOnly: boolean,
 ): EmailSuggestionInput | null => {
     const candidates = NEXT_STATUSES[application.status];
     if (!candidates) return null;
+    if (repeatOnly && !candidates.includes(application.status)) return null;
 
-    const suggestedStatus = pick(candidates);
+    const suggestedStatus = repeatOnly ? application.status : pick(candidates);
     const role = application.role ?? "the role";
-    const template = TEMPLATES[suggestedStatus];
+    const template =
+        suggestedStatus === application.status
+            ? REPEAT_TEMPLATE
+            : TEMPLATES[suggestedStatus];
 
     return {
         applicationId: application.id,
@@ -214,6 +232,7 @@ const clearSeeded = async (userId: string): Promise<number> => {
 const run = async (): Promise<void> => {
     const args = process.argv.slice(2);
     const clear = args.includes("--clear");
+    const repeatOnly = args.includes("--repeat");
     const rest = args.filter((arg) => !arg.startsWith("--"));
     const count = Number(rest.find((arg) => /^\d+$/.test(arg)) ?? 3);
     const email = rest.find((arg) => arg.includes("@"));
@@ -231,7 +250,9 @@ const run = async (): Promise<void> => {
 
     const applications = await findApplications(user.id, listName);
     const suggestions = shuffle(applications)
-        .map(buildSuggestion)
+        .map((application, index) =>
+            buildSuggestion(application, index, repeatOnly),
+        )
         .filter((suggestion): suggestion is EmailSuggestionInput =>
             Boolean(suggestion),
         )
@@ -239,7 +260,9 @@ const run = async (): Promise<void> => {
 
     if (suggestions.length === 0) {
         throw new Error(
-            `No applications for ${user.email} are in a status that can move forward.`,
+            repeatOnly
+                ? `No applications for ${user.email} are at a status that can repeat.`
+                : `No applications for ${user.email} are in a status that can move forward.`,
         );
     }
 

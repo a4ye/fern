@@ -593,6 +593,10 @@ export type EmailSuggestion = {
     subject: string;
     currentStatus: ApplicationStatus;
     suggestedStatus: ApplicationStatus;
+    // Which visit to `suggestedStatus` accepting this would make. Read only
+    // where the suggestion keeps the current status, which is a further round
+    // at that step rather than a move.
+    roundNumber: number;
 };
 
 export type EmailSyncPanel = {

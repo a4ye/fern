@@ -27,6 +27,17 @@ const SUGGESTABLE_STATUSES = [
     "rejected",
 ] as const;
 
+// Statuses an application can genuinely hold twice. A second interview or a
+// second assessment is a real step. A second rejection or a second offer is
+// not, so a repeat of anything else is treated as another email about the step
+// the application is already on.
+const REPEATABLE_STATUSES = new Set<ApplicationStatus>([
+    "online_assessment",
+    "takehome",
+    "interviewing",
+    "onsite",
+]);
+
 export type ClassifierApplication = {
     company: string;
     role: string | null;
@@ -37,6 +48,9 @@ export type EmailMatch = {
     emailIndex: number;
     applicationIndex: number;
     suggestedStatus: ApplicationStatus;
+    // A further round at the status the application already holds. Without this
+    // a second interview is indistinguishable from a reminder about the first.
+    newRound: boolean;
     confidence: number;
     reasoning: string;
 };
@@ -55,6 +69,14 @@ const matchSchema = z.object({
     suggestedStatus: z
         .enum(SUGGESTABLE_STATUSES)
         .describe("The status this email implies the application has reached."),
+    newRound: z
+        .boolean()
+        .describe(
+            "True only when the email invites a further round at the status " +
+                "the application already holds, such as a second interview. " +
+                "A reminder, reschedule, confirmation or thank-you about a " +
+                "round already arranged is not a new round.",
+        ),
     confidence: z
         .number()
         .min(0)
@@ -75,6 +97,11 @@ const SYSTEM_PROMPT = [
     "the email is not about a job application, do not return an entry for it.",
     "Never guess a company that is not in the APPLICATIONS list. Only propose a",
     "status that reflects what the email actually says.",
+    "An application can reach the same status twice. When an email invites a",
+    "further round at the status the application already holds, return that",
+    "same status and set newRound. Set newRound only for a genuine additional",
+    "round: a reminder, reschedule, confirmation or thank-you about a round",
+    "already arranged reports no change, so return no entry for it at all.",
 ].join(" ");
 
 const buildPrompt = (
@@ -137,11 +164,22 @@ export const classifyEmails = async (
                 match.applicationIndex >= 0 &&
                 match.applicationIndex < applications.length,
         )
-        .map((match) => ({
-            emailIndex: match.emailIndex,
-            applicationIndex: match.applicationIndex,
-            suggestedStatus: match.suggestedStatus as ApplicationStatus,
-            confidence: match.confidence,
-            reasoning: match.reasoning,
-        }));
+        .map((match) => {
+            const suggestedStatus = match.suggestedStatus as ApplicationStatus;
+            return {
+                emailIndex: match.emailIndex,
+                applicationIndex: match.applicationIndex,
+                suggestedStatus,
+                // The model is asked for a repeat but not trusted to bound one.
+                // A claim that an application repeated a step it is not on, or
+                // repeated a step nobody repeats, is a plain status change.
+                newRound:
+                    match.newRound &&
+                    suggestedStatus ===
+                        applications[match.applicationIndex].currentStatus &&
+                    REPEATABLE_STATUSES.has(suggestedStatus),
+                confidence: match.confidence,
+                reasoning: match.reasoning,
+            };
+        });
 };

@@ -90,6 +90,7 @@ export const listPendingSuggestions = async (
         subject: row.emailSubject,
         currentStatus: row.currentStatus as ApplicationStatus,
         suggestedStatus: row.suggestedStatus as ApplicationStatus,
+        roundNumber: row.roundNumber,
     }));
 };
 
@@ -222,10 +223,15 @@ export const applySuggestion = async (
         const hasRoom = (events?.total ?? 0) < MAX_EVENTS_PER_APPLICATION;
 
         const toStatus = suggestion.suggestedStatus;
+        // A suggestion that proposes the status it was raised against is a
+        // further round at that step. The status stands still and the event is
+        // still worth recording, which is the one case a standstill is not a
+        // reason to skip the write.
+        const anotherRound = suggestion.currentStatus === toStatus;
         if (
             hasRoom &&
             isStatus(application.status) &&
-            application.status !== toStatus
+            (application.status !== toStatus || anotherRound)
         ) {
             await recordApplicationChangeWithClient(client, {
                 userId,

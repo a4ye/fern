@@ -113,26 +113,37 @@ export const syncEmailInbox = async (
             );
         }
 
-        const bestMatches = new Map<string, EmailMatch>();
-        for (const match of matches) {
+        // Every suggestion is a question put to the user, and two ways of
+        // asking the same one are worth no more than the clearest. A batch
+        // repeats itself when the model reads one email against an application
+        // twice, and when a company announces a single decision over several
+        // emails. Taking the confident matches first settles both, so the mail
+        // that states a move most plainly is the one shown.
+        const claimed = new Set<string>();
+        const suggestions: EmailSuggestionInput[] = [];
+        for (const match of [...matches].sort(
+            (left, right) => right.confidence - left.confidence,
+        )) {
             const email = candidates.emails[match.emailIndex];
             const application = candidates.applications[match.applicationIndex];
             if (!email || !application) continue;
-            if (application.status === match.suggestedStatus) continue;
-
-            const key = `${application.id}\u0000${email.id}`;
-            const previous = bestMatches.get(key);
-            if (!previous || previous.confidence < match.confidence) {
-                bestMatches.set(key, match);
+            // Landing on the status already held is a second round at that
+            // step, which is a real move, or it is another email about the
+            // step the application is already on, which is nothing.
+            if (
+                application.status === match.suggestedStatus &&
+                !match.newRound
+            ) {
+                continue;
             }
-        }
 
-        const suggestions: EmailSuggestionInput[] = [
-            ...bestMatches.values(),
-        ].map((match) => {
-            const email = candidates.emails[match.emailIndex];
-            const application = candidates.applications[match.applicationIndex];
-            return {
+            const perEmail = `email ${application.id} ${email.id}`;
+            const perMove = `move ${application.id} ${match.suggestedStatus}`;
+            if (claimed.has(perEmail) || claimed.has(perMove)) continue;
+            claimed.add(perEmail);
+            claimed.add(perMove);
+
+            suggestions.push({
                 applicationId: application.id,
                 messageId: email.id,
                 from: email.from,
@@ -143,8 +154,8 @@ export const syncEmailInbox = async (
                 suggestedStatus: match.suggestedStatus,
                 confidence: match.confidence,
                 reasoning: match.reasoning,
-            };
-        });
+            });
+        }
         found += await completeEmailSyncMessages(
             userId,
             messageIds,

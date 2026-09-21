@@ -35,6 +35,16 @@ const GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 const gmailMessageUrl = (messageId: string): string =>
     `https://mail.google.com/mail/#all/${encodeURIComponent(messageId)}`;
 
+// 2 becomes "2nd". Teens break the pattern that the last digit otherwise sets:
+// 13 is "13th", not "13rd".
+const ordinal = (value: number): string => {
+    const teen = value % 100 >= 11 && value % 100 <= 13;
+    const suffix = teen
+        ? "th"
+        : ({ 1: "st", 2: "nd", 3: "rd" }[value % 10] ?? "th");
+    return `${value}${suffix}`;
+};
+
 const StatusPill = ({ status }: { status: ApplicationStatus }) => {
     const meta = STATUS_META[status];
     return (
@@ -53,61 +63,78 @@ const SuggestionRow = ({
 }: {
     suggestion: EmailSuggestion;
     onResolve: (id: string, accept: boolean) => void;
-}) => (
-    <li className="flex flex-col gap-3 border-b border-faint px-4 py-4 last:border-b-0">
-        <div className="min-w-0">
-            <div className="flex items-center justify-between gap-3">
-                <span className="truncate text-sm font-medium text-ink">
-                    {suggestion.company}
-                </span>
-                <span className="inline-flex max-w-32 shrink-0 items-center gap-1 text-xs text-muted">
+}) => {
+    // A suggestion that keeps the status is a further round at that step, so
+    // an arrow between two identical pills would say nothing.
+    const repeatRound = suggestion.currentStatus === suggestion.suggestedStatus;
+
+    return (
+        <li className="flex flex-col gap-3 border-b border-faint px-4 py-4 last:border-b-0">
+            <div className="min-w-0">
+                <div className="flex items-center justify-between gap-3">
+                    <span className="truncate text-sm font-medium text-ink">
+                        {suggestion.company}
+                    </span>
+                    <span className="inline-flex max-w-32 shrink-0 items-center gap-1 text-xs text-muted">
+                        <span
+                            aria-hidden="true"
+                            className="icon-[lucide--list] size-3 shrink-0"
+                        />
+                        <span className="truncate">{suggestion.listName}</span>
+                    </span>
+                </div>
+                <a
+                    href={gmailMessageUrl(suggestion.messageId)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Open the original email in Gmail"
+                    className="mt-1 inline-flex min-h-10 max-w-full items-center gap-1.5 text-xs text-sub underline decoration-hairline underline-offset-3 transition-[color,text-decoration-color] hover:text-ink hover:decoration-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                >
+                    <span className="truncate">{suggestion.subject}</span>
                     <span
                         aria-hidden="true"
-                        className="icon-[lucide--list] size-3 shrink-0"
+                        className="icon-[lucide--external-link] size-3 shrink-0"
                     />
-                    <span className="truncate">{suggestion.listName}</span>
-                </span>
+                </a>
             </div>
-            <a
-                href={gmailMessageUrl(suggestion.messageId)}
-                target="_blank"
-                rel="noopener noreferrer"
-                title="Open the original email in Gmail"
-                className="mt-1 inline-flex min-h-10 max-w-full items-center gap-1.5 text-xs text-sub underline decoration-hairline underline-offset-3 transition-[color,text-decoration-color] hover:text-ink hover:decoration-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-            >
-                <span className="truncate">{suggestion.subject}</span>
-                <span
-                    aria-hidden="true"
-                    className="icon-[lucide--external-link] size-3 shrink-0"
-                />
-            </a>
-        </div>
-        <div className="flex max-w-full items-center gap-2 self-start bg-surface px-3 py-2.5">
-            <StatusPill status={suggestion.currentStatus} />
-            <span
-                aria-hidden="true"
-                className="icon-[lucide--arrow-right] size-3.5 shrink-0 text-muted"
-            />
-            <StatusPill status={suggestion.suggestedStatus} />
-        </div>
-        <div className="flex items-center justify-end gap-2 border-t border-faint pt-3">
-            <button
-                type="button"
-                onClick={() => onResolve(suggestion.id, false)}
-                className="focus-frame inline-flex h-10 cursor-pointer items-center border border-hairline bg-background px-4 text-sm text-sub transition-[background-color,color,transform] hover:bg-surface hover:text-ink active:scale-[0.96]"
-            >
-                Dismiss
-            </button>
-            <button
-                type="button"
-                onClick={() => onResolve(suggestion.id, true)}
-                className="inline-flex h-10 cursor-pointer items-center bg-accent px-4 text-sm font-medium text-background transition-[background-color,transform] hover:bg-accent-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:scale-[0.96]"
-            >
-                Apply
-            </button>
-        </div>
-    </li>
-);
+            <div className="flex max-w-full items-center gap-2 self-start bg-surface px-3 py-2.5">
+                {repeatRound ? (
+                    <>
+                        <StatusPill status={suggestion.suggestedStatus} />
+                        <span className="text-xs text-muted">
+                            {ordinal(suggestion.roundNumber)} round
+                        </span>
+                    </>
+                ) : (
+                    <>
+                        <StatusPill status={suggestion.currentStatus} />
+                        <span
+                            aria-hidden="true"
+                            className="icon-[lucide--arrow-right] size-3.5 shrink-0 text-muted"
+                        />
+                        <StatusPill status={suggestion.suggestedStatus} />
+                    </>
+                )}
+            </div>
+            <div className="flex items-center justify-end gap-2 border-t border-faint pt-3">
+                <button
+                    type="button"
+                    onClick={() => onResolve(suggestion.id, false)}
+                    className="focus-frame inline-flex h-10 cursor-pointer items-center border border-hairline bg-background px-4 text-sm text-sub transition-[background-color,color,transform] hover:bg-surface hover:text-ink active:scale-[0.96]"
+                >
+                    Dismiss
+                </button>
+                <button
+                    type="button"
+                    onClick={() => onResolve(suggestion.id, true)}
+                    className="inline-flex h-10 cursor-pointer items-center bg-accent px-4 text-sm font-medium text-background transition-[background-color,transform] hover:bg-accent-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:scale-[0.96]"
+                >
+                    Apply
+                </button>
+            </div>
+        </li>
+    );
+};
 
 const SyncNowButton = ({
     isSyncing,
