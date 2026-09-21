@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useExtensionInstallable } from "@/components/extension/use-extension-browser";
 import {
     JOB_IMPORT_CHANNEL,
     isExtensionImportResponse,
@@ -9,7 +10,8 @@ import {
     type ExtensionImportResponse,
 } from "@/lib/job-import/protocol";
 
-export type ExtensionAvailability = "checking" | "available" | "missing";
+export type ExtensionAvailability =
+    "checking" | "available" | "missing" | "unsupported";
 
 type PendingRequest = {
     resolve: (response: ExtensionImportResponse) => void;
@@ -23,6 +25,7 @@ const requestId = (): string =>
 export const useJobImportExtension = () => {
     const [availability, setAvailability] =
         useState<ExtensionAvailability>("checking");
+    const canInstall = useExtensionInstallable();
     const pending = useRef(new Map<string, PendingRequest>());
 
     useEffect(() => {
@@ -100,8 +103,13 @@ export const useJobImportExtension = () => {
         [],
     );
 
+    // The ping still goes out everywhere, so an extension that does answer is
+    // used. Only the invitation to install one is withheld.
     return {
-        availability,
+        availability:
+            availability === "missing" && !canInstall
+                ? "unsupported"
+                : availability,
         importFromUrl: (url: string) => request("import", url),
         openAndImport: (url: string) => request("open-visible", url),
     };

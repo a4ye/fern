@@ -488,7 +488,9 @@ export const AddApplicationForm = ({
     const note =
         error ??
         (rateLimited
-            ? "That job site is busy. Try again shortly or use the extension."
+            ? extension.availability === "unsupported"
+                ? "That job site is busy. Try again shortly."
+                : "That job site is busy. Try again shortly or use the extension."
             : missed
               ? "Couldn't read that link. Fill the fields in manually."
               : null);

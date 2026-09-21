@@ -45,7 +45,12 @@ const Extension = () => {
                     ))}
                 </ul>
 
-                <section className="mt-10 border-t border-hairline pt-8">
+                <p className="mt-10 hidden border-t border-hairline pt-8 text-sm leading-6 text-sub pointer-coarse:block">
+                    Extensions install on a computer. Open this page there to
+                    download and set it up.
+                </p>
+
+                <section className="mt-10 border-t border-hairline pt-8 pointer-coarse:hidden">
                     <h2 className="text-base font-semibold">Download</h2>
                     <div className="mt-4">
                         <ExtensionDownloads />
@@ -56,7 +61,7 @@ const Extension = () => {
                     </p>
                 </section>
 
-                <section className="mt-10 border-t border-hairline pt-8">
+                <section className="mt-10 border-t border-hairline pt-8 pointer-coarse:hidden">
                     <h2 className="text-base font-semibold">Install</h2>
                     <div className="mt-4">
                         <InstallSteps />
