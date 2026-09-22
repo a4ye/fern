@@ -64,15 +64,30 @@ describe("activityGridFrom", () => {
 
     test("marks the first month and later month boundaries", () => {
         const grid = activityGridFrom(volume, {
-            start: "2026-08-20",
+            start: "2026-08-10",
             end: "2026-09-03",
         });
 
         expect(grid.months).toEqual([
             { column: 0, label: "Aug" },
-            { column: 2, label: "Sep" },
+            { column: 3, label: "Sep" },
         ]);
-        expect(grid.range).toBe("Aug 20, 2026 to Sep 3, 2026");
+        expect(grid.range).toBe("Aug 10, 2026 to Sep 3, 2026");
+    });
+
+    test("drops a leading month label the next one would collide with", () => {
+        const grid = activityGridFrom(volume, trailingYearRange("2026-09-22"));
+
+        expect(grid.months[0]).toEqual({ column: 1, label: "Oct" });
+    });
+
+    test("keeps one label for a month the range opens on", () => {
+        const grid = activityGridFrom(volume, calendarYearRange(2026));
+
+        expect(grid.months[0]).toEqual({ column: 0, label: "Jan" });
+        expect(
+            grid.months.filter((month) => month.label === "Jan"),
+        ).toHaveLength(1);
     });
 
     test("describes each visible square with its count and exact date", () => {

@@ -42,6 +42,8 @@ const endOfWeek = (date: Date) => {
     return end;
 };
 
+const MIN_LABEL_COLUMNS = 3;
+
 const MONTH = new Intl.DateTimeFormat("en-US", { month: "short" });
 const DAY = new Intl.DateTimeFormat("en-US", {
     weekday: "long",
@@ -117,15 +119,20 @@ export const activityGridFrom = (
     const weeks = cells.length / 7;
     const months: MonthMark[] = [];
     for (let column = 0; column < weeks; column += 1) {
-        const dates = cells
+        const mark = cells
             .slice(column * 7, column * 7 + 7)
             .filter((cell) => cell.visible)
-            .map((cell) => dateFromInput(cell.date));
-        const mark =
-            column === 0
-                ? firstVisible
-                : dates.find((date) => date.getDate() === 1);
+            .map((cell) => dateFromInput(cell.date))
+            .find((date) => date.getDate() === 1);
         if (mark) months.push({ column, label: MONTH.format(mark) });
+    }
+
+    // A range that opens mid-month has no boundary to label, so the leading
+    // column names that month itself. A label is about twice as wide as the
+    // column it sits above, so it only earns the space when the next month
+    // begins far enough along to clear it.
+    if (months.length === 0 || months[0].column >= MIN_LABEL_COLUMNS) {
+        months.unshift({ column: 0, label: MONTH.format(firstVisible) });
     }
 
     return {

@@ -152,7 +152,7 @@ export const VolumeChart = ({ volume }: { volume: Volume }) => {
                             className="w-max min-w-full"
                         >
                             <div
-                                className="mb-1 ml-7 grid h-4 gap-0.75 text-xs text-muted"
+                                className="mb-1 ml-9 grid h-4 gap-0.75 text-xs text-muted"
                                 style={{
                                     gridTemplateColumns: `repeat(${grid.weeks}, 0.625rem)`,
                                 }}
@@ -172,7 +172,7 @@ export const VolumeChart = ({ volume }: { volume: Volume }) => {
                             <div className="flex gap-2">
                                 <div
                                     aria-hidden="true"
-                                    className="grid w-5 shrink-0 grid-rows-7 gap-0.75 text-xs leading-2.5 text-muted"
+                                    className="grid w-7 shrink-0 grid-rows-7 gap-0.75 text-xs leading-2.5 text-muted"
                                 >
                                     <span className="row-start-2">Mon</span>
                                     <span className="row-start-4">Wed</span>
