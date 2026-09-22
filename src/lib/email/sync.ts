@@ -14,7 +14,7 @@ import {
     type EmailProvider,
 } from "@/lib/email/types";
 import { candidatesFor } from "@/lib/email/candidates";
-import type { EmailMatch } from "@/lib/email/classify";
+import type { EmailMatch } from "@/lib/email/matches";
 import { MAX_EMAILS_PER_SYNC } from "@/lib/limits";
 
 const INITIAL_LOOKBACK_DAYS = 90;

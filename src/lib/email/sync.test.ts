@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, mock } from "bun:test";
 import { MAX_EMAILS_PER_SYNC } from "@/lib/limits";
 import type { UserApplication } from "@/db/email";
-import type { EmailMatch } from "./classify";
+import type { EmailMatch } from "./matches";
 import type { EmailProvider, NormalizedEmail } from "./types";
 import { EmailHistoryExpiredError } from "./types";
 

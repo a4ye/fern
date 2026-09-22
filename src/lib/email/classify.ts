@@ -1,10 +1,12 @@
 import { generateObject } from "ai";
 import { google } from "@ai-sdk/google";
 import { z } from "zod";
+import { STATUS_META } from "@/components/dashboard/data";
 import {
-    STATUS_META,
-    type ApplicationStatus,
-} from "@/components/dashboard/data";
+    usableMatches,
+    type ClassifierApplication,
+    type EmailMatch,
+} from "./matches";
 import type { NormalizedEmail } from "./types";
 
 // Calls the Google Generative AI API directly (reads GOOGLE_GENERATIVE_AI_API_KEY).
@@ -26,34 +28,6 @@ const SUGGESTABLE_STATUSES = [
     "offer_rescinded",
     "rejected",
 ] as const;
-
-// Statuses an application can genuinely hold twice. A second interview or a
-// second assessment is a real step. A second rejection or a second offer is
-// not, so a repeat of anything else is treated as another email about the step
-// the application is already on.
-const REPEATABLE_STATUSES = new Set<ApplicationStatus>([
-    "online_assessment",
-    "takehome",
-    "interviewing",
-    "onsite",
-]);
-
-export type ClassifierApplication = {
-    company: string;
-    role: string | null;
-    currentStatus: ApplicationStatus;
-};
-
-export type EmailMatch = {
-    emailIndex: number;
-    applicationIndex: number;
-    suggestedStatus: ApplicationStatus;
-    // A further round at the status the application already holds. Without this
-    // a second interview is indistinguishable from a reminder about the first.
-    newRound: boolean;
-    confidence: number;
-    reasoning: string;
-};
 
 const matchSchema = z.object({
     emailIndex: z
@@ -156,30 +130,5 @@ export const classifyEmails = async (
         prompt: buildPrompt(applications, emails),
     });
 
-    return object.matches
-        .filter(
-            (match) =>
-                match.emailIndex >= 0 &&
-                match.emailIndex < emails.length &&
-                match.applicationIndex >= 0 &&
-                match.applicationIndex < applications.length,
-        )
-        .map((match) => {
-            const suggestedStatus = match.suggestedStatus as ApplicationStatus;
-            return {
-                emailIndex: match.emailIndex,
-                applicationIndex: match.applicationIndex,
-                suggestedStatus,
-                // The model is asked for a repeat but not trusted to bound one.
-                // A claim that an application repeated a step it is not on, or
-                // repeated a step nobody repeats, is a plain status change.
-                newRound:
-                    match.newRound &&
-                    suggestedStatus ===
-                        applications[match.applicationIndex].currentStatus &&
-                    REPEATABLE_STATUSES.has(suggestedStatus),
-                confidence: match.confidence,
-                reasoning: match.reasoning,
-            };
-        });
+    return usableMatches(object.matches, applications, emails.length);
 };
