@@ -71,6 +71,11 @@ const SYSTEM_PROMPT = [
     "the email is not about a job application, do not return an entry for it.",
     "Never guess a company that is not in the APPLICATIONS list. Only propose a",
     "status that reflects what the email actually says.",
+    "When several tracked applications share the same company, prefer the one",
+    "whose role, job ID or other detail the email names. When the email names no",
+    "such detail, pick the row with the most recent applied date, and if none of",
+    "the candidates has an applied date, pick the last one listed. Do not refuse",
+    "a clear status change just because the company appears more than once.",
     "An application can reach the same status twice. When an email invites a",
     "further round at the status the application already holds, return that",
     "same status and set newRound. Set newRound only for a genuine additional",
@@ -91,7 +96,9 @@ const buildPrompt = (
             (app, index) =>
                 `[${index}] ${app.company}` +
                 (app.role ? ` — ${app.role}` : "") +
-                ` (current status: ${app.currentStatus})`,
+                ` (current status: ${app.currentStatus}` +
+                (app.appliedAt ? `, applied: ${app.appliedAt}` : "") +
+                `)`,
         )
         .join("\n");
 

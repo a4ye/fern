@@ -217,6 +217,9 @@ const findApplications = async (
         company: row.companyName,
         role: row.roleTitle,
         status: row.status as ApplicationStatus,
+        appliedAt: row.appliedAt
+            ? row.appliedAt.toISOString().slice(0, 10)
+            : null,
     }));
 };
 

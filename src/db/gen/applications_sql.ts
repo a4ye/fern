@@ -333,6 +333,7 @@ select
     a.company_name,
     a.role_title,
     a.status,
+    a.applied_at,
     l.id as list_id,
     l.name as list_name
 from applications a
@@ -350,6 +351,7 @@ export interface ApplicationsForUserRow {
     companyName: string;
     roleTitle: string | null;
     status: string;
+    appliedAt: Date | null;
     listId: string;
     listName: string;
 }
@@ -366,8 +368,9 @@ export async function applicationsForUser(client: Client, args: ApplicationsForU
             companyName: row[1],
             roleTitle: row[2],
             status: row[3],
-            listId: row[4],
-            listName: row[5]
+            appliedAt: row[4],
+            listId: row[5],
+            listName: row[6]
         };
     });
 }

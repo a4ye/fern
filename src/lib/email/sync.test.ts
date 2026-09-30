@@ -27,6 +27,7 @@ const getApplicationsForUser = mock(async (): Promise<UserApplication[]> => [
         company: "Acme",
         role: "Engineer",
         status: "applied",
+        appliedAt: null,
     },
 ]);
 const completeEmailSyncMessages = mock(
@@ -284,6 +285,7 @@ describe("syncEmailInbox", () => {
                 company: "Acme",
                 role: "Engineer",
                 status: "interviewing",
+                appliedAt: null,
             },
         ]);
         pendingBatches = [["m-1"]];
@@ -312,6 +314,7 @@ describe("syncEmailInbox", () => {
                 company: "Acme",
                 role: "Engineer",
                 status: "interviewing",
+                appliedAt: null,
             },
         ]);
         pendingBatches = [["m-1"]];

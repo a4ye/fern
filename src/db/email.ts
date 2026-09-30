@@ -17,6 +17,10 @@ export type UserApplication = {
     company: string;
     role: string | null;
     status: ApplicationStatus;
+    // The date the row moved into "applied", used as a tie-breaker when several
+    // applications for the same company would otherwise be indistinguishable to
+    // the classifier.
+    appliedAt: string | null;
 };
 
 export const getApplicationsForUser = async (
@@ -28,6 +32,9 @@ export const getApplicationsForUser = async (
         company: row.companyName,
         role: row.roleTitle,
         status: row.status as ApplicationStatus,
+        appliedAt: row.appliedAt
+            ? row.appliedAt.toISOString().slice(0, 10)
+            : null,
     }));
 };
 

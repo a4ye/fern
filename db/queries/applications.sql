@@ -190,6 +190,7 @@ select
     a.company_name,
     a.role_title,
     a.status,
+    a.applied_at,
     l.id as list_id,
     l.name as list_name
 from applications a

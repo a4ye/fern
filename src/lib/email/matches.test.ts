@@ -11,6 +11,7 @@ const application = (
     company: "Acme",
     role: "Engineer",
     currentStatus,
+    appliedAt: null,
 });
 
 const raw = (overrides: Partial<RawMatch> = {}): RawMatch => ({

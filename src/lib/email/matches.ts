@@ -4,6 +4,9 @@ export type ClassifierApplication = {
     company: string;
     role: string | null;
     currentStatus: ApplicationStatus;
+    // ISO date. When several rows for the same company are otherwise
+    // indistinguishable, the model is told to pick the most recent one.
+    appliedAt: string | null;
 };
 
 export type EmailMatch = {

@@ -108,6 +108,7 @@ export const syncEmailInbox = async (
                     company: application.company,
                     role: application.role,
                     currentStatus: application.status,
+                    appliedAt: application.appliedAt,
                 })),
                 candidates.emails,
             );
