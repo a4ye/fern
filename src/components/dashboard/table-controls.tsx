@@ -107,15 +107,34 @@ type Placement = { left: number; width: number } & (
 // otherwise clip the popup on the last rows. A popup that grows with its
 // contents leaves `size` out and takes the height it is given back; one of a
 // fixed size passes its own and uses only the side it was put on.
+//
+// A centred modal dialog animates on `translate`, which makes it the containing
+// block for the fixed popup inside it and clips the popup at its own bounds. So
+// the space above and below the trigger is read against the host's box rather
+// than the viewport when a dialog is hosting; without this the popup opens
+// below into space the modal does not have and the tail of the list disappears.
 const placeFrom = (
     rect: DOMRect,
+    host: HTMLElement,
     size?: { width: number; height: number },
 ): { style: Placement; maxHeight: number } => {
     const width = size?.width ?? Math.max(rect.width, POPUP_MIN_WIDTH);
     const wanted = size?.height ?? POPUP_MAX;
-    const below = window.innerHeight - rect.bottom - GAP - EDGE;
-    const above = rect.top - GAP - EDGE;
-    const left = Math.min(rect.left, window.innerWidth - width - EDGE);
+    const bounds =
+        host === document.body
+            ? {
+                  top: 0,
+                  bottom: window.innerHeight,
+                  left: 0,
+                  right: window.innerWidth,
+              }
+            : host.getBoundingClientRect();
+    const below = bounds.bottom - rect.bottom - GAP - EDGE;
+    const above = rect.top - bounds.top - GAP - EDGE;
+    const left = Math.max(
+        bounds.left + EDGE,
+        Math.min(rect.left, bounds.right - width - EDGE),
+    );
 
     if (below < Math.min(wanted, above)) {
         return {
@@ -236,7 +255,7 @@ export const CellSelect = <T,>({
         const trigger = triggerRef.current;
         if (!trigger) return;
         const host = popupHost(trigger);
-        const placement = placeFrom(trigger.getBoundingClientRect());
+        const placement = placeFrom(trigger.getBoundingClientRect(), host);
         setPlaced({
             ...placement,
             style: within(placement.style, host),
@@ -582,7 +601,7 @@ export const DateField = ({
         const trigger = triggerRef.current;
         if (!trigger) return;
         const host = popupHost(trigger);
-        const placement = placeFrom(trigger.getBoundingClientRect(), {
+        const placement = placeFrom(trigger.getBoundingClientRect(), host, {
             width: CALENDAR_WIDTH,
             height: CALENDAR_HEIGHT,
         });
