@@ -1,4 +1,4 @@
-import type { ApplicationFields } from "@/components/dashboard/application-form";
+import type { ApplicationFields } from "@/components/dashboard/application-fields";
 import type { ScrapedPosting } from "@/lib/job-import/shared";
 import type { ExchangeRates } from "@/lib/exchange";
 import { currencyForCountry, parsePay, payAmountInput } from "@/lib/pay";

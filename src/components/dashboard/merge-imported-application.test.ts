@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
     EMPTY_FIELDS,
     type ApplicationFields,
-} from "@/components/dashboard/application-form";
+} from "@/components/dashboard/application-fields";
 import { mergeImportedApplication } from "@/components/dashboard/merge-imported-application";
 import type { ScrapedPosting } from "@/lib/job-import/shared";
 

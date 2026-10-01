@@ -17,10 +17,12 @@ import {
 import {
     PAY_PERIODS,
     payPeriodLabel,
-    type Arrangement,
     type PayPeriod,
 } from "@/components/dashboard/data";
-import { DEFAULT_CURRENCY } from "@/lib/pay";
+import {
+    EMPTY_FIELDS,
+    type ApplicationFields,
+} from "@/components/dashboard/application-fields";
 import { searchRoleTitles } from "@/lib/roles";
 import {
     AMOUNT_INPUT_MAX,
@@ -31,40 +33,11 @@ import {
     URL_MAX,
 } from "@/lib/constraints";
 
-// Every column an application carries, held as text so a half-typed amount
-// survives a re-render. The create drawer and the detail panel edit the same
-// set, which is why the fields below are shared between them.
-export type ApplicationFields = {
-    company: string;
-    role: string;
-    location: string;
-    arrangement: Arrangement | null;
-    appliedAt: string;
-    url: string;
-    payMin: string;
-    payMax: string;
-    payCurrency: string;
-    payPeriod: PayPeriod | null;
-    bonus: string;
-    payNote: string;
-    notes: string;
-};
-
-export const EMPTY_FIELDS: ApplicationFields = {
-    company: "",
-    role: "",
-    location: "",
-    arrangement: null,
-    appliedAt: "",
-    url: "",
-    payMin: "",
-    payMax: "",
-    payCurrency: DEFAULT_CURRENCY,
-    payPeriod: null,
-    bonus: "",
-    payNote: "",
-    notes: "",
-};
+// The create drawer and the detail panel edit the same field set, so callers
+// pull the shape and its blank value from a common module below and this file
+// re-exports them so existing imports keep working.
+export { EMPTY_FIELDS };
+export type { ApplicationFields };
 
 export type SetField = <K extends keyof ApplicationFields>(
     key: K,
