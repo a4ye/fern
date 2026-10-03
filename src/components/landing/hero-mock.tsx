@@ -67,11 +67,15 @@ export const HeroMock = ({
 
         <div className="flex h-11 items-center gap-2.5 border-b border-hairline bg-surface px-4">
             <span className="icon-[lucide--link] size-3.5 shrink-0 text-muted" />
-            <span className="flex min-w-0 items-center">
-                <span className="lp lp-url inline-block overflow-hidden text-sm whitespace-nowrap text-ink">
-                    jobs.ashbyhq.com/ramp/frontend-engineer
+            {/* Scrolls like a real input: once the URL outgrows the field,
+                its start slides off the left edge so the caret stays visible. */}
+            <span className="flex min-w-0 flex-1 justify-end overflow-hidden">
+                <span className="flex shrink-0 grow items-center">
+                    <span className="lp lp-url inline-block overflow-hidden text-sm whitespace-nowrap text-ink">
+                        jobs.ashbyhq.com/ramp/frontend-engineer
+                    </span>
+                    <span className="lp-caret ml-px h-4 w-px shrink-0 bg-accent" />
                 </span>
-                <span className="lp-caret ml-px h-4 w-px shrink-0 bg-accent" />
             </span>
         </div>
 

@@ -1,13 +1,12 @@
 import Link from "next/link";
 import { APP_NAME } from "@/lib/site";
-import { CARET_PATH, SLASH_PATH } from "@/components/brand/logo";
+import { SLASH_PATH } from "@/components/brand/logo";
 import { AgentPanel } from "@/components/landing/agent-panel";
 import { AppliedMap } from "@/components/landing/applied-map";
 import { CapturePanel } from "@/components/landing/capture-panel";
 import { ChangeLog } from "@/components/landing/change-log";
 import { HeroMock } from "@/components/landing/hero-mock";
 import { ImportMap } from "@/components/landing/import-map";
-import { ParallaxLayer } from "@/components/landing/parallax-layer";
 import { Pipeline } from "@/components/landing/pipeline";
 import { Sankey } from "@/components/landing/sankey";
 import { SharePanel } from "@/components/landing/share-panel";
@@ -17,6 +16,71 @@ import { SpreadsheetArt } from "@/components/landing/spreadsheet-art";
 import { SystemDiagram } from "@/components/landing/system-diagram";
 import { Timeline } from "@/components/landing/timeline";
 import { WordFill } from "@/components/landing/word-fill";
+import { SwayingFrond } from "@/components/landing/plants/swaying-frond";
+import { SwayingVines } from "@/components/landing/plants/swaying-vines";
+import { SwayingLeaf } from "@/components/landing/plants/swaying-leaf";
+import { SwayingIvy } from "@/components/landing/plants/swaying-ivy";
+import { GreenhouseBackdrop } from "@/components/landing/plants/greenhouse-backdrop";
+import { TreeRings } from "@/components/landing/plants/tree-rings";
+import {
+    ginkgoPaths,
+    monsteraPaths,
+    viewBoxOf,
+} from "@/components/landing/plants/plants";
+
+// One plant per chosen section, each a different one, so no two sit close
+// together and no section carries more than one. Every piece is fixed to
+// something: it grows from a section edge, hangs from one, or grows on one of
+// the product panels, and nothing floats loose.
+const VINES = [
+    { length: 200, leaves: 7, x: 0 },
+    { length: 130, leaves: 5, phase: 2, x: 34 },
+];
+// Below lg the heading starts 64px down and runs the full width, so the vines
+// there are short enough to hang in the top padding.
+const SHORT_VINES = [
+    { length: 56, leaves: 3, leafSize: 24, x: 0 },
+    { length: 40, leaves: 2, phase: 2, leafSize: 22, x: 22 },
+];
+const MONSTERA = { length: 230, stalk: 130, dir: { x: -1, y: -0.1 } };
+const MONSTERA_BOX = viewBoxOf(monsteraPaths(MONSTERA).fill, 2);
+// The agent panel is 268px tall over 80px of section padding, so the ivy's
+// stem starts on the section floor.
+const IVY = { rise: 348, run: 240 };
+// Below lg the panel's own text fills it edge to edge, so the ivy there only
+// reaches in along the top edge from the screen's side, with nothing hanging
+// over the panel.
+const SHORT_IVY = { rise: 0, run: 150, leafSize: 26, overhang: false };
+const RINGS = { radius: 200 };
+
+// A ginkgo leaf slipped under the map's top edge, toward the right, so its
+// fan rises into the empty space across from the short heading. The stalk's
+// foot sits 40px inside the map, hidden, three quarters of the way across.
+const GINKGO = { radius: 100, angle: 14 };
+const GINKGO_BOX = viewBoxOf(ginkgoPaths(GINKGO).fill, 4)
+    .split(" ")
+    .map(Number);
+// Below lg it shrinks about that foot and moves further right, so the fan
+// stays clear of the paragraph above the map.
+const GINKGO_PLACE = {
+    left: `calc(var(--leaf-x) + ${GINKGO_BOX[0]}px)`,
+    top: 40 + GINKGO_BOX[1],
+    width: GINKGO_BOX[2],
+    height: GINKGO_BOX[3],
+    transformOrigin: `${-GINKGO_BOX[0]}px ${-GINKGO_BOX[1]}px`,
+};
+
+// Art sits behind a section's content: the section isolates itself and the
+// art takes a negative z-index. Sections clip only top and bottom, so art may
+// run past the frame's side borders into the page margins.
+const ART = "pointer-events-none absolute -z-10";
+// Plants that grow on a panel sit in front of it. Each is drawn twice, first
+// in the page colour, so the panel's border does not show through the leaves.
+const ON_PANEL = "pointer-events-none absolute z-10";
+// The desktop layout puts copy and visuals side by side from lg up; below lg
+// they stack, so some pieces have a second, smaller arrangement there.
+const WIDE = "hidden lg:block";
+const NARROW = "lg:hidden";
 
 // Email sync access is temporarily limited, so its promotional content stays
 // off the public landing page until the wider rollout resumes.
@@ -114,8 +178,17 @@ const Home = () => {
             <SiteHeader />
 
             <div className="mx-auto w-full max-w-6xl flex-1 border-x border-hairline">
-                <section className="px-6 pt-16 pb-20 [background:linear-gradient(165deg,var(--color-surface)_0%,var(--color-background)_55%)] sm:px-10 lg:pt-20">
-                    <div className="grid items-center gap-16 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16">
+                <section className="relative isolate overflow-y-clip px-6 pt-16 pb-20 [background:linear-gradient(165deg,var(--color-surface)_0%,var(--color-background)_55%)] sm:px-10 lg:pt-20">
+                    {/* Drawn in section pixels at the full desktop width. The
+                        frond rises in the gap beside the copy, arches over
+                        the mock, and its tip runs past the right border. */}
+                    <SwayingFrond
+                        viewBox="0 0 1152 552"
+                        preserveAspectRatio="xMidYMax slice"
+                        placement="translate(492 572)"
+                        className={`${ART} ${WIDE} inset-0 h-full w-full overflow-visible`}
+                    />
+                    <div className="grid grid-cols-1 items-center gap-16 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16">
                         <div>
                             <h1 className="text-4xl font-semibold tracking-tight text-balance sm:text-5xl lg:text-6xl">
                                 A job tracker that fills itself in.
@@ -149,25 +222,16 @@ const Home = () => {
                             </div>
                         </div>
                         <div className="relative">
-                            <ParallaxLayer
-                                strength={6}
-                                className="pointer-events-none absolute inset-0"
-                            >
-                                <div
-                                    aria-hidden="true"
-                                    className="absolute -inset-x-10 -top-12 -bottom-8 [background-image:radial-gradient(var(--color-tile-border)_1px,transparent_1px)] [background-size:18px_18px] [mask-image:radial-gradient(ellipse_60%_60%_at_center,black,transparent)]"
-                                />
-                                <svg
-                                    aria-hidden="true"
-                                    viewBox="8 10 40 30"
-                                    className="absolute -top-13 right-8 h-40 w-auto"
-                                >
-                                    <path
-                                        d={CARET_PATH}
-                                        className="fill-accent-tint-soft"
-                                    />
-                                </svg>
-                            </ParallaxLayer>
+                            {/* Below lg the hero stacks, so the same arch is
+                                drawn against the mock: in the mock's own
+                                pixels at its desktop size, 588 by 345, scaled
+                                with the mock's width, up to 560px so the
+                                pinnae stay below the buttons. */}
+                            <SwayingFrond
+                                viewBox="0 0 588 345"
+                                placement="translate(-32 492)"
+                                className={`${ART} ${NARROW} top-0 left-0 aspect-[588/345] w-full overflow-visible sm:max-w-140`}
+                            />
                             <div
                                 aria-hidden="true"
                                 className="absolute inset-0 translate-x-3 translate-y-3 border border-hairline bg-accent-tint/40"
@@ -267,7 +331,18 @@ const Home = () => {
                 </section>
 
                 <SectionRule number={nextSection()} />
-                <section className="px-6 py-16 sm:px-10 lg:py-20">
+                <section className="relative isolate overflow-y-clip px-6 py-16 sm:px-10 lg:py-20">
+                    {/* Two vines hang from the rule above the section. */}
+                    <SwayingVines
+                        vines={SHORT_VINES}
+                        viewBox="-24 0 72 84"
+                        className={`${ART} ${NARROW} top-0 right-4 h-21 w-18 overflow-visible`}
+                    />
+                    <SwayingVines
+                        vines={VINES}
+                        viewBox="-40 0 120 230"
+                        className={`${ART} ${WIDE} top-0 right-32 h-60 w-auto overflow-visible`}
+                    />
                     <h2 className="max-w-xl text-3xl font-semibold tracking-tight text-balance">
                         Bring the old spreadsheet with you.
                     </h2>
@@ -281,13 +356,16 @@ const Home = () => {
                 </section>
 
                 <div className="relative overflow-hidden border-t border-hairline bg-ink px-6 py-24 sm:px-10 lg:py-32">
-                    <svg
-                        aria-hidden="true"
-                        viewBox="8 10 40 30"
-                        className="absolute -top-8 -right-6 h-56 w-auto"
-                    >
-                        <path d={CARET_PATH} className="fill-accent-deep/25" />
-                    </svg>
+                    {/* A monstera leaf reaching in from the right edge, its
+                        midrib drawn in the band's own colour. */}
+                    <SwayingLeaf
+                        leaf={{ kind: "monstera", options: MONSTERA }}
+                        viewBox={MONSTERA_BOX}
+                        className="absolute right-0 -bottom-8 h-28 w-auto overflow-visible sm:-bottom-6 sm:h-48 lg:-bottom-10 lg:h-60"
+                        fill="fill-accent-deep opacity-60"
+                        veins="stroke-ink"
+                        veinWidth={2}
+                    />
                     <WordFill
                         text="Forty applications. Six interviews. One offer. The details won't fit in your head, so the tracker holds them."
                         className="relative max-w-4xl text-3xl leading-snug font-semibold tracking-tight sm:text-4xl lg:text-5xl"
@@ -355,20 +433,30 @@ const Home = () => {
                 </section>
 
                 <SectionRule number={nextSection()} />
-                <section className="bg-surface px-6 py-16 sm:px-10 lg:py-20">
+                <section className="relative isolate overflow-y-clip bg-surface px-6 py-16 sm:px-10 lg:py-20">
                     <h2 className="max-w-xl text-3xl font-semibold tracking-tight text-balance">
                         Where you applied.
                     </h2>
                     <p className="mt-4 max-w-md text-sm leading-6 text-sub">
                         Each dot is a city you applied to.
                     </p>
-                    <div className="mt-12">
+                    <div className="relative mt-12">
+                        <SwayingLeaf
+                            leaf={{ kind: "ginkgo", options: GINKGO }}
+                            viewBox={GINKGO_BOX.join(" ")}
+                            style={GINKGO_PLACE}
+                            className={`${ART} overflow-visible [--leaf-x:88%] max-lg:scale-55 lg:[--leaf-x:74%]`}
+                            fill="fill-accent opacity-25"
+                            veins="stroke-background"
+                            veinWidth={1}
+                            hairlineVeins
+                        />
                         <AppliedMap />
                     </div>
                 </section>
 
                 <SectionRule number={nextSection()} />
-                <section className="px-6 py-16 sm:px-10 lg:py-20">
+                <section className="relative isolate overflow-y-clip px-6 py-16 sm:px-10 lg:py-20">
                     <h2 className="max-w-xl text-3xl font-semibold tracking-tight text-balance">
                         Nothing you change is lost.
                     </h2>
@@ -377,7 +465,15 @@ const Home = () => {
                         undone. You can also revert a list to any point in its
                         history.
                     </p>
-                    <div className="mt-12">
+                    {/* Tree rings, a tree's own history, spread out from behind
+                        the history panel's top-right corner. The panel is
+                        opaque, so only the rings outside it show. */}
+                    <div className="relative mt-12">
+                        <TreeRings
+                            options={RINGS}
+                            viewBox="-230 -230 460 460"
+                            className={`${ART} top-0 right-0 h-36 w-36 translate-x-1/2 -translate-y-1/2 overflow-visible text-accent/50 lg:h-115 lg:w-115 lg:text-accent/60`}
+                        />
                         <ChangeLog />
                     </div>
                 </section>
@@ -397,7 +493,7 @@ const Home = () => {
                 </section>
 
                 <SectionRule number={nextSection()} />
-                <section className="px-6 py-16 sm:px-10 lg:py-20">
+                <section className="relative isolate overflow-y-clip px-6 py-16 sm:px-10 lg:py-20">
                     <h2 className="max-w-xl text-3xl font-semibold tracking-tight text-balance">
                         Let an agent do the work.
                     </h2>
@@ -411,7 +507,20 @@ const Home = () => {
                     >
                         How to connect
                     </Link>
-                    <div className="mt-12">
+                    {/* Ivy climbs the panel's right side from the section floor,
+                        turns over its top-right corner, and creeps along the
+                        top edge. The panel corner is the ivy's (0, 0). */}
+                    <div className="relative mt-12">
+                        <SwayingIvy
+                            options={SHORT_IVY}
+                            viewBox="-172 -44 232 72"
+                            className={`${ON_PANEL} ${NARROW} -top-11 -right-15 h-18 w-58 overflow-visible`}
+                        />
+                        <SwayingIvy
+                            options={IVY}
+                            viewBox="-280 -48 340 400"
+                            className={`${ON_PANEL} ${WIDE} -top-12 -right-15 h-100 w-85 overflow-visible`}
+                        />
                         <AgentPanel />
                     </div>
                 </section>
@@ -433,24 +542,7 @@ const Home = () => {
                 </section>
 
                 <section className="relative overflow-hidden border-t border-hairline bg-ink">
-                    <div
-                        aria-hidden="true"
-                        className="absolute inset-0 [background:radial-gradient(70%_90%_at_50%_100%,var(--color-accent-deep),transparent)] opacity-30"
-                    />
-                    <svg
-                        aria-hidden="true"
-                        viewBox="8 10 40 30"
-                        className="absolute -bottom-10 -left-12 h-64 w-auto"
-                    >
-                        <path d={CARET_PATH} className="fill-accent-deep/40" />
-                    </svg>
-                    <svg
-                        aria-hidden="true"
-                        viewBox="56 10 24 30"
-                        className="absolute -top-12 -right-8 h-64 w-auto"
-                    >
-                        <path d={SLASH_PATH} className="fill-gold/30" />
-                    </svg>
+                    <GreenhouseBackdrop />
                     <div className="relative px-6 py-24 text-center lg:py-32">
                         <h2 className="text-4xl font-semibold tracking-tight text-balance text-background sm:text-5xl">
                             Retire the spreadsheet.
