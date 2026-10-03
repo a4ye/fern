@@ -54,9 +54,9 @@ export const SharePanel = () => (
                 <div className="mt-2 flex items-center justify-between gap-4">
                     <span className="flex items-center gap-2 text-sm text-sub">
                         <span className="flex size-5 shrink-0 items-center justify-center border border-tile-border bg-background text-xs font-medium text-accent">
-                            A
+                            J
                         </span>
-                        Aaron
+                        John
                     </span>
                     <span className="shrink-0 text-xs text-muted">
                         Edited Jun 12
