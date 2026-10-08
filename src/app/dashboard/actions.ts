@@ -41,6 +41,7 @@ import type {
     ListStatus,
     PayPeriod,
     ListInsightsData,
+    Ranking,
 } from "@/components/dashboard/data";
 import {
     EMPTY_POSTING,
@@ -462,6 +463,7 @@ export type ApplicationDraft = {
     status: ApplicationStatus;
     location: string | null;
     arrangement: Arrangement | null;
+    ranking: Ranking | null;
     pay: string | null;
     appliedAt: string | null;
     url: string | null;
@@ -479,6 +481,7 @@ export type ApplicationDetailDraft = {
     role: string | null;
     location: string | null;
     arrangement: Arrangement | null;
+    ranking: Ranking | null;
     appliedAt: string | null;
     url: string | null;
     payMin: string | null;

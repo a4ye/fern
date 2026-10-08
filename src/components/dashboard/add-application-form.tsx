@@ -105,6 +105,7 @@ export const AddApplicationForm = ({
     cleanLinks,
     employerLinks,
     tidyTitles,
+    rankings,
     rates,
 }: {
     listId: string;
@@ -112,6 +113,7 @@ export const AddApplicationForm = ({
     cleanLinks: boolean;
     employerLinks: boolean;
     tidyTitles: boolean;
+    rankings: boolean;
     rates: ExchangeRates;
 }) => {
     const dismiss = useOverlayDismiss();
@@ -733,6 +735,7 @@ export const AddApplicationForm = ({
                     disabled={fetching}
                     companyRef={companyRef}
                     omitLink
+                    rankings={rankings}
                     roleNote={
                         tidyRole && (
                             <div className="bg-surface px-3 py-2.5 shadow-sm">

@@ -6,8 +6,8 @@
 with created as (
     insert into applications (
         list_id, position, company_name, role_title, status, url, location,
-        arrangement, applied_at, pay_min, pay_max, pay_currency, pay_period,
-        bonus_amount, pay_note, notes, created_by_history_action_id
+        arrangement, ranking, applied_at, pay_min, pay_max, pay_currency,
+        pay_period, bonus_amount, pay_note, notes, created_by_history_action_id
     )
     select
         l.id,
@@ -25,6 +25,7 @@ with created as (
         sqlc.narg('url'),
         sqlc.narg('location'),
         sqlc.narg('arrangement')::work_arrangement,
+        sqlc.narg('ranking')::waterlooworks_ranking,
         coalesce(
             sqlc.narg('applied_at')::date,
             case
@@ -154,6 +155,7 @@ select
     a.url,
     a.location,
     a.arrangement,
+    a.ranking,
     a.pay_min,
     a.pay_max,
     a.pay_currency,
@@ -230,6 +232,7 @@ with locked as materialized (
         input.value ->> 'url' as url,
         input.value ->> 'location' as location,
         input.value ->> 'arrangement' as arrangement,
+        input.value ->> 'ranking' as ranking,
         input.value ->> 'applied_at' as applied_at,
         (input.value ->> 'pay_typed')::boolean as pay_typed,
         input.value ->> 'pay_min' as pay_min,
@@ -254,6 +257,7 @@ updated as (
         url = row.url,
         location = row.location,
         arrangement = row.arrangement::work_arrangement,
+        ranking = row.ranking::waterlooworks_ranking,
         applied_at = case
             when a.applied_at is null
                 and a.status <> 'applied'
@@ -352,6 +356,7 @@ set
     url = sqlc.narg('url'),
     location = sqlc.narg('location'),
     arrangement = sqlc.narg('arrangement')::work_arrangement,
+    ranking = sqlc.narg('ranking')::waterlooworks_ranking,
     applied_at = sqlc.narg('applied_at')::date,
     pay_min = sqlc.narg('pay_min')::numeric,
     pay_max = sqlc.narg('pay_max')::numeric,
@@ -424,6 +429,18 @@ where a.list_id = l.id
     and a.arrangement is distinct from
         sqlc.narg('arrangement')::work_arrangement;
 
+-- A WaterlooWorks result across a selection, which is how a cycle's results
+-- arrive: most of them at once, and most of those the same.
+-- name: SetApplicationsRanking :exec
+update applications a
+set ranking = sqlc.narg('ranking')::waterlooworks_ranking
+from lists l
+where a.list_id = l.id
+    and a.id = any(@application_ids::uuid[])
+    and l.user_id = @user_id
+    and a.ranking is distinct from
+        sqlc.narg('ranking')::waterlooworks_ranking;
+
 -- The day an application was sent is the day whatever reported it is dated,
 -- not the day the report was read. Bounded above by today, since the date can
 -- come from a clock that is not ours and no application was sent in future.
@@ -461,6 +478,7 @@ select
     a.url,
     a.location,
     a.arrangement,
+    a.ranking,
     a.applied_at,
     a.pay_min,
     a.pay_max,
@@ -510,6 +528,7 @@ select
     a.url,
     a.location,
     a.arrangement,
+    a.ranking,
     a.applied_at,
     a.pay_min,
     a.pay_max,

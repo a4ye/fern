@@ -80,6 +80,7 @@ export const SharedList = ({
             <SharedTable
                 name={list.name}
                 applications={list.applications}
+                rankings={list.rankings}
                 rates={rates}
             />
         </div>

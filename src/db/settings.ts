@@ -7,6 +7,7 @@ export type UserSettings = {
     cleanLinks: boolean;
     employerLinks: boolean;
     tidyTitles: boolean;
+    waterlooRankings: boolean;
 };
 
 // A user who has never changed a preference has no row, so a read falls back to
@@ -16,6 +17,7 @@ const DEFAULT_SETTINGS: UserSettings = {
     cleanLinks: true,
     employerLinks: false,
     tidyTitles: false,
+    waterlooRankings: false,
 };
 
 export const getUserSettings = async (
@@ -28,6 +30,7 @@ export const getUserSettings = async (
               cleanLinks: row.cleanLinks,
               employerLinks: row.employerLinks,
               tidyTitles: row.tidyTitles,
+              waterlooRankings: row.waterlooRankings,
           }
         : DEFAULT_SETTINGS;
 };
@@ -42,6 +45,7 @@ export const saveUserSettings = async (
         cleanLinks: settings.cleanLinks,
         employerLinks: settings.employerLinks,
         tidyTitles: settings.tidyTitles,
+        waterlooRankings: settings.waterlooRankings,
     });
 };
 

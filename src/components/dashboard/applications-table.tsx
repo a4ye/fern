@@ -23,11 +23,10 @@ import {
 } from "@/app/dashboard/actions";
 import { LocalDateTime } from "@/components/dashboard/local-date-time";
 import {
-    APPLICATION_COLUMNS as COLUMNS,
     ApplicationsHeaderRow,
     ROW_HEIGHT,
-    ROW_MIN_WIDTH,
     ROW_REM,
+    applicationGrid,
 } from "@/components/dashboard/applications-columns";
 import { useRowWindow } from "@/components/dashboard/use-row-window";
 import { ApplicationsFilterMenu } from "@/components/dashboard/applications-filter";
@@ -51,6 +50,7 @@ import {
     DateField,
     STATUS_OPTIONS,
     ARRANGEMENT_OPTIONS,
+    RANKING_OPTIONS,
     SearchField,
     cellFieldClass,
     checkboxClass,
@@ -77,11 +77,13 @@ import {
     arrangementLabel,
     browserTimeZone,
     formatDay,
+    rankingLabel,
     todayDateInput,
     type ApplicationExtras,
     type ApplicationRow,
     type ApplicationStatus,
     type Arrangement,
+    type Ranking,
 } from "@/components/dashboard/data";
 import { fileSlug, saveBlob } from "@/lib/download";
 import type { ExchangeRates } from "@/lib/exchange";
@@ -142,6 +144,7 @@ type Draft = {
     company: string;
     role: string;
     status: ApplicationStatus;
+    ranking: Ranking | null;
     location: string;
     arrangement: Arrangement | null;
     pay: string;
@@ -153,6 +156,7 @@ const draftOf = (app: ApplicationRow): Draft => ({
     company: app.company,
     role: app.role ?? "",
     status: app.status,
+    ranking: app.ranking,
     location: app.location ?? "",
     arrangement: app.arrangement,
     pay: app.payNote ?? app.pay ?? "",
@@ -164,6 +168,7 @@ const asDraftInput = (draft: Draft): ApplicationDraft => ({
     company: draft.company,
     role: draft.role,
     status: draft.status,
+    ranking: draft.ranking,
     location: draft.location,
     arrangement: draft.arrangement,
     pay: draft.pay,
@@ -200,9 +205,11 @@ const Cell = ({
 // holds beyond these is edited in the detail panel.
 const RowFields = ({
     draft,
+    rankings,
     onChange,
 }: {
     draft: Draft;
+    rankings: boolean;
     onChange: <K extends keyof Draft>(key: K, value: Draft[K]) => void;
 }) => (
     <>
@@ -233,6 +240,14 @@ const RowFields = ({
             className="pl-2"
             searchable
         />
+        {rankings && (
+            <CellSelect
+                label="Ranking"
+                value={draft.ranking}
+                options={RANKING_OPTIONS}
+                onChange={(ranking) => onChange("ranking", ranking)}
+            />
+        )}
         <input
             value={draft.location}
             onChange={(event) => onChange("location", event.target.value)}
@@ -276,6 +291,8 @@ const REVEAL_CLASS =
 
 const ReadRow = ({
     app,
+    columns,
+    rankings,
     convertedPay,
     selected,
     opening,
@@ -286,6 +303,8 @@ const ReadRow = ({
     onDelete,
 }: {
     app: ApplicationRow;
+    columns: string;
+    rankings: boolean;
     convertedPay: string | null;
     selected: boolean;
     opening: boolean;
@@ -301,7 +320,7 @@ const ReadRow = ({
     const meta = STATUS_META[app.status];
     return (
         <li
-            className={`${COLUMNS} ${ROW_HEIGHT} group border-b border-faint px-5 text-xs transition-colors last:border-b-0 ${selected ? "bg-accent-tint-soft" : "hover:bg-surface"}`}
+            className={`${columns} ${ROW_HEIGHT} group border-b border-faint px-5 text-xs transition-colors last:border-b-0 ${selected ? "bg-accent-tint-soft" : "hover:bg-surface"}`}
         >
             {viewing ? (
                 <span />
@@ -327,6 +346,9 @@ const ReadRow = ({
                     {meta.label}
                 </span>
             </span>
+            {rankings && (
+                <Cell value={app.ranking ? rankingLabel(app.ranking) : null} />
+            )}
             <Cell value={app.location} />
             <Cell
                 value={
@@ -415,20 +437,24 @@ const ReadRow = ({
 
 const BulkRow = ({
     draft,
+    columns,
+    rankings,
     updated,
     updatedAt,
     onChange,
 }: {
     draft: Draft;
+    columns: string;
+    rankings: boolean;
     updated: string;
     updatedAt: string;
     onChange: <K extends keyof Draft>(key: K, value: Draft[K]) => void;
 }) => (
     <li
-        className={`${COLUMNS} ${ROW_HEIGHT} border-b border-faint px-5 text-xs last:border-b-0`}
+        className={`${columns} ${ROW_HEIGHT} border-b border-faint px-5 text-xs last:border-b-0`}
     >
         <span />
-        <RowFields draft={draft} onChange={onChange} />
+        <RowFields draft={draft} rankings={rankings} onChange={onChange} />
         {/* Nothing here is editable, but the column keeps its reading so the
                 row does not trail off into empty space. */}
         <LocalDateTime
@@ -442,17 +468,19 @@ const BulkRow = ({
 
 const DeleteRow = ({
     label,
+    minWidth,
     onConfirm,
     onPermanent,
     onCancel,
 }: {
     label: string;
+    minWidth: string;
     onConfirm: () => void;
     onPermanent: () => void;
     onCancel: () => void;
 }) => (
     <li
-        className={`${ROW_HEIGHT} ${ROW_MIN_WIDTH} flex items-center gap-4 border-b border-faint bg-surface px-5 last:border-b-0`}
+        className={`${ROW_HEIGHT} ${minWidth} flex items-center gap-4 border-b border-faint bg-surface px-5 last:border-b-0`}
     >
         <p className="min-w-0 flex-1 truncate text-xs text-ink">
             Delete {label}? You can undo this from History.
@@ -547,6 +575,7 @@ export const ApplicationsTable = ({
     cleanLinks,
     employerLinks,
     tidyTitles,
+    rankings,
     rates,
 }: {
     listId: string;
@@ -556,9 +585,12 @@ export const ApplicationsTable = ({
     cleanLinks: boolean;
     employerLinks: boolean;
     tidyTitles: boolean;
+    // Whether the account tracks WaterlooWorks rankings, which adds a column.
+    rankings: boolean;
     rates: ExchangeRates;
 }) => {
     const [, startMutation] = useTransition();
+    const grid = applicationGrid(rankings);
     const viewing = useViewing();
     // The panel opens on more than the table carries, so the row it is opened
     // over travels with the notes and status trail fetched for it. Both arrive
@@ -666,8 +698,9 @@ export const ApplicationsTable = ({
                 sort,
                 rates,
                 convertTo,
+                rankings,
             ),
-        [optimisticApplications, filters, sort, rates, convertTo],
+        [optimisticApplications, filters, sort, rates, convertTo, rankings],
     );
     const filtered = isFiltered(filters);
     const rowWindow = useRowWindow(
@@ -837,7 +870,7 @@ export const ApplicationsTable = ({
             const { applicationsFile } =
                 await import("@/components/dashboard/applications-export");
             saveBlob(
-                applicationsFile(view.rows, format, name),
+                applicationsFile(view.rows, format, name, rankings),
                 `${fileSlug(name)}-applications.${format}`,
             );
         } catch {
@@ -1212,6 +1245,7 @@ export const ApplicationsTable = ({
                         cleanLinks={cleanLinks}
                         employerLinks={employerLinks}
                         tidyTitles={tidyTitles}
+                        rankings={rankings}
                         rates={rates}
                     />
                 </OverlayDrawer>
@@ -1252,6 +1286,7 @@ export const ApplicationsTable = ({
             ) : (
                 <div ref={scrollRef} className="max-h-[70vh] overflow-auto">
                     <ApplicationsHeaderRow
+                        rankings={rankings}
                         sort={sort}
                         // An open editor holds a field under the pointer, and
                         // reordering the rows would move it out from under one
@@ -1299,6 +1334,8 @@ export const ApplicationsTable = ({
                                         <BulkRow
                                             key={app.id}
                                             draft={draft}
+                                            columns={grid.columns}
+                                            rankings={rankings}
                                             updated={app.updated}
                                             updatedAt={app.updatedAt}
                                             onChange={(key, value) =>
@@ -1316,6 +1353,7 @@ export const ApplicationsTable = ({
                                         <DeleteRow
                                             key={app.id}
                                             label={app.company}
+                                            minWidth={grid.minWidth}
                                             onConfirm={() => onDelete(app.id)}
                                             onPermanent={() => {
                                                 setDeletingId(null);
@@ -1332,6 +1370,8 @@ export const ApplicationsTable = ({
                                     <ReadRow
                                         key={app.id}
                                         app={app}
+                                        columns={grid.columns}
+                                        rankings={rankings}
                                         convertedPay={
                                             convertTo &&
                                             payInCurrency(app, convertTo, rates)
@@ -1368,6 +1408,7 @@ export const ApplicationsTable = ({
                         listId={listId}
                         app={editingRow}
                         extras={editing.extras}
+                        rankings={rankings}
                     />
                 </OverlayDrawer>
             )}

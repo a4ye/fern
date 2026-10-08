@@ -1,4 +1,8 @@
-import type { Arrangement, PayPeriod } from "@/components/dashboard/data";
+import type {
+    Arrangement,
+    PayPeriod,
+    Ranking,
+} from "@/components/dashboard/data";
 import { DEFAULT_CURRENCY } from "@/lib/pay";
 
 export type ApplicationFields = {
@@ -6,6 +10,7 @@ export type ApplicationFields = {
     role: string;
     location: string;
     arrangement: Arrangement | null;
+    ranking: Ranking | null;
     appliedAt: string;
     url: string;
     payMin: string;
@@ -22,6 +27,7 @@ export const EMPTY_FIELDS: ApplicationFields = {
     role: "",
     location: "",
     arrangement: null,
+    ranking: null,
     appliedAt: "",
     url: "",
     payMin: "",

@@ -60,6 +60,7 @@ const existingRow = (fields: Partial<ApplicationRow> = {}): ApplicationRow => ({
     bonus: null,
     location: null,
     arrangement: null,
+    ranking: null,
     appliedAt: null,
     url: null,
     updated: "Just now",

@@ -2,6 +2,7 @@ import { getPool } from "@/db/client";
 import * as gen from "@/db/gen/shares_sql";
 import { listStats, toApplicationRow } from "@/db/dashboard";
 import type { Person } from "@/db/friends";
+import { getUserSettings } from "@/db/settings";
 import type { ApplicationRow, Stat } from "@/components/dashboard/data";
 import { applicationIdSchema } from "@/lib/validation";
 import {
@@ -218,6 +219,9 @@ export type SharedList = {
     expiresAt: string | null;
     stats: Stat[];
     applications: ApplicationRow[];
+    // The owner's choice, so a reader sees the list with the columns its
+    // owner keeps.
+    rankings: boolean;
 };
 
 const withApplications = async (
@@ -231,10 +235,13 @@ const withApplications = async (
     },
     expiresAt: Date | null,
 ): Promise<SharedList> => {
-    const rows = await gen.applicationsForSharedList(getPool(), {
-        listId: list.id,
-        maxApplications: MAX_APPLICATIONS_READ_PER_LIST,
-    });
+    const [rows, settings] = await Promise.all([
+        gen.applicationsForSharedList(getPool(), {
+            listId: list.id,
+            maxApplications: MAX_APPLICATIONS_READ_PER_LIST,
+        }),
+        getUserSettings(list.ownerId),
+    ]);
     const applications = rows.map(toApplicationRow);
 
     return {
@@ -247,8 +254,9 @@ const withApplications = async (
             image: list.ownerImage,
         },
         expiresAt: expiresAt?.toISOString() ?? null,
-        stats: listStats(applications),
+        stats: listStats(applications, settings.waterlooRankings),
         applications,
+        rankings: settings.waterlooRankings,
     };
 };
 

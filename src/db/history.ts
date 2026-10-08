@@ -3,13 +3,16 @@ import type { PoolClient } from "@neondatabase/serverless";
 import { getPool, withTransaction } from "@/db/client";
 import {
     PAY_PERIODS,
+    RANKINGS,
     STATUS_META,
     arrangementLabel,
     formatRelative,
     payPeriodLabel,
+    rankingLabel,
     type ApplicationStatus,
     type Arrangement,
     type PayPeriod,
+    type Ranking,
 } from "@/components/dashboard/data";
 import {
     HISTORY_APPLICATIONS_PAGE_SIZE,
@@ -50,6 +53,7 @@ type ApplicationSnapshot = {
     url: string | null;
     location: string | null;
     arrangement: string | null;
+    ranking: string | null;
     notes: string | null;
     payMin: string | null;
     payMax: string | null;
@@ -289,6 +293,7 @@ const FIELD_MAP = {
     c: "companyName",
     r: "roleTitle",
     s: "status",
+    rk: "ranking",
     u: "url",
     l: "location",
     a: "arrangement",
@@ -306,6 +311,7 @@ const STORED_FIELD_MAP = {
     c: "company_name",
     r: "role_title",
     s: "status",
+    rk: "ranking",
     u: "url",
     l: "location",
     a: "arrangement",
@@ -323,6 +329,7 @@ const FIELD_LABELS: Record<keyof typeof FIELD_MAP, string> = {
     c: "Company",
     r: "Role",
     s: "Status",
+    rk: "Ranking",
     u: "Link",
     l: "Location",
     a: "Arrangement",
@@ -407,6 +414,7 @@ const applicationSnapshots = async (
                 a.url,
                 a.location,
                 a.arrangement,
+                a.ranking,
                 a.notes,
                 a.pay_min::text as "payMin",
                 a.pay_max::text as "payMax",
@@ -555,6 +563,7 @@ const storedApplication = (row: ApplicationSnapshot) => ({
     url: row.url,
     location: row.location,
     arrangement: row.arrangement,
+    ranking: row.ranking,
     notes: row.notes,
     pay_min: row.payMin,
     pay_max: row.payMax,
@@ -894,6 +903,9 @@ const displayValue = (code: string, value: Scalar): string => {
     }
     if (code === "a" && ["remote", "hybrid", "onsite"].includes(value)) {
         return arrangementLabel(value as Arrangement);
+    }
+    if (code === "rk" && RANKINGS.includes(value as Ranking)) {
+        return rankingLabel(value as Ranking);
     }
     if (code === "pe" && PAY_PERIODS.includes(value as PayPeriod)) {
         return payPeriodLabel(value as PayPeriod);
@@ -2320,22 +2332,24 @@ export const historyStateAt = (
     return target;
 };
 
+// A row stored before a column existed has no key for it, and the column was
+// added empty, so a missing key and a null are the same value. Comparing key
+// counts instead would call every row written before the column changed, and
+// refuse to undo it.
 const recordsEqual = (
     left: Record<string, unknown>,
     right: Record<string, unknown>,
-): boolean => {
-    const keys = Object.keys(left);
-    return (
-        keys.length === Object.keys(right).length &&
-        keys.every((key) => left[key] === right[key])
+): boolean =>
+    Object.keys({ ...left, ...right }).every(
+        (key) => (left[key] ?? null) === (right[key] ?? null),
     );
-};
 
 const storedValueOf = (
     application: StoredApplication,
     code: keyof typeof STORED_FIELD_MAP,
 ): Scalar => {
-    const value = application[STORED_FIELD_MAP[code]];
+    // Missing on a row stored before the column existed. See recordsEqual.
+    const value = application[STORED_FIELD_MAP[code]] ?? null;
     return value === null ? null : String(value);
 };
 
@@ -3086,6 +3100,9 @@ const applyPatches = async (
                 arrangement = case when patch.f ? 'a'
                     then (patch.f ->> 'a')::work_arrangement
                     else a.arrangement end,
+                ranking = case when patch.f ? 'rk'
+                    then (patch.f ->> 'rk')::waterlooworks_ranking
+                    else a.ranking end,
                 notes = case when patch.f ? 'n'
                     then patch.f ->> 'n' else a.notes end,
                 pay_min = case when patch.f ? 'mi'
@@ -3121,14 +3138,15 @@ const restoreApplications = async (
         text: `
             insert into applications (
                 id, list_id, position, company_name, role_title, status, url,
-                location, arrangement, notes, pay_min, pay_max, pay_currency,
-                pay_period, bonus_amount, pay_note, applied_at, created_at,
-                updated_at, created_by_history_action_id
+                location, arrangement, ranking, notes, pay_min, pay_max,
+                pay_currency, pay_period, bonus_amount, pay_note, applied_at,
+                created_at, updated_at, created_by_history_action_id
             )
             select
                 row.id::uuid, l.id, row.position, row.company_name,
                 row.role_title, row.status::application_status, row.url,
-                row.location, row.arrangement::work_arrangement, row.notes,
+                row.location, row.arrangement::work_arrangement,
+                row.ranking::waterlooworks_ranking, row.notes,
                 row.pay_min::numeric, row.pay_max::numeric,
                 row.pay_currency::char(3), row.pay_period::pay_period,
                 row.bonus_amount::numeric, row.pay_note, row.applied_at::date,
@@ -3138,7 +3156,7 @@ const restoreApplications = async (
             cross join jsonb_to_recordset($1::jsonb) as row(
                 id text, position int, company_name text, role_title text,
                 status text, url text, location text, arrangement text,
-                notes text, pay_min text, pay_max text, pay_currency text,
+                ranking text, notes text, pay_min text, pay_max text, pay_currency text,
                 pay_period text, bonus_amount text, pay_note text,
                 applied_at text, created_at text, updated_at text,
                 created_by_history_action_id text
@@ -3343,17 +3361,6 @@ const applyVersionDelta = async (
     await applyListFields(client, userId, listId, delta.f ?? {}, value);
 };
 
-const sameStoredRecord = (
-    current: Record<string, unknown>,
-    expected: Record<string, unknown>,
-): boolean => {
-    const entries = Object.entries(current);
-    return (
-        entries.length === Object.keys(expected).length &&
-        entries.every(([key, value]) => expected[key] === value)
-    );
-};
-
 const storedApplicationsMatch = (
     current: ApplicationSnapshot[],
     stored: NonNullable<HistoryData["d"]>,
@@ -3365,7 +3372,7 @@ const storedApplicationsMatch = (
             const original = expected.get(row.id);
             return (
                 original !== undefined &&
-                sameStoredRecord(storedApplication(row), original)
+                recordsEqual(storedApplication(row), original)
             );
         })
     );
@@ -3382,7 +3389,7 @@ const storedEventsMatch = (
             const original = expected.get(event.id);
             return (
                 original !== undefined &&
-                sameStoredRecord(storedEvent(event), original)
+                recordsEqual(storedEvent(event), original)
             );
         })
     );
@@ -3659,7 +3666,7 @@ export const undoHistoryAction = async (
                         const currentEvent = eventsById.get(event.id);
                         return (
                             currentEvent === undefined ||
-                            !sameStoredRecord(currentEvent, event)
+                            !recordsEqual(currentEvent, event)
                         );
                     })
                 ) {

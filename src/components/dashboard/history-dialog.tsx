@@ -21,15 +21,18 @@ import {
 import {
     LIST_STATUS_META,
     PAY_PERIODS,
+    RANKINGS,
     STATUS_META,
     arrangementLabel,
     formatDay,
     formatPay,
     payPeriodLabel,
+    rankingLabel,
     type ApplicationStatus,
     type Arrangement,
     type ListStatus,
     type PayPeriod,
+    type Ranking,
 } from "@/components/dashboard/data";
 import {
     DIALOG_TITLE_ID,
@@ -163,6 +166,9 @@ const formattedFieldValue = (
     }
     if (change.code === "pe" && PAY_PERIODS.includes(value as PayPeriod)) {
         return payPeriodLabel(value as PayPeriod);
+    }
+    if (change.code === "rk" && RANKINGS.includes(value as Ranking)) {
+        return rankingLabel(value as Ranking);
     }
     if (change.code === "d" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
         return formatDay(value);

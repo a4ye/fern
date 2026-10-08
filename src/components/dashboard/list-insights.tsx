@@ -22,11 +22,14 @@ export const ListInsights = ({
     listId,
     stats,
     revision,
+    rankings,
 }: {
     name: string;
     listId: string;
     stats: Stat[];
     revision: string;
+    // Whether the account tracks WaterlooWorks rankings, which the charts read.
+    rankings: boolean;
 }) => {
     const [open, setOpen] = useState(false);
     const [insights, setInsights] = useState<ListInsightsData | null>(null);
@@ -93,6 +96,7 @@ export const ListInsights = ({
                         name={name}
                         insights={insights}
                         error={error}
+                        rankings={rankings}
                     />
                 </div>
             )}

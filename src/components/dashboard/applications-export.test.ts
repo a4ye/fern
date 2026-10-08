@@ -19,6 +19,7 @@ const app = (fields: Partial<ApplicationRow> = {}): ApplicationRow => ({
     bonus: null,
     location: null,
     arrangement: null,
+    ranking: null,
     appliedAt: null,
     url: null,
     updated: "Just now",
@@ -34,6 +35,21 @@ const field = (row: ApplicationRow, header: string) => {
 };
 
 const json = (row: ApplicationRow) => JSON.parse(applicationsJson([row]))[0];
+
+describe("rankings", () => {
+    test("leave in a column of their own only while the table shows them", () => {
+        const ranked = app({ ranking: "ranked_first" });
+        expect(csvRows([ranked])[0]).not.toContain("Ranking");
+        expect("ranking" in json(ranked)).toBe(false);
+
+        const [headers, values] = applicationsCsv([ranked], true).split("\r\n");
+        expect(headers.startsWith("Company,Role,Status,Ranking,")).toBe(true);
+        expect(values.split(",")[3]).toBe("Ranked 1");
+        expect(JSON.parse(applicationsJson([ranked], true))[0].ranking).toBe(
+            "Ranked 1",
+        );
+    });
+});
 
 describe("csv", () => {
     test("writes a heading row and one row per application", () => {

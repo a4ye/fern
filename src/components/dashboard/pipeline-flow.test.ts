@@ -5,6 +5,7 @@ import type { ApplicationStatus, FlowEntry } from "@/components/dashboard/data";
 const entry = (...history: ApplicationStatus[]): FlowEntry => ({
     status: history[history.length - 1],
     history,
+    ranking: null,
 });
 
 const many = (count: number, ...history: ApplicationStatus[]) =>
@@ -513,5 +514,181 @@ describe("graphFrom", () => {
         const names = graph.nodes.map((node) => node.name);
         expect(names).toContain("Interview");
         expect(names).toContain("Interviewing");
+    });
+});
+
+// The names one application's ribbon passes, opening to ending, for a chart of
+// that application alone. Threading nodes carry no name and are skipped.
+const routeOf = (graph: ReturnType<typeof graphFrom>) => {
+    const into = new Set(graph.links.map((link) => link.target));
+    let id = graph.links.find((link) => !into.has(link.source))?.source;
+    const names: string[] = [];
+    while (id) {
+        const at = id;
+        const name = nameOf(graph, at);
+        if (name) names.push(name);
+        id = graph.links.find((link) => link.source === at)?.target;
+    }
+    return names;
+};
+
+const ranked = (
+    ranking: NonNullable<FlowEntry["ranking"]>,
+    ...history: ApplicationStatus[]
+): FlowEntry => ({ ...entry(...history), ranking });
+
+describe("graphFrom with WaterlooWorks rankings", () => {
+    test("is the chart of statuses alone while the setting is off", () => {
+        const flow = [ranked("ranked_first", "applied", "interviewing")];
+        expect(graphFrom(flow)).toEqual(
+            graphFrom([entry("applied", "interviewing")]),
+        );
+    });
+
+    test("opens on where each application was made", () => {
+        const graph = graphFrom(
+            [
+                ranked("ranked", "applied", "interviewing"),
+                entry("applied", "rejected"),
+            ],
+            "waterlooworks",
+        );
+        const opening = graph.nodes
+            .filter(
+                (node) => !graph.links.some((link) => link.target === node.id),
+            )
+            .map((node) => node.name)
+            .sort();
+        expect(opening).toEqual(["External", "WaterlooWorks"]);
+    });
+
+    test("an application still waiting rests as awaiting a reply", () => {
+        expect(routeOf(graphFrom([entry("applied")], "waterlooworks"))).toEqual(
+            ["External", "Awaiting reply"],
+        );
+    });
+
+    test("puts the ranking after the last interview", () => {
+        const flow = [
+            ranked("ranked_first", "applied", "interviewing", "interviewing"),
+        ];
+        expect(routeOf(graphFrom(flow, "waterlooworks"))).toEqual([
+            "WaterlooWorks",
+            "Interview",
+            "2nd Interview",
+            "Ranked 1",
+        ]);
+    });
+
+    // Only interviewed students are ranked, so the interview happened whether
+    // or not anyone moved the status to it.
+    test("adds the interview a ranking proves", () => {
+        expect(
+            routeOf(graphFrom([ranked("not_ranked", "applied")], "standard")),
+        ).toEqual(["Applied", "Interview", "Rejected"]);
+    });
+
+    test("draws an application that holds a ranking as sent", () => {
+        expect(
+            routeOf(
+                graphFrom([ranked("not_selected", "not_applied")], "standard"),
+            ),
+        ).toEqual(["Applied", "Rejected"]);
+    });
+
+    test("sends not selected straight to a rejection, with no interview", () => {
+        expect(
+            routeOf(
+                graphFrom([ranked("not_selected", "applied")], "waterlooworks"),
+            ),
+        ).toEqual(["WaterlooWorks", "Rejected"]);
+    });
+
+    // Ranked is a waitlist. Whether the employer's first choice took the job or
+    // the student matched somewhere they ranked higher, it was not a no.
+    test("ends ranked as a waitlist rather than a rejection", () => {
+        const flow = [ranked("ranked", "applied", "interviewing")];
+        expect(routeOf(graphFrom(flow, "standard"))).toEqual([
+            "Applied",
+            "Interview",
+            "Waitlisted",
+        ]);
+        expect(routeOf(graphFrom(flow, "waterlooworks"))).toEqual([
+            "WaterlooWorks",
+            "Interview",
+            "Ranked",
+        ]);
+    });
+
+    test("carries on to whatever the status recorded after the ranking", () => {
+        const passedOn = [
+            ranked("ranked_first", "applied", "interviewing", "offer_declined"),
+        ];
+        expect(routeOf(graphFrom(passedOn, "waterlooworks"))).toEqual([
+            "WaterlooWorks",
+            "Interview",
+            "Ranked 1",
+            "Offer declined",
+        ]);
+        expect(routeOf(graphFrom(passedOn, "standard"))).toEqual([
+            "Applied",
+            "Interview",
+            "Offer",
+            "Offer declined",
+        ]);
+
+        const matched = [
+            ranked("ranked", "applied", "interviewing", "offer_accepted"),
+        ];
+        expect(routeOf(graphFrom(matched, "standard"))).toEqual([
+            "Applied",
+            "Interview",
+            "Waitlisted",
+            "Offer accepted",
+        ]);
+    });
+
+    test("does not draw a ranking and the status for it twice", () => {
+        expect(
+            routeOf(
+                graphFrom(
+                    [
+                        ranked(
+                            "ranked_first",
+                            "applied",
+                            "interviewing",
+                            "offer_in_progress",
+                        ),
+                    ],
+                    "standard",
+                ),
+            ),
+        ).toEqual(["Applied", "Interview", "Offer in progress"]);
+        expect(
+            routeOf(
+                graphFrom(
+                    [
+                        ranked(
+                            "not_ranked",
+                            "applied",
+                            "interviewing",
+                            "rejected",
+                        ),
+                    ],
+                    "waterlooworks",
+                ),
+            ),
+        ).toEqual(["WaterlooWorks", "Interview", "Not ranked"]);
+    });
+
+    test("leaves an ending the status already recorded alone", () => {
+        expect(
+            routeOf(
+                graphFrom(
+                    [ranked("not_selected", "applied", "ghosted")],
+                    "standard",
+                ),
+            ),
+        ).toEqual(["Applied", "Ghosted"]);
     });
 });

@@ -70,6 +70,7 @@ const SettingsPage = async ({
                 cleanLinks={settings.cleanLinks}
                 employerLinks={settings.employerLinks}
                 tidyTitles={settings.tidyTitles}
+                waterlooRankings={settings.waterlooRankings}
             />
         </div>
     );

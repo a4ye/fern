@@ -10,6 +10,7 @@ import {
     applicationDetailSchema,
     applicationPatch,
     firstIssue,
+    importRowSchema,
     githubUsernameSchema,
     listCreateSchema,
     listUpdateSchema,
@@ -102,6 +103,7 @@ const detail = (pay: {
         payCurrency: "USD",
         payPeriod: "yearly",
         arrangement: null,
+        ranking: null,
         ...pay,
     });
 
@@ -214,6 +216,45 @@ describe("githubUsernameSchema", () => {
         ]) {
             expect(name(attempt).success).toBe(false);
         }
+    });
+});
+
+describe("ranking", () => {
+    it("takes one of the three rankings, or none", () => {
+        const ranked = applicationDetailSchema.safeParse({
+            company: "Circleback",
+            payCurrency: "USD",
+            payPeriod: null,
+            arrangement: null,
+            ranking: "ranked_first",
+        });
+        expect(ranked.success && ranked.data.ranking).toBe("ranked_first");
+        expect(applicationPatch({ ranking: "offer" })).toEqual({
+            ok: false,
+            error: "Choose a valid ranking.",
+        });
+        expect(applicationPatch({ ranking: null })).toEqual({
+            ok: true,
+            patch: { ranking: null },
+        });
+    });
+
+    // A sheet or an agent adding rows never brings one, since a ranking only
+    // exists once interviews close.
+    it("is not part of an imported row", () => {
+        const row = importRowSchema.safeParse({
+            company: "Circleback",
+            role: null,
+            status: "applied",
+            location: null,
+            arrangement: null,
+            pay: null,
+            appliedAt: null,
+            url: null,
+            notes: null,
+        });
+        expect(row.success).toBe(true);
+        expect(row.success && "ranking" in row.data).toBe(false);
     });
 });
 

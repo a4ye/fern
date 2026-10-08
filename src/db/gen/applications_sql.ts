@@ -8,8 +8,8 @@ export const createApplicationQuery = `-- name: CreateApplication :one
 with created as (
     insert into applications (
         list_id, position, company_name, role_title, status, url, location,
-        arrangement, applied_at, pay_min, pay_max, pay_currency, pay_period,
-        bonus_amount, pay_note, notes, created_by_history_action_id
+        arrangement, ranking, applied_at, pay_min, pay_max, pay_currency,
+        pay_period, bonus_amount, pay_note, notes, created_by_history_action_id
     )
     select
         l.id,
@@ -27,23 +27,24 @@ with created as (
         $4,
         $5,
         $6::work_arrangement,
+        $7::waterlooworks_ranking,
         coalesce(
-            $7::date,
+            $8::date,
             case
                 when $3::application_status = 'applied'
-                then (current_timestamp at time zone $8::text)::date
+                then (current_timestamp at time zone $9::text)::date
             end
         ),
-        $9::numeric,
         $10::numeric,
-        $11,
-        $12::pay_period,
-        $13::numeric,
-        $14,
+        $11::numeric,
+        $12,
+        $13::pay_period,
+        $14::numeric,
         $15,
-        $16::bigint
+        $16,
+        $17::bigint
     from lists l
-    where l.id = $17 and l.user_id = $18
+    where l.id = $18 and l.user_id = $19
     returning id, status
 ),
 opening as (
@@ -54,7 +55,7 @@ opening as (
         created.id,
         null::application_status,
         created.status,
-        $16::bigint
+        $17::bigint
     from created
 )
 select id from created`;
@@ -66,6 +67,7 @@ export interface CreateApplicationArgs {
     url: string | null;
     location: string | null;
     arrangement: string | null;
+    ranking: string | null;
     appliedAt: Date | null;
     timeZone: string;
     payMin: string | null;
@@ -87,7 +89,7 @@ export interface CreateApplicationRow {
 export async function createApplication(client: Client, args: CreateApplicationArgs): Promise<CreateApplicationRow | null> {
     const result = await client.query({
         text: createApplicationQuery,
-        values: [args.companyName, args.roleTitle, args.status, args.url, args.location, args.arrangement, args.appliedAt, args.timeZone, args.payMin, args.payMax, args.payCurrency, args.payPeriod, args.bonusAmount, args.payNote, args.notes, args.historyActionId, args.listId, args.userId],
+        values: [args.companyName, args.roleTitle, args.status, args.url, args.location, args.arrangement, args.ranking, args.appliedAt, args.timeZone, args.payMin, args.payMax, args.payCurrency, args.payPeriod, args.bonusAmount, args.payNote, args.notes, args.historyActionId, args.listId, args.userId],
         rowMode: "array"
     });
     if (result.rows.length !== 1) {
@@ -203,6 +205,7 @@ select
     a.url,
     a.location,
     a.arrangement,
+    a.ranking,
     a.pay_min,
     a.pay_max,
     a.pay_currency,
@@ -231,6 +234,7 @@ export interface ListApplicationsForListRow {
     url: string | null;
     location: string | null;
     arrangement: string | null;
+    ranking: string | null;
     payMin: string | null;
     payMax: string | null;
     payCurrency: string;
@@ -256,14 +260,15 @@ export async function listApplicationsForList(client: Client, args: ListApplicat
             url: row[4],
             location: row[5],
             arrangement: row[6],
-            payMin: row[7],
-            payMax: row[8],
-            payCurrency: row[9],
-            payPeriod: row[10],
-            bonusAmount: row[11],
-            payNote: row[12],
-            appliedAt: row[13],
-            updatedAt: row[14]
+            ranking: row[7],
+            payMin: row[8],
+            payMax: row[9],
+            payCurrency: row[10],
+            payPeriod: row[11],
+            bonusAmount: row[12],
+            payNote: row[13],
+            appliedAt: row[14],
+            updatedAt: row[15]
         };
     });
 }
@@ -449,6 +454,7 @@ with locked as materialized (
         input.value ->> 'url' as url,
         input.value ->> 'location' as location,
         input.value ->> 'arrangement' as arrangement,
+        input.value ->> 'ranking' as ranking,
         input.value ->> 'applied_at' as applied_at,
         (input.value ->> 'pay_typed')::boolean as pay_typed,
         input.value ->> 'pay_min' as pay_min,
@@ -473,6 +479,7 @@ updated as (
         url = row.url,
         location = row.location,
         arrangement = row.arrangement::work_arrangement,
+        ranking = row.ranking::waterlooworks_ranking,
         applied_at = case
             when a.applied_at is null
                 and a.status <> 'applied'
@@ -626,18 +633,19 @@ set
     url = $3,
     location = $4,
     arrangement = $5::work_arrangement,
-    applied_at = $6::date,
-    pay_min = $7::numeric,
-    pay_max = $8::numeric,
-    pay_currency = $9,
-    pay_period = $10::pay_period,
-    bonus_amount = $11::numeric,
-    pay_note = $12,
-    notes = $13
+    ranking = $6::waterlooworks_ranking,
+    applied_at = $7::date,
+    pay_min = $8::numeric,
+    pay_max = $9::numeric,
+    pay_currency = $10,
+    pay_period = $11::pay_period,
+    bonus_amount = $12::numeric,
+    pay_note = $13,
+    notes = $14
 from lists l
 where a.list_id = l.id
-    and a.id = $14
-    and l.user_id = $15`;
+    and a.id = $15
+    and l.user_id = $16`;
 
 export interface UpdateApplicationDetailArgs {
     companyName: string;
@@ -645,6 +653,7 @@ export interface UpdateApplicationDetailArgs {
     url: string | null;
     location: string | null;
     arrangement: string | null;
+    ranking: string | null;
     appliedAt: Date | null;
     payMin: string | null;
     payMax: string | null;
@@ -660,7 +669,7 @@ export interface UpdateApplicationDetailArgs {
 export async function updateApplicationDetail(client: Client, args: UpdateApplicationDetailArgs): Promise<void> {
     await client.query({
         text: updateApplicationDetailQuery,
-        values: [args.companyName, args.roleTitle, args.url, args.location, args.arrangement, args.appliedAt, args.payMin, args.payMax, args.payCurrency, args.payPeriod, args.bonusAmount, args.payNote, args.notes, args.applicationId, args.userId],
+        values: [args.companyName, args.roleTitle, args.url, args.location, args.arrangement, args.ranking, args.appliedAt, args.payMin, args.payMax, args.payCurrency, args.payPeriod, args.bonusAmount, args.payNote, args.notes, args.applicationId, args.userId],
         rowMode: "array"
     });
 }
@@ -792,6 +801,30 @@ export async function setApplicationsArrangement(client: Client, args: SetApplic
     });
 }
 
+export const setApplicationsRankingQuery = `-- name: SetApplicationsRanking :exec
+update applications a
+set ranking = $1::waterlooworks_ranking
+from lists l
+where a.list_id = l.id
+    and a.id = any($2::uuid[])
+    and l.user_id = $3
+    and a.ranking is distinct from
+        $1::waterlooworks_ranking`;
+
+export interface SetApplicationsRankingArgs {
+    ranking: string | null;
+    applicationIds: string[];
+    userId: string;
+}
+
+export async function setApplicationsRanking(client: Client, args: SetApplicationsRankingArgs): Promise<void> {
+    await client.query({
+        text: setApplicationsRankingQuery,
+        values: [args.ranking, args.applicationIds, args.userId],
+        rowMode: "array"
+    });
+}
+
 export const setApplicationStatusQuery = `-- name: SetApplicationStatus :exec
 update applications a
 set
@@ -838,6 +871,7 @@ select
     a.url,
     a.location,
     a.arrangement,
+    a.ranking,
     a.applied_at,
     a.pay_min,
     a.pay_max,
@@ -865,6 +899,7 @@ export interface ApplicationRowForUpdateRow {
     url: string | null;
     location: string | null;
     arrangement: string | null;
+    ranking: string | null;
     appliedAt: Date | null;
     payMin: string | null;
     payMax: string | null;
@@ -894,14 +929,15 @@ export async function applicationRowForUpdate(client: Client, args: ApplicationR
         url: row[5],
         location: row[6],
         arrangement: row[7],
-        appliedAt: row[8],
-        payMin: row[9],
-        payMax: row[10],
-        payCurrency: row[11],
-        payPeriod: row[12],
-        bonusAmount: row[13],
-        payNote: row[14],
-        notes: row[15]
+        ranking: row[8],
+        appliedAt: row[9],
+        payMin: row[10],
+        payMax: row[11],
+        payCurrency: row[12],
+        payPeriod: row[13],
+        bonusAmount: row[14],
+        payNote: row[15],
+        notes: row[16]
     };
 }
 
@@ -960,6 +996,7 @@ select
     a.url,
     a.location,
     a.arrangement,
+    a.ranking,
     a.applied_at,
     a.pay_min,
     a.pay_max,
@@ -987,6 +1024,7 @@ export interface ApplicationForUserRow {
     url: string | null;
     location: string | null;
     arrangement: string | null;
+    ranking: string | null;
     appliedAt: Date | null;
     payMin: string | null;
     payMax: string | null;
@@ -1017,15 +1055,16 @@ export async function applicationForUser(client: Client, args: ApplicationForUse
         url: row[5],
         location: row[6],
         arrangement: row[7],
-        appliedAt: row[8],
-        payMin: row[9],
-        payMax: row[10],
-        payCurrency: row[11],
-        payPeriod: row[12],
-        bonusAmount: row[13],
-        payNote: row[14],
-        notes: row[15],
-        updatedAt: row[16]
+        ranking: row[8],
+        appliedAt: row[9],
+        payMin: row[10],
+        payMax: row[11],
+        payCurrency: row[12],
+        payPeriod: row[13],
+        bonusAmount: row[14],
+        payNote: row[15],
+        notes: row[16],
+        updatedAt: row[17]
     };
 }
 

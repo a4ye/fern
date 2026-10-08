@@ -203,6 +203,7 @@ select
     a.url,
     a.location,
     a.arrangement,
+    a.ranking,
     a.pay_min,
     a.pay_max,
     a.pay_currency,

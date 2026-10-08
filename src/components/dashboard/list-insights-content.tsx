@@ -26,16 +26,22 @@ export const ListInsightsContent = ({
     name,
     insights,
     error,
+    rankings,
 }: {
     name: string;
     insights: ListInsightsData | null;
     error: string | null;
+    rankings: boolean;
 }) => {
     if (!insights) return <InsightsPlaceholder error={error} />;
 
     return (
         <>
-            <PipelineFlow flow={insights.flow} name={name} />
+            <PipelineFlow
+                flow={insights.flow}
+                name={name}
+                rankings={rankings}
+            />
             <div className="grid items-stretch gap-4 lg:grid-cols-[2fr_3fr]">
                 <FunnelSummary funnel={insights.funnel} />
                 <VolumeChart volume={insights.volume} />

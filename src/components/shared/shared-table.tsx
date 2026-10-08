@@ -3,10 +3,10 @@
 import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
-    APPLICATION_COLUMNS as COLUMNS,
     ApplicationsHeaderRow,
     ROW_HEIGHT,
     ROW_REM,
+    applicationGrid,
 } from "@/components/dashboard/applications-columns";
 import { ApplicationsFilterMenu } from "@/components/dashboard/applications-filter";
 import type { ExportFormat } from "@/components/dashboard/applications-export";
@@ -38,6 +38,7 @@ import {
     STATUS_META,
     arrangementLabel,
     formatDay,
+    rankingLabel,
     type ApplicationRow,
 } from "@/components/dashboard/data";
 import { fileSlug, saveBlob } from "@/lib/download";
@@ -86,15 +87,17 @@ const Cell = ({
 
 const Row = ({
     app,
+    rankings,
     convertedPay,
 }: {
     app: ApplicationRow;
+    rankings: boolean;
     convertedPay: string | null;
 }) => {
     const meta = STATUS_META[app.status];
     return (
         <li
-            className={`${COLUMNS} ${ROW_HEIGHT} border-b border-faint px-5 text-xs transition-colors last:border-b-0 hover:bg-surface`}
+            className={`${applicationGrid(rankings).columns} ${ROW_HEIGHT} border-b border-faint px-5 text-xs transition-colors last:border-b-0 hover:bg-surface`}
         >
             <span />
             <Cell value={app.company} className="font-medium text-ink" />
@@ -107,6 +110,9 @@ const Row = ({
                     {meta.label}
                 </span>
             </span>
+            {rankings && (
+                <Cell value={app.ranking ? rankingLabel(app.ranking) : null} />
+            )}
             <Cell value={app.location} />
             <Cell
                 value={
@@ -158,10 +164,12 @@ const Row = ({
 export const SharedTable = ({
     name,
     applications,
+    rankings,
     rates,
 }: {
     name: string;
     applications: ApplicationRow[];
+    rankings: boolean;
     rates: ExchangeRates;
 }) => {
     const [filters, setFilters] = useState<Filters>(NO_FILTERS);
@@ -171,8 +179,16 @@ export const SharedTable = ({
     const listRef = useRef<HTMLUListElement>(null);
 
     const view = useMemo(
-        () => applicationsView(applications, filters, sort, rates, convertTo),
-        [applications, filters, sort, rates, convertTo],
+        () =>
+            applicationsView(
+                applications,
+                filters,
+                sort,
+                rates,
+                convertTo,
+                rankings,
+            ),
+        [applications, filters, sort, rates, convertTo, rankings],
     );
     const rowWindow = useRowWindow(
         scrollRef,
@@ -192,7 +208,7 @@ export const SharedTable = ({
             const { applicationsFile } =
                 await import("@/components/dashboard/applications-export");
             saveBlob(
-                applicationsFile(view.rows, format, name),
+                applicationsFile(view.rows, format, name, rankings),
                 `${fileSlug(name)}-applications.${format}`,
             );
         } catch {
@@ -283,6 +299,7 @@ export const SharedTable = ({
             ) : (
                 <div ref={scrollRef} className="max-h-[70vh] overflow-auto">
                     <ApplicationsHeaderRow
+                        rankings={rankings}
                         sort={sort}
                         onSort={(key) =>
                             setSort((current) => nextSort(current, key))
@@ -303,6 +320,7 @@ export const SharedTable = ({
                                 <Row
                                     key={app.id}
                                     app={app}
+                                    rankings={rankings}
                                     convertedPay={
                                         convertTo &&
                                         payInCurrency(app, convertTo, rates)

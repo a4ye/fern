@@ -4,6 +4,7 @@
 
 import {
     INTERVIEWING_STATUSES,
+    rankingSteps,
     toDateInput,
     type ApplicationStatus,
     type FlowEntry,
@@ -41,10 +42,16 @@ const SENT: ApplicationStatus[] = ["applied", "ghosted", ...REPLIED];
 export const wasSent = (history: ApplicationStatus[]): boolean =>
     history.some((status) => SENT.includes(status));
 
-export const funnelFrom = (flow: FlowEntry[]): Funnel => {
+// `rankings` reads each WaterlooWorks ranking for what it proves the application
+// went through, so an offer or interview known only from the ranking still
+// counts.
+export const funnelFrom = (flow: FlowEntry[], rankings = false): Funnel => {
     const reaching = (statuses: ApplicationStatus[]) =>
         flow.filter((entry) =>
-            entry.history.some((status) => statuses.includes(status)),
+            [
+                ...entry.history,
+                ...(rankings ? rankingSteps(entry.ranking) : []),
+            ].some((status) => statuses.includes(status)),
         ).length;
 
     const applied = reaching(SENT);

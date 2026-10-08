@@ -39,6 +39,12 @@ export type ApplicationStatus =
 
 export type Arrangement = "remote" | "hybrid" | "onsite";
 
+// What a WaterlooWorks employer decided: not selected for an interview, or
+// where they ranked the student once interviews closed. Only that board gives
+// one, so a row holding any of these is a WaterlooWorks application, and a row
+// without one is either external or still waiting to hear.
+export type Ranking = "ranked_first" | "ranked" | "not_ranked" | "not_selected";
+
 export type PayPeriod =
     "hourly" | "weekly" | "biweekly" | "monthly" | "yearly" | "one_time";
 
@@ -360,6 +366,61 @@ const ARRANGEMENT_LABEL: Record<Arrangement, string> = {
 export const arrangementLabel = (arrangement: Arrangement): string =>
     ARRANGEMENT_LABEL[arrangement];
 
+// WaterlooWorks shows the first choice as "Offer". Beside a Status column that
+// already holds offers of its own, that would read as a second offer, so it is
+// named for where it sits instead.
+const RANKING_LABEL: Record<Ranking, string> = {
+    ranked_first: "Ranked 1",
+    ranked: "Ranked",
+    not_ranked: "Not ranked",
+    not_selected: "Not selected",
+};
+
+export const rankingLabel = (ranking: Ranking): string =>
+    RANKING_LABEL[ranking];
+
+// Statuses that have not said how an application ended. "Other" says nothing
+// either way, so it is among them.
+const UNSETTLED: ApplicationStatus[] = [
+    "not_applied",
+    "applied",
+    "online_assessment",
+    "takehome",
+    "interviewing",
+    "onsite",
+    "other",
+];
+
+// The status a row counts as in a list's totals once its ranking is read. A
+// ranking only fills in an ending the status has not recorded; a status that
+// has one is the user's own word on how it ended, and stands. The first choice
+// is an offer, and not selected and not ranked are rejections. Ranked is a
+// waitlist, which has no status of its own: it is over once the match runs a
+// day or two later, so it counts as settled without counting as anything.
+export const countedStatus = (
+    status: ApplicationStatus,
+    ranking: Ranking | null,
+): ApplicationStatus | null => {
+    if (!ranking || !UNSETTLED.includes(status)) return status;
+    if (ranking === "ranked_first") return "offer_in_progress";
+    if (ranking === "ranked") return null;
+    return "rejected";
+};
+
+// What a ranking proves an application went through, whatever its status
+// history recorded: any ranking answers something that was sent, every one but
+// not selected follows an interview, and the first choice is an offer.
+export const rankingSteps = (ranking: Ranking | null): ApplicationStatus[] => {
+    if (!ranking) return [];
+    if (ranking === "not_selected") return ["applied", "rejected"];
+    if (ranking === "ranked_first") {
+        return ["applied", "interviewing", "offer_in_progress"];
+    }
+    return ranking === "ranked"
+        ? ["applied", "interviewing"]
+        : ["applied", "interviewing", "rejected"];
+};
+
 const PERIOD_LABEL: Record<PayPeriod, string> = {
     hourly: "Hourly",
     weekly: "Weekly",
@@ -481,6 +542,7 @@ export type ApplicationRow = {
     bonus: string | null;
     location: string | null;
     arrangement: Arrangement | null;
+    ranking: Ranking | null;
     appliedAt: string | null;
     url: string | null;
     // `updated` is the relative label the cell prints, which orders rows by the
@@ -513,6 +575,14 @@ export type ApplicationExtras = {
 
 export const ARRANGEMENTS: Arrangement[] = ["remote", "hybrid", "onsite"];
 
+// Best first, which is the order the column sorts in.
+export const RANKINGS: Ranking[] = [
+    "ranked_first",
+    "ranked",
+    "not_ranked",
+    "not_selected",
+];
+
 export const APPLICATION_STATUSES = Object.keys(
     STATUS_META,
 ) as ApplicationStatus[];
@@ -539,6 +609,7 @@ export type Funnel = { applied: number; stages: FunnelStage[] };
 export type FlowEntry = {
     status: ApplicationStatus;
     history: ApplicationStatus[];
+    ranking: Ranking | null;
 };
 
 // One active day in the application grid. Empty calendar days are filled in by

@@ -8,6 +8,7 @@ import {
     ARRANGEMENT_OPTIONS,
     CURRENCY_OPTIONS,
     CellSelect,
+    RANKING_OPTIONS,
     DateField,
     formInputClass,
     ghostButtonClass,
@@ -116,12 +117,15 @@ export const PickerField = ({
 );
 
 // `omitLink` is for the create drawer, which asks for the link first in a row
-// of its own rather than as one field among these.
+// of its own rather than as one field among these. `rankings` adds the
+// WaterlooWorks ranking for the accounts that turned it on; for the rest the
+// value rides along untouched.
 export const BasicsFields = ({
     draft,
     set,
     disabled = false,
     omitLink = false,
+    rankings = false,
     companyRef,
     roleNote,
     locationSuggestions,
@@ -131,6 +135,7 @@ export const BasicsFields = ({
     set: SetField;
     disabled?: boolean;
     omitLink?: boolean;
+    rankings?: boolean;
     companyRef?: RefObject<HTMLInputElement | null>;
     roleNote?: ReactNode;
     locationSuggestions?: readonly string[];
@@ -205,6 +210,19 @@ export const BasicsFields = ({
                 disabled={disabled}
             />
         </PickerField>
+        {rankings && (
+            <PickerField label="Ranking">
+                <CellSelect
+                    label="Ranking"
+                    value={draft.ranking}
+                    options={RANKING_OPTIONS}
+                    onChange={(ranking) => set("ranking", ranking)}
+                    variant="form"
+                    className="flex-1"
+                    disabled={disabled}
+                />
+            </PickerField>
+        )}
     </Section>
 );
 

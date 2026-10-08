@@ -66,6 +66,7 @@ const SeasonPage = async ({ params, searchParams }: Props) => {
                     listId={detail.id}
                     stats={detail.stats}
                     revision={listRevision(detail.applications)}
+                    rankings={settings.waterlooRankings}
                 />
             </div>
 
@@ -78,6 +79,7 @@ const SeasonPage = async ({ params, searchParams }: Props) => {
                     cleanLinks={settings.cleanLinks}
                     employerLinks={settings.employerLinks}
                     tidyTitles={settings.tidyTitles}
+                    rankings={settings.waterlooRankings}
                     rates={rates}
                 />
             </div>

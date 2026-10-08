@@ -2,6 +2,7 @@ import {
     STATUS_META,
     arrangementLabel,
     payPeriodLabel,
+    rankingLabel,
     type ApplicationRow,
 } from "@/components/dashboard/data";
 import { buildXlsx, type XlsxCell, type XlsxColumn } from "@/lib/xlsx";
@@ -43,6 +44,12 @@ const COLUMNS: ExportColumn[] = [
         header: "Status",
         width: 16,
         cell: (app) => STATUS_META[app.status].label,
+    },
+    {
+        key: "ranking",
+        header: "Ranking",
+        width: 11,
+        cell: (app) => app.ranking && rankingLabel(app.ranking),
     },
     {
         key: "location",
@@ -111,6 +118,11 @@ const COLUMNS: ExportColumn[] = [
     { key: "url", header: "Link", width: 34, cell: (app) => app.url },
 ];
 
+// A file holds what the table showed, so the Ranking column leaves only while
+// the table draws it.
+const columnsFor = (rankings: boolean) =>
+    rankings ? COLUMNS : COLUMNS.filter((column) => column.key !== "ranking");
+
 const pad = (value: number) => String(value).padStart(2, "0");
 
 // Dates read the same in every file the app writes, on the clock the table drew
@@ -137,21 +149,23 @@ const csvField = (value: XlsxCell, column: ExportColumn) => {
     return /["\r\n,]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 };
 
-export const applicationsCsv = (rows: ApplicationRow[]) =>
-    [
-        COLUMNS.map((column) => column.header).join(","),
+export const applicationsCsv = (rows: ApplicationRow[], rankings = false) => {
+    const columns = columnsFor(rankings);
+    return [
+        columns.map((column) => column.header).join(","),
         ...rows.map((app) =>
-            COLUMNS.map((column) => csvField(column.cell(app), column)).join(
-                ",",
-            ),
+            columns
+                .map((column) => csvField(column.cell(app), column))
+                .join(","),
         ),
     ].join("\r\n");
+};
 
-export const applicationsJson = (rows: ApplicationRow[]) =>
+export const applicationsJson = (rows: ApplicationRow[], rankings = false) =>
     JSON.stringify(
         rows.map((app) =>
             Object.fromEntries(
-                COLUMNS.map((column) => {
+                columnsFor(rankings).map((column) => {
                     const value = column.cell(app);
                     return [
                         column.key,
@@ -166,12 +180,18 @@ export const applicationsJson = (rows: ApplicationRow[]) =>
         2,
     );
 
-export const applicationsXlsx = (rows: ApplicationRow[], sheet: string) =>
-    buildXlsx({
+export const applicationsXlsx = (
+    rows: ApplicationRow[],
+    sheet: string,
+    rankings = false,
+) => {
+    const columns = columnsFor(rankings);
+    return buildXlsx({
         sheet,
-        columns: COLUMNS,
-        rows: rows.map((app) => COLUMNS.map((column) => column.cell(app))),
+        columns,
+        rows: rows.map((app) => columns.map((column) => column.cell(app))),
     });
+};
 
 const MIME: Record<ExportFormat, string> = {
     csv: "text/csv;charset=utf-8",
@@ -187,12 +207,13 @@ export const applicationsFile = (
     rows: ApplicationRow[],
     format: ExportFormat,
     listName: string,
+    rankings = false,
 ): Blob => {
     const body =
         format === "csv"
-            ? BOM + applicationsCsv(rows)
+            ? BOM + applicationsCsv(rows, rankings)
             : format === "json"
-              ? applicationsJson(rows)
-              : applicationsXlsx(rows, listName);
+              ? applicationsJson(rows, rankings)
+              : applicationsXlsx(rows, listName, rankings);
     return new Blob([body], { type: MIME[format] });
 };

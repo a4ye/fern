@@ -29,12 +29,36 @@ export const ROW_MIN_WIDTH = "min-w-[79.5rem]";
 // squares, which is what keeps the glyphs off each other and off the row's edge.
 export const APPLICATION_COLUMNS = `grid ${ROW_MIN_WIDTH} grid-cols-[1.75rem_minmax(9rem,1.6fr)_minmax(9rem,1.7fr)_8.5rem_minmax(7rem,1.2fr)_6.5rem_9.5rem_8rem_5rem_6rem] items-center gap-x-3`;
 
+// The same grid with a WaterlooWorks Ranking column after Status, measured in
+// the app's own font. Ranking is 6rem because bulk edit holds "Not selected"
+// and the picker's chevron there, which take 5.9rem. Added on its own it would
+// leave this table scrolling on laptops where the plain one fits, so the other
+// columns pay for it. Applied keeps 6.5rem, which "May 31, 2025" fills in the
+// picker, and Updated 4.5rem, room for its own heading. Company and Role start
+// at 7.75rem and Location at 5.5rem, and all three still grow with the window
+// and carry their whole value on hover. Status, Arrangement and Pay are already
+// at their longest label. The minimums come to the same 70.25rem as the plain
+// grid, so the floor is that grid's plus one 0.75rem gap: 80.25rem.
+export const RANKED_ROW_MIN_WIDTH = "min-w-[80.25rem]";
+
+const RANKED_APPLICATION_COLUMNS = `grid ${RANKED_ROW_MIN_WIDTH} grid-cols-[1.75rem_minmax(7.75rem,1.6fr)_minmax(7.75rem,1.7fr)_8.5rem_6rem_minmax(5.5rem,1.2fr)_6.5rem_9.5rem_6.5rem_4.5rem_6rem] items-center gap-x-3`;
+
+// The grid a table draws on, and the floor its full-width rows share with it.
+export const applicationGrid = (rankings: boolean) =>
+    rankings
+        ? {
+              columns: RANKED_APPLICATION_COLUMNS,
+              minWidth: RANKED_ROW_MIN_WIDTH,
+          }
+        : { columns: APPLICATION_COLUMNS, minWidth: ROW_MIN_WIDTH };
+
 // The value columns in the order they are drawn, each with what it sorts by.
 // The checkbox and the row actions are not values and so are not here.
 const HEADINGS: { label: string; key: SortKey }[] = [
     { label: "Company", key: "company" },
     { label: "Role", key: "role" },
     { label: "Status", key: "status" },
+    { label: "Ranking", key: "ranking" },
     { label: "Location", key: "location" },
     { label: "Arrangement", key: "arrangement" },
     { label: "Pay", key: "pay" },
@@ -107,23 +131,27 @@ export const ApplicationsHeaderRow = ({
     selectAll,
     sort = null,
     onSort,
+    rankings = false,
 }: {
     selectAll?: ReactNode;
     sort?: Sort | null;
     onSort?: (key: SortKey) => void;
+    rankings?: boolean;
 }) => (
     <div
-        className={`${APPLICATION_COLUMNS} sticky top-0 z-20 border-b border-hairline bg-background px-5 py-2 text-xs font-medium text-muted`}
+        className={`${applicationGrid(rankings).columns} sticky top-0 z-20 border-b border-hairline bg-background px-5 py-2 text-xs font-medium text-muted`}
     >
         <span className="flex items-center">{selectAll}</span>
-        {HEADINGS.map(({ label, key }) => (
-            <Heading
-                key={key}
-                label={label}
-                direction={sort?.key === key ? sort.direction : null}
-                onSort={onSort && (() => onSort(key))}
-            />
-        ))}
+        {HEADINGS.filter(({ key }) => rankings || key !== "ranking").map(
+            ({ label, key }) => (
+                <Heading
+                    key={key}
+                    label={label}
+                    direction={sort?.key === key ? sort.direction : null}
+                    onSort={onSort && (() => onSort(key))}
+                />
+            ),
+        )}
         <span className="sr-only">Actions</span>
     </div>
 );

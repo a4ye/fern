@@ -13,6 +13,7 @@ import {
     APPLICATION_STATUSES,
     ARRANGEMENTS,
     PAY_PERIODS,
+    RANKINGS,
     toDateInput,
     type ListStatus,
 } from "@/components/dashboard/data";
@@ -166,6 +167,8 @@ const appliedAtSchema = optionalText("Applied date", 10)
         `Applied date must fall between ${APPLIED_MIN_YEAR} and today.`,
     );
 
+const rankingSchema = z.enum(RANKINGS, "Choose a valid ranking.").nullable();
+
 export const applicationSchema = z.object({
     company: z
         .string()
@@ -179,6 +182,7 @@ export const applicationSchema = z.object({
     status: z.enum(APPLICATION_STATUSES, "Choose a valid status."),
     location: optionalText("Location", LOCATION_MAX),
     arrangement: z.enum(ARRANGEMENTS, "Choose a valid arrangement.").nullable(),
+    ranking: rankingSchema,
     pay: optionalText("Pay", PAY_MAX),
     appliedAt: appliedAtSchema,
     url: urlSchema,
@@ -186,10 +190,13 @@ export const applicationSchema = z.object({
 
 // One row read out of a spreadsheet: the columns the quick-edit grid holds,
 // where pay is still the single line of text the sheet wrote, plus the notes
-// only an import carries in alongside them.
-export const importRowSchema = applicationSchema.extend({
-    notes: optionalText("Notes", NOTES_MAX),
-});
+// only an import carries in alongside them. A ranking is the one grid column
+// left out, since it only exists once interviews close.
+export const importRowSchema = applicationSchema
+    .omit({ ranking: true })
+    .extend({
+        notes: optionalText("Notes", NOTES_MAX),
+    });
 
 // What an amount field accepts before it stops taking keys: ten digits and two
 // decimals, plus room for the grouping commas people type, which the schema
@@ -236,6 +243,7 @@ export const applicationDetailFields = z.object({
     role: optionalText("Role", ROLE_MAX),
     location: optionalText("Location", LOCATION_MAX),
     arrangement: z.enum(ARRANGEMENTS, "Choose a valid arrangement.").nullable(),
+    ranking: rankingSchema,
     appliedAt: appliedAtSchema,
     url: urlSchema,
     payMin: amountSchema("Minimum pay"),
@@ -320,6 +328,7 @@ export const accountSettingsSchema = z.object({
     cleanLinks: z.boolean(),
     employerLinks: z.boolean(),
     tidyTitles: z.boolean(),
+    waterlooRankings: z.boolean(),
 });
 
 // What the browser says a pasted link did. This is the one thing the app records

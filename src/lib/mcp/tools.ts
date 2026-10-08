@@ -15,6 +15,7 @@ import {
     importApplications,
     saveApplicationDetailPatch,
     setApplicationsArrangement,
+    setApplicationsRanking,
     setApplicationsStatus,
     setListPinned,
     updateList,
@@ -37,6 +38,7 @@ import { READ_ONLY_TOKEN, allowsWrite } from "@/lib/mcp/scopes";
 import {
     APPLICATION_STATUSES,
     ARRANGEMENTS,
+    RANKINGS,
     LIST_SORTS,
 } from "@/components/dashboard/data";
 import {
@@ -248,7 +250,7 @@ export const registerFernTools = (server: McpServer): void => {
         {
             title: "Read account settings",
             description:
-                "The account's default currency and its link and title preferences.",
+                "The account's default currency, its link and title preferences, and whether WaterlooWorks rankings are on.",
             inputSchema: z.object({}),
             annotations: { readOnlyHint: true },
         },
@@ -346,7 +348,7 @@ export const registerFernTools = (server: McpServer): void => {
                 changes: z
                     .record(z.string(), z.unknown())
                     .describe(
-                        "Any of company, role, location, arrangement, appliedAt, url, payMin, payMax, payCurrency, payPeriod, bonus, payNote, notes.",
+                        "Any of company, role, location, arrangement, ranking, appliedAt, url, payMin, payMax, payCurrency, payPeriod, bonus, payNote, notes. ranking is the WaterlooWorks result: ranked_first, ranked, not_ranked, or not_selected (turned down before an interview).",
                     ),
             }),
         },
@@ -444,6 +446,26 @@ export const registerFernTools = (server: McpServer): void => {
                 applicationIds,
                 arrangement,
             );
+            return reply({ updated: applicationIds.length });
+        },
+    );
+
+    server.registerTool(
+        "set_ranking",
+        {
+            title: "Set the WaterlooWorks result of applications",
+            description:
+                "Set the WaterlooWorks result across a selection: ranked_first (the employer's first choice), ranked (a backup), not_ranked (interviewed, then not ranked), or not_selected (turned down before an interview). Send null to clear it. Any result marks an application as a WaterlooWorks one. This is recorded in the list's history and can be undone with undo_action.",
+            inputSchema: z.object({
+                applicationIds: idsSchema,
+                ranking: z.enum(RANKINGS).nullable(),
+            }),
+        },
+        async ({ applicationIds, ranking }, context) => {
+            const userId = accountOf(context);
+            const denied = await writeRefusal(context, userId);
+            if (denied) return refuse(denied);
+            await setApplicationsRanking(userId, applicationIds, ranking);
             return reply({ updated: applicationIds.length });
         },
     );

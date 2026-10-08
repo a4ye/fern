@@ -6,9 +6,11 @@
 import {
     APPLICATION_STATUSES,
     ARRANGEMENTS,
+    RANKINGS,
     STATUS_META,
     arrangementLabel,
     formatPay,
+    rankingLabel,
     type ApplicationRow,
     type ApplicationStatus,
     type Arrangement,
@@ -26,6 +28,7 @@ export type SortKey =
     | "company"
     | "role"
     | "status"
+    | "ranking"
     | "location"
     | "arrangement"
     | "pay"
@@ -54,6 +57,11 @@ const STATUS_RANK = new Map(
 
 const ARRANGEMENT_RANK = new Map(
     ARRANGEMENTS.map((arrangement, index) => [arrangement, index] as const),
+);
+
+// Best first, so an ascending sort puts the first choices on top.
+const RANKING_RANK = new Map(
+    RANKINGS.map((ranking, index) => [ranking, index] as const),
 );
 
 // A rate compares against another only once both are on the same clock, so
@@ -126,6 +134,10 @@ const sortValue = (
             return app.role || null;
         case "status":
             return STATUS_RANK.get(app.status) ?? null;
+        case "ranking":
+            return app.ranking === null
+                ? null
+                : (RANKING_RANK.get(app.ranking) ?? null);
         case "location":
             return app.location || null;
         case "arrangement":
@@ -194,17 +206,24 @@ export const activeFilterCount = (filters: Filters): number =>
 export const isFiltered = (filters: Filters): boolean =>
     filters.query.trim() !== "" || activeFilterCount(filters) > 0;
 
-// Every column a row can be found by. Status and arrangement are searched
-// through the label the row prints, so typing what you can see finds it. Pay is
-// searched by both the figure on record and the converted one, so a column
-// showing one currency is still searchable by the other.
-const fieldsOf = (app: ApplicationRow, converted: string | null): string[] => [
+// Every column a row can be found by. Status, ranking and arrangement are
+// searched through the label the row prints, so typing what you can see finds
+// it. A ranking is only searched while its column is drawn: a row turning up
+// for "1" because of a "Ranked 1" nobody can see would read as a broken
+// search. Pay is searched by both the figure on record and the converted one,
+// so a column showing one currency is still searchable by the other.
+const fieldsOf = (
+    app: ApplicationRow,
+    converted: string | null,
+    rankings: boolean,
+): string[] => [
     app.company,
     app.role ?? "",
     app.location ?? "",
     app.pay ?? "",
     converted ?? "",
     STATUS_META[app.status].label,
+    rankings && app.ranking ? rankingLabel(app.ranking) : "",
     app.arrangement ? arrangementLabel(app.arrangement) : "",
 ];
 
@@ -214,10 +233,11 @@ const matchesQuery = (
     app: ApplicationRow,
     query: string,
     converted: string | null,
+    rankings: boolean,
 ): boolean => {
     const terms = query.trim().split(/\s+/).filter(Boolean);
     if (terms.length === 0) return true;
-    const fields = fieldsOf(app, converted);
+    const fields = fieldsOf(app, converted, rankings);
     return terms.every((term) =>
         fields.some((field) => containsMatch(term, field)),
     );
@@ -245,12 +265,14 @@ export type ApplicationsView = {
 // what ticking the box would add rather than as what is already on screen. The
 // search box is not a facet and narrows both. `convertTo` is the currency the
 // pay column is being read in, or null while every row is read as written.
+// `rankings` says whether the Ranking column is drawn.
 export const applicationsView = (
     applications: ApplicationRow[],
     filters: Filters,
     sort: Sort | null,
     rates: ExchangeRates,
     convertTo: string | null = null,
+    rankings = false,
 ): ApplicationsView => {
     const byStatus = (app: ApplicationRow) =>
         filters.statuses.length === 0 || filters.statuses.includes(app.status);
@@ -263,6 +285,7 @@ export const applicationsView = (
             app,
             filters.query,
             convertTo && payInCurrency(app, convertTo, rates),
+            rankings,
         ),
     );
     const rows = searched.filter((app) => byStatus(app) && byArrangement(app));

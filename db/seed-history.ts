@@ -77,6 +77,7 @@ const storedApplication = (
     url: `https://jobs.example.com/${application.position}`,
     location: "Toronto, ON",
     arrangement: "remote",
+    ranking: null,
     notes: null,
     pay_min: "110000.00",
     pay_max: "145000.00",

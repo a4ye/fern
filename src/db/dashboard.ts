@@ -2,6 +2,7 @@ import type { PoolClient } from "@neondatabase/serverless";
 import { getPool } from "@/db/client";
 import * as gen from "@/db/queries";
 import { getExchangeRates } from "@/db/exchange-rates";
+import { getUserSettings } from "@/db/settings";
 import {
     HISTORY_KIND,
     recordApplicationChange,
@@ -13,8 +14,10 @@ import {
     ACTIVE_STATUSES,
     INTERVIEWING_STATUSES,
     OFFER_STATUSES,
+    countedStatus,
     formatPay,
     formatRelative,
+    rankingSteps,
     toDateInput,
     type ApplicationExtras,
     type ApplicationRow,
@@ -27,6 +30,7 @@ import {
     type ListStatus,
     type ListSummary,
     type PayPeriod,
+    type Ranking,
     type StatusStep,
     type Stat,
 } from "@/components/dashboard/data";
@@ -122,6 +126,7 @@ export type ApplicationInput = {
     status: ApplicationStatus;
     location: string | null;
     arrangement: Arrangement | null;
+    ranking: Ranking | null;
     pay: string | null;
     appliedAt: string | null;
     url: string | null;
@@ -156,6 +161,7 @@ export const createApplication = async (
                 url: input.url,
                 location: input.location,
                 arrangement: input.arrangement,
+                ranking: input.ranking,
                 appliedAt: parseDateInput(input.appliedAt),
                 timeZone,
                 payMin: input.payMin,
@@ -179,10 +185,13 @@ export const createApplication = async (
 // Date, so the day cannot move in serialization. Everything else is text for the
 // same reason: one JSON parameter that the database casts, rather than fourteen
 // arrays that have to stay in step.
+//
+// No sheet or agent brings a ranking with it, since one only exists once
+// interviews close, so an imported row always starts without one.
 export const importApplications = async (
     userId: string,
     listId: string,
-    rows: (ApplicationInput & { notes: string | null })[],
+    rows: (Omit<ApplicationInput, "ranking"> & { notes: string | null })[],
     timeZone: string,
     defaultCurrency: string,
 ): Promise<number> => {
@@ -254,6 +263,7 @@ export const updateApplications = async (
             url: row.input.url,
             location: row.input.location,
             arrangement: row.input.arrangement,
+            ranking: row.input.ranking,
             applied_at: row.input.appliedAt,
             pay_typed: row.payTyped,
             pay_min: pay?.payMin ?? null,
@@ -286,6 +296,7 @@ export type ApplicationDetail = {
     role: string | null;
     location: string | null;
     arrangement: Arrangement | null;
+    ranking: Ranking | null;
     appliedAt: string | null;
     url: string | null;
     payMin: string | null;
@@ -311,6 +322,7 @@ const saveApplicationDetailWithClient = async (
         url: detail.url,
         location: detail.location,
         arrangement: detail.arrangement,
+        ranking: detail.ranking,
         appliedAt: parseDateInput(detail.appliedAt),
         payMin: detail.payMin,
         payMax: detail.payMax,
@@ -407,6 +419,7 @@ export const getApplication = async (
         role: row.roleTitle,
         location: row.location,
         arrangement: row.arrangement as Arrangement | null,
+        ranking: row.ranking as Ranking | null,
         appliedAt: row.appliedAt ? toDateInput(row.appliedAt) : null,
         url: row.url,
         payMin: row.payMin,
@@ -455,6 +468,7 @@ export const saveApplicationDetailPatch = async (
                 role: row.roleTitle,
                 location: row.location,
                 arrangement: row.arrangement as Arrangement | null,
+                ranking: row.ranking as Ranking | null,
                 appliedAt: row.appliedAt ? toDateInput(row.appliedAt) : null,
                 url: row.url,
                 payMin: row.payMin,
@@ -655,6 +669,27 @@ export const setApplicationsArrangement = async (
     });
 };
 
+// Recorded as an edit: History then names it "Updated details for 40
+// applications" and lists the ranking each one was given, which says all a kind
+// of its own would.
+export const setApplicationsRanking = async (
+    userId: string,
+    applicationIds: string[],
+    ranking: Ranking | null,
+): Promise<void> => {
+    await recordApplicationChange({
+        userId,
+        applicationIds,
+        kind: HISTORY_KIND.edit,
+        mutation: (client) =>
+            gen.setApplicationsRanking(client, {
+                applicationIds,
+                userId,
+                ranking,
+            }),
+    });
+};
+
 export const deleteApplication = async (
     userId: string,
     applicationId: string,
@@ -731,6 +766,7 @@ export const toApplicationRow = (row: {
     url: string | null;
     location: string | null;
     arrangement: string | null;
+    ranking: string | null;
     payMin: string | null;
     payMax: string | null;
     payCurrency: string;
@@ -759,16 +795,25 @@ export const toApplicationRow = (row: {
     bonus: row.bonusAmount,
     location: row.location,
     arrangement: row.arrangement as Arrangement | null,
+    ranking: row.ranking as Ranking | null,
     appliedAt: row.appliedAt ? toDateInput(row.appliedAt) : null,
     url: row.url,
     updated: formatRelative(row.updatedAt),
     updatedAt: row.updatedAt.toISOString(),
 });
 
-export const listStats = (applications: ApplicationRow[]): Stat[] => {
+// `rankings` counts each row by what its WaterlooWorks ranking settles, for an
+// account that tracks them. See countedStatus.
+export const listStats = (
+    applications: ApplicationRow[],
+    rankings = false,
+): Stat[] => {
     const counts = new Map<ApplicationStatus, number>();
     for (const app of applications) {
-        counts.set(app.status, (counts.get(app.status) ?? 0) + 1);
+        const status = rankings
+            ? countedStatus(app.status, app.ranking)
+            : app.status;
+        if (status) counts.set(status, (counts.get(status) ?? 0) + 1);
     }
     const sumOf = (statuses: ApplicationStatus[]): number =>
         statuses.reduce(
@@ -789,13 +834,14 @@ export const getListDetail = async (
     listId: string,
 ): Promise<ListDetail | null> => {
     const pool = getPool();
-    const [list, applicationRows] = await Promise.all([
+    const [list, applicationRows, settings] = await Promise.all([
         gen.getListForUser(pool, { id: listId, userId }),
         gen.listApplicationsForList(pool, {
             listId,
             userId,
             maxApplications: MAX_APPLICATIONS_READ_PER_LIST,
         }),
+        getUserSettings(userId),
     ]);
     if (!list) return null;
 
@@ -806,7 +852,7 @@ export const getListDetail = async (
         name: list.name,
         description: list.description,
         status: list.status as ListStatus,
-        stats: listStats(applications),
+        stats: listStats(applications, settings.waterlooRankings),
         applications,
     };
 };
@@ -844,7 +890,7 @@ export const getListInsights = async (
     const list = await gen.getListForUser(pool, { id: listId, userId });
     if (!list) return null;
 
-    const [applicationRows, statusEventRows] = await Promise.all([
+    const [applicationRows, statusEventRows, settings] = await Promise.all([
         gen.listApplicationsForList(pool, {
             listId,
             userId,
@@ -854,7 +900,9 @@ export const getListInsights = async (
             listId,
             maxEvents: MAX_EVENTS_READ_PER_APPLICATION,
         }),
+        getUserSettings(userId),
     ]);
+    const rankings = settings.waterlooRankings;
 
     const trails = new Map<string, StatusStep[]>();
     for (const row of statusEventRows) {
@@ -890,12 +938,19 @@ export const getListInsights = async (
         return {
             status,
             history: historyOf(row.id, status).map((step) => step.status),
+            ranking: row.ranking as Ranking | null,
         };
     });
 
+    // A ranking answers an application, so one holding a ranking was sent
+    // even when its status never said so.
     const sentAt = applicationRows.flatMap((row) => {
         const trail = historyOf(row.id, row.status as ApplicationStatus);
-        if (!wasSent(trail.map((step) => step.status))) return [];
+        const steps = [
+            ...trail.map((step) => step.status),
+            ...(rankings ? rankingSteps(row.ranking as Ranking | null) : []),
+        ];
+        if (!wasSent(steps)) return [];
         const recorded = trail.find((step) => step.at)?.at;
         return [
             row.appliedAt ?? (recorded ? new Date(recorded) : row.updatedAt),
@@ -903,7 +958,7 @@ export const getListInsights = async (
     });
 
     return {
-        funnel: funnelFrom(flow),
+        funnel: funnelFrom(flow, rankings),
         flow,
         volume: volumeFrom(sentAt),
         places: placesFrom(applicationRows.map((row) => row.location)),

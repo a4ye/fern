@@ -27,6 +27,7 @@ let total = 0;
 let rows: Row[] = [];
 let applications: Record<string, unknown>[] = [];
 let statusEvents: EventRow[] = [];
+let waterlooRankings = false;
 let applicationEvents: EventRow[] = [];
 const TIME_ZONE = "America/Toronto";
 const transactionClient = { transaction: true };
@@ -77,6 +78,9 @@ const applyStatusStepEditsQuery = mock(
 const lockApplicationsForUser = mock(async (..._args: unknown[]) => []);
 const insertStatusEvents = mock(async (..._args: unknown[]) => undefined);
 const setApplicationsStatus = mock(async (..._args: unknown[]) => undefined);
+const setApplicationsRankingQuery = mock(
+    async (..._args: unknown[]) => undefined,
+);
 const getApplicationForUser = mock(async (..._args: unknown[]) =>
     application("applied"),
 );
@@ -136,6 +140,15 @@ mock.module("@/db/client", () => ({
     getPool: () => ({}),
     withTransaction,
 }));
+mock.module("@/db/settings", () => ({
+    getUserSettings: async () => ({
+        defaultCurrency: "USD",
+        cleanLinks: true,
+        employerLinks: false,
+        tidyTitles: false,
+        waterlooRankings,
+    }),
+}));
 mock.module("@/db/history", () => ({
     HISTORY_KIND: {
         create: 1,
@@ -186,6 +199,7 @@ mock.module("@/db/queries", () => ({
     updateApplicationDetail,
     updateApplicationFields,
     updateApplicationsBulk: updateApplicationsBulkQuery,
+    setApplicationsRanking: setApplicationsRankingQuery,
     applyStatusStepEdits: applyStatusStepEditsQuery,
     lockApplicationsForUser,
     insertStatusEvents,
@@ -206,6 +220,7 @@ const {
     getListsForUser,
     removeStatusStep,
     saveApplicationDetailAndSteps,
+    setApplicationsRanking,
     setApplicationsStatus: setApplicationsStatusDb,
     updateApplications,
 } = await import("@/db/dashboard");
@@ -234,6 +249,7 @@ const queryArgs = () => listsPageForUser.mock.calls.at(-1)?.[1];
 
 beforeEach(() => {
     total = 0;
+    waterlooRankings = false;
     rows = [];
     applicationEvents = [];
     applicationNotes = null;
@@ -252,6 +268,8 @@ beforeEach(() => {
     lockApplicationsForUser.mockClear();
     insertStatusEvents.mockClear();
     setApplicationsStatus.mockClear();
+    setApplicationsRankingQuery.mockClear();
+    recordApplicationChange.mockClear();
     getApplicationForUser.mockClear();
     insertApplicationEvent.mockClear();
     getSuggestionForUser.mockClear();
@@ -335,6 +353,7 @@ const application = (status: string) => ({
     url: null,
     location: null,
     arrangement: null,
+    ranking: null,
     notes: null,
     payMin: null,
     payMax: null,
@@ -429,6 +448,60 @@ describe("getListDetail", () => {
             listId: "list-1",
             userId: "user-1",
             maxApplications: MAX_APPLICATIONS_READ_PER_LIST,
+        });
+    });
+});
+
+describe("list totals with WaterlooWorks rankings", () => {
+    const value = (stats: { label: string; value: string }[], label: string) =>
+        stats.find((stat) => stat.label === label)?.value;
+
+    it("count each row by what its ranking settles", async () => {
+        waterlooRankings = true;
+        applications = [
+            { ...application("interviewing"), ranking: "ranked_first" },
+            { ...application("interviewing"), ranking: "ranked" },
+            { ...application("applied"), ranking: "not_selected" },
+            { ...application("interviewing"), ranking: null },
+        ];
+        const { stats } = await detail();
+
+        expect(value(stats, "Total")).toBe("4");
+        expect(value(stats, "Active")).toBe("2");
+        expect(value(stats, "Interviewing")).toBe("1");
+        expect(value(stats, "Offers")).toBe("1");
+    });
+
+    it("count statuses alone while the setting is off", async () => {
+        applications = [
+            { ...application("interviewing"), ranking: "ranked_first" },
+            { ...application("applied"), ranking: "not_selected" },
+        ];
+        const { stats } = await detail();
+
+        expect(value(stats, "Active")).toBe("2");
+        expect(value(stats, "Offers")).toBe("0");
+    });
+});
+
+describe("setApplicationsRanking", () => {
+    it("writes a selection in one statement, recorded as an undoable edit", async () => {
+        await setApplicationsRanking(
+            "user-1",
+            ["app-a", "app-b"],
+            "not_selected",
+        );
+
+        expect(setApplicationsRankingQuery).toHaveBeenCalledTimes(1);
+        expect(setApplicationsRankingQuery.mock.calls[0]?.[1]).toEqual({
+            applicationIds: ["app-a", "app-b"],
+            userId: "user-1",
+            ranking: "not_selected",
+        });
+        expect(recordApplicationChange.mock.calls[0]?.[0]).toMatchObject({
+            userId: "user-1",
+            applicationIds: ["app-a", "app-b"],
+            kind: 3,
         });
     });
 });
@@ -538,6 +611,7 @@ describe("compound application writes", () => {
         status: "interviewing" as const,
         location: null,
         arrangement: null,
+        ranking: null,
         pay: null,
         appliedAt: null,
         url: null,
@@ -573,6 +647,7 @@ describe("compound application writes", () => {
                 role: null,
                 location: null,
                 arrangement: null,
+                ranking: null,
                 appliedAt: null,
                 url: null,
                 payMin: null,

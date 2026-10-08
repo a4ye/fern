@@ -1,16 +1,18 @@
 -- name: GetUserSettings :one
-select default_currency, clean_links, employer_links, tidy_titles
+select default_currency, clean_links, employer_links, tidy_titles,
+    waterloo_rankings
 from user_settings
 where user_id = $1;
 
 -- name: SaveUserSettings :exec
-insert into user_settings (user_id, default_currency, clean_links, employer_links, tidy_titles)
-values ($1, $2, $3, $4, $5)
+insert into user_settings (user_id, default_currency, clean_links, employer_links, tidy_titles, waterloo_rankings)
+values ($1, $2, $3, $4, $5, $6)
 on conflict (user_id) do update
 set default_currency = excluded.default_currency,
     clean_links = excluded.clean_links,
     employer_links = excluded.employer_links,
     tidy_titles = excluded.tidy_titles,
+    waterloo_rankings = excluded.waterloo_rankings,
     updated_at = now();
 
 -- name: GetOnboardedAt :one

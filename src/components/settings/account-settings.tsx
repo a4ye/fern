@@ -86,6 +86,7 @@ export const AccountSettings = ({
     cleanLinks,
     employerLinks,
     tidyTitles,
+    waterlooRankings,
 }: {
     name: string;
     signedInAs: string;
@@ -94,6 +95,7 @@ export const AccountSettings = ({
     cleanLinks: boolean;
     employerLinks: boolean;
     tidyTitles: boolean;
+    waterlooRankings: boolean;
 }) => {
     const router = useRouter();
     const [draftName, setDraftName] = useState(name);
@@ -101,6 +103,7 @@ export const AccountSettings = ({
     const [draftCleanLinks, setDraftCleanLinks] = useState(cleanLinks);
     const [draftEmployerLinks, setDraftEmployerLinks] = useState(employerLinks);
     const [draftTidyTitles, setDraftTidyTitles] = useState(tidyTitles);
+    const [draftRankings, setDraftRankings] = useState(waterlooRankings);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -112,7 +115,8 @@ export const AccountSettings = ({
         draftCurrency !== defaultCurrency ||
         draftCleanLinks !== cleanLinks ||
         draftEmployerLinks !== employerLinks ||
-        draftTidyTitles !== tidyTitles;
+        draftTidyTitles !== tidyTitles ||
+        draftRankings !== waterlooRankings;
 
     const save = async () => {
         if (saving || !changed) return;
@@ -125,6 +129,7 @@ export const AccountSettings = ({
                 cleanLinks: draftCleanLinks,
                 employerLinks: draftEmployerLinks,
                 tidyTitles: draftTidyTitles,
+                waterlooRankings: draftRankings,
             });
             if (result.ok) {
                 toast.success("Settings saved.");
@@ -240,6 +245,16 @@ export const AccountSettings = ({
                         label="Auto shorten role titles"
                         on={draftTidyTitles}
                         onChange={setDraftTidyTitles}
+                    />
+                </Row>
+                <Row
+                    label="Track WaterlooWorks rankings"
+                    hint="Adds a Ranking column for each WaterlooWorks result: Not selected, Not ranked, Ranked, or Ranked 1. The Sankey can then show WaterlooWorks and external jobs apart."
+                >
+                    <Toggle
+                        label="Track WaterlooWorks rankings"
+                        on={draftRankings}
+                        onChange={setDraftRankings}
                     />
                 </Row>
             </Section>

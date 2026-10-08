@@ -84,6 +84,7 @@ describe("permanent application deletion", () => {
         url: null,
         location: null,
         arrangement: "remote",
+        ranking: null,
         notes: null,
         pay_min: null,
         pay_max: null,
@@ -559,6 +560,24 @@ describe("history wording", () => {
             "NotionGraph: Role set to Developer",
             "NotionGraph: Location cleared",
         ]);
+    });
+
+    it("names a ranking by the label the table prints", () => {
+        expect(
+            historyChangesFor(
+                historyAction({
+                    data: {
+                        a: [
+                            {
+                                i: "00000000-0000-4000-8000-000000000001",
+                                n: "NotionGraph",
+                                f: { rk: ["ranked", "ranked_first"] },
+                            },
+                        ],
+                    },
+                }),
+            ),
+        ).toEqual(["NotionGraph: Ranking changed from Ranked to Ranked 1"]);
     });
 
     it("summarizes a bulk change instead of naming one application", () => {
@@ -1291,6 +1310,7 @@ const storedApplication = (
     url: null,
     location: null,
     arrangement: "remote",
+    ranking: null,
     notes: null,
     pay_min: null,
     pay_max: null,
@@ -1404,6 +1424,25 @@ describe("point-in-time history restoration", () => {
         expect(before.applications.values().next().value?.role_title).toBe(
             "Senior Engineer",
         );
+    });
+
+    // History written before the ranking column existed stores rows with no key
+    // for it. That is the same row as one whose ranking is empty, so it must not
+    // read as an edit, nor stop a version from matching the list as it is now.
+    it("treats a row stored before a column existed as holding null there", () => {
+        const { ranking: _ranking, ...older } = storedApplication();
+        const stored = older as StoredApplication;
+        const current = storedApplication({ ranking: null });
+
+        expect(
+            versionDeltaBetween(versionState(stored), versionState(current)).a,
+        ).toBeUndefined();
+        expect(
+            versionDeltaBetween(
+                versionState(stored),
+                versionState(storedApplication({ ranking: "ranked_first" })),
+            ).a?.[0]?.f,
+        ).toEqual({ rk: [null, "ranked_first"] });
     });
 
     it("keeps pay currency in a version delta without duplicating a field edit", () => {

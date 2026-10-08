@@ -9,6 +9,7 @@ import type {
 const entry = (...history: ApplicationStatus[]): FlowEntry => ({
     status: history[history.length - 1],
     history,
+    ranking: null,
 });
 
 const stageOf = (flow: FlowEntry[], key: FunnelStageKey) => {
@@ -132,5 +133,24 @@ describe("volumeFrom", () => {
             through: "2026-09-03",
             days: [],
         });
+    });
+});
+
+describe("funnelFrom with WaterlooWorks rankings", () => {
+    const flow: FlowEntry[] = [
+        { ...entry("not_applied"), ranking: "ranked_first" },
+        { ...entry("applied"), ranking: "not_selected" },
+    ];
+
+    test("counts what a ranking proves the application went through", () => {
+        const funnel = funnelFrom(flow, true);
+        expect(funnel.applied).toBe(2);
+        expect(funnel.stages.map((stage) => stage.count)).toEqual([2, 1, 1]);
+    });
+
+    test("reads statuses alone while the setting is off", () => {
+        const funnel = funnelFrom(flow, false);
+        expect(funnel.applied).toBe(1);
+        expect(funnel.stages.map((stage) => stage.count)).toEqual([0, 0, 0]);
     });
 });

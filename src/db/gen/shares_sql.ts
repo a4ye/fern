@@ -541,6 +541,7 @@ select
     a.url,
     a.location,
     a.arrangement,
+    a.ranking,
     a.pay_min,
     a.pay_max,
     a.pay_currency,
@@ -567,6 +568,7 @@ export interface ApplicationsForSharedListRow {
     url: string | null;
     location: string | null;
     arrangement: string | null;
+    ranking: string | null;
     payMin: string | null;
     payMax: string | null;
     payCurrency: string;
@@ -592,14 +594,15 @@ export async function applicationsForSharedList(client: Client, args: Applicatio
             url: row[4],
             location: row[5],
             arrangement: row[6],
-            payMin: row[7],
-            payMax: row[8],
-            payCurrency: row[9],
-            payPeriod: row[10],
-            bonusAmount: row[11],
-            payNote: row[12],
-            appliedAt: row[13],
-            updatedAt: row[14]
+            ranking: row[7],
+            payMin: row[8],
+            payMax: row[9],
+            payCurrency: row[10],
+            payPeriod: row[11],
+            bonusAmount: row[12],
+            payNote: row[13],
+            appliedAt: row[14],
+            updatedAt: row[15]
         };
     });
 }

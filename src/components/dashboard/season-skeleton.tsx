@@ -1,8 +1,8 @@
 import Link from "next/link";
 import {
-    APPLICATION_COLUMNS,
     ApplicationsHeaderRow,
     ROW_HEIGHT,
+    applicationGrid,
 } from "@/components/dashboard/applications-columns";
 
 // Loading placeholders for a single list. Each block mirrors the real section
@@ -49,9 +49,15 @@ const ControlSkeleton = ({
 
 const STAT_LABELS = ["Total", "Active", "Interviewing", "Offers"];
 
-const ApplicationRowSkeleton = ({ viewing }: { viewing: boolean }) => (
+const ApplicationRowSkeleton = ({
+    viewing,
+    rankings,
+}: {
+    viewing: boolean;
+    rankings: boolean;
+}) => (
     <li
-        className={`${APPLICATION_COLUMNS} ${ROW_HEIGHT} border-b border-faint px-5 last:border-b-0`}
+        className={`${applicationGrid(rankings).columns} ${ROW_HEIGHT} border-b border-faint px-5 last:border-b-0`}
     >
         {viewing ? <span /> : <span className="skeleton size-3.5" />}
         <Cell width="w-28" />
@@ -59,6 +65,7 @@ const ApplicationRowSkeleton = ({ viewing }: { viewing: boolean }) => (
         {/* Status renders as a filled plate in the real row, so the placeholder
             matches that box rather than a text line. */}
         <span className="skeleton h-5 w-20" />
+        {rankings && <Cell width="w-12" />}
         <Cell width="w-24" />
         <Cell width="w-14" />
         <Cell width="w-16" />
@@ -70,10 +77,13 @@ const ApplicationRowSkeleton = ({ viewing }: { viewing: boolean }) => (
 
 // `viewing` drops the same controls the real page leaves out while an admin is
 // viewing another account, so the toolbar is the same length either way.
+// `rankings` lays the rows out on the grid with a Ranking column.
 export const SeasonPageSkeleton = ({
     viewing = false,
+    rankings = false,
 }: {
     viewing?: boolean;
+    rankings?: boolean;
 }) => (
     <div className="mx-auto w-full max-w-[88rem] flex-1 px-6 py-10 sm:px-10">
         <Link
@@ -203,6 +213,7 @@ export const SeasonPageSkeleton = ({
             </div>
             <div className="max-h-[70vh] overflow-auto">
                 <ApplicationsHeaderRow
+                    rankings={rankings}
                     selectAll={
                         viewing ? null : (
                             <span
@@ -214,7 +225,11 @@ export const SeasonPageSkeleton = ({
                 />
                 <ul aria-hidden="true">
                     {Array.from({ length: 10 }, (_, index) => (
-                        <ApplicationRowSkeleton key={index} viewing={viewing} />
+                        <ApplicationRowSkeleton
+                            key={index}
+                            viewing={viewing}
+                            rankings={rankings}
+                        />
                     ))}
                 </ul>
             </div>

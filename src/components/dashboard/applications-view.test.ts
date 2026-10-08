@@ -28,6 +28,7 @@ const app = (
     bonus: null,
     location: null,
     arrangement: null,
+    ranking: null,
     appliedAt: null,
     url: null,
     updated: "Just now",
@@ -323,6 +324,46 @@ describe("reading pay in one currency", () => {
         expect(shown("60,000", "EUR")).toBe(1);
         // The figure on record stays searchable behind the converted one.
         expect(shown("120,000", "EUR")).toBe(1);
+    });
+});
+
+describe("rankings", () => {
+    const rows = [
+        app("not", { ranking: "not_ranked" }),
+        app("none"),
+        app("first", { ranking: "ranked_first" }),
+        app("ranked", { ranking: "ranked" }),
+    ];
+
+    test("sorts best first, with unranked rows last either way", () => {
+        expect(order(rows, "ranking")).toEqual([
+            "first",
+            "ranked",
+            "not",
+            "none",
+        ]);
+        expect(order(rows, "ranking", "desc")).toEqual([
+            "not",
+            "ranked",
+            "first",
+            "none",
+        ]);
+    });
+
+    // A hidden "Ranked 1" answering a search for "1" would surface a row for a
+    // reason nobody can see.
+    test("are searched only while their column is drawn", () => {
+        const shown = (query: string, rankings: boolean) =>
+            applicationsView(
+                rows,
+                { ...NO_FILTERS, query },
+                null,
+                RATES,
+                null,
+                rankings,
+            ).rows.map((row) => row.company);
+        expect(shown("ranked 1", true)).toEqual(["first"]);
+        expect(shown("ranked 1", false)).toEqual([]);
     });
 });
 

@@ -15,13 +15,16 @@ import {
     APPLICATION_STATUSES,
     ARRANGEMENTS,
     MONTHS,
+    RANKINGS,
     STATUS_KEYWORDS,
     STATUS_META,
     arrangementLabel,
     formatDay,
+    rankingLabel,
     toDateInput,
     type ApplicationStatus,
     type Arrangement,
+    type Ranking,
 } from "@/components/dashboard/data";
 import { CurrencyFlag } from "@/components/dashboard/currency-flag";
 import { searchScore } from "@/lib/fuzzy";
@@ -934,6 +937,14 @@ export const ARRANGEMENT_OPTIONS: Option<Arrangement | null>[] = [
     ...ARRANGEMENTS.map((arrangement) => ({
         value: arrangement,
         label: arrangementLabel(arrangement),
+    })),
+];
+
+export const RANKING_OPTIONS: Option<Ranking | null>[] = [
+    { value: null, label: "Not set" },
+    ...RANKINGS.map((ranking) => ({
+        value: ranking,
+        label: rankingLabel(ranking),
     })),
 ];
 

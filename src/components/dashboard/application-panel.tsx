@@ -39,6 +39,7 @@ const draftOf = (
     role: app.role ?? "",
     location: app.location ?? "",
     arrangement: app.arrangement,
+    ranking: app.ranking,
     appliedAt: app.appliedAt ?? "",
     url: app.url ?? "",
     payMin: payAmountInput(app.payMin),
@@ -54,10 +55,12 @@ export const ApplicationPanel = ({
     listId,
     app,
     extras,
+    rankings,
 }: {
     listId: string;
     app: ApplicationRow;
     extras: ApplicationExtras;
+    rankings: boolean;
 }) => {
     const dismiss = useOverlayDismiss();
     // The notes and the status trail are only here, so the panel still opens
@@ -153,7 +156,12 @@ export const ApplicationPanel = ({
             </DrawerHeader>
 
             <div className="min-h-0 flex-1 overflow-y-auto">
-                <BasicsFields draft={draft} set={set} disabled={viewing} />
+                <BasicsFields
+                    draft={draft}
+                    set={set}
+                    disabled={viewing}
+                    rankings={rankings}
+                />
 
                 {viewing && rows.length === 0 ? null : (
                     <Section title="Status">

@@ -25,11 +25,13 @@ import {
     STATUS_META,
     type ApplicationStatus,
     type FlowEntry,
+    type Ranking,
 } from "@/components/dashboard/data";
 import {
     DownloadMenu,
     type DownloadFormat,
 } from "@/components/dashboard/download-menu";
+import { CellSelect, type Option } from "@/components/dashboard/table-controls";
 import { useModalDialog } from "@/components/dashboard/use-modal-dialog";
 import { fileSlug, saveFile } from "@/lib/download";
 
@@ -51,6 +53,16 @@ const LABEL_SIZE = 10;
 // Left and right leave room for the opening and closing columns' labels, plates
 // included, since those read outwards past the ends of the chart.
 const MARGIN = { top: 16, right: 112, bottom: 16, left: 80 };
+
+// The WaterlooWorks chart opens on "WaterlooWorks · 120", which takes 114px with
+// its gap and plate where "Applied · 136" takes 80, so its opening column gets
+// the room.
+const WATERLOOWORKS_MARGIN = { ...MARGIN, left: 120 };
+
+type Margin = typeof MARGIN;
+
+const marginFor = (kind?: ChartKind): Margin =>
+    kind === "waterlooworks" ? WATERLOOWORKS_MARGIN : MARGIN;
 const NODE_THICKNESS = 8;
 
 // Nivo spreads the columns over whatever width it is handed, so a long journey
@@ -61,10 +73,10 @@ const COLUMN_GAP = 96;
 // Horizontal padding inside the chart box, which min-width has to carry too.
 const CHART_PAD = 32;
 
-const chartWidth = (columns: number) =>
+const chartWidth = (columns: number, margin: Margin) =>
     CHART_PAD +
-    MARGIN.left +
-    MARGIN.right +
+    margin.left +
+    margin.right +
     NODE_THICKNESS +
     COLUMN_GAP * (columns - 1);
 
@@ -75,16 +87,41 @@ const EXPANDED_COLUMN_GAP = 176;
 const EXPANDED_HEIGHT = 780;
 const EXPANDED_MIN_WIDTH = 880;
 
-const expandedWidth = (columns: number) =>
+const expandedWidth = (columns: number, margin: Margin) =>
     Math.max(
         EXPANDED_MIN_WIDTH,
-        MARGIN.left +
-            MARGIN.right +
+        margin.left +
+            margin.right +
             NODE_THICKNESS +
             EXPANDED_COLUMN_GAP * (columns - 1),
     );
 
-const FILL: Record<ApplicationStatus, string> = {
+// Places the chart draws that are not statuses. The two sources open the
+// WaterlooWorks chart where "Applied" would be. The rankings are the step after
+// an interview that only WaterlooWorks has, and "waitlisted" is how the standard
+// chart says ranked to someone who has never used it.
+type Stage =
+    | "waterlooworks"
+    | "external"
+    | "ranked_first"
+    | "ranked"
+    | "not_ranked"
+    | "waitlisted";
+
+type Step = ApplicationStatus | Stage;
+
+// Which chart a list that tracks WaterlooWorks rankings draws. The standard one
+// puts rankings in words anyone reads, to be shared outside Waterloo. Without
+// the setting there is only the chart of statuses alone.
+export type ChartKind = "standard" | "waterlooworks";
+
+const FILL: Record<Step, string> = {
+    waterlooworks: DEEP,
+    external: SAGE,
+    ranked_first: GOLD,
+    ranked: SAGE,
+    not_ranked: ROSE,
+    waitlisted: SAGE,
     not_applied: GREY,
     applied: SAGE,
     online_assessment: DEEP,
@@ -105,7 +142,13 @@ const FILL: Record<ApplicationStatus, string> = {
 // several of these in a column, where the full names would collide. Where a
 // journey stopped, STATUS_META's label is used instead, so "Interview" is one an
 // application sat through and "Interviewing" is where it is now.
-const LABEL: Record<ApplicationStatus, string> = {
+const LABEL: Record<Step, string> = {
+    waterlooworks: "WaterlooWorks",
+    external: "External",
+    ranked_first: "Ranked 1",
+    ranked: "Ranked",
+    not_ranked: "Not ranked",
+    waitlisted: "Waitlisted",
     not_applied: "Not applied",
     applied: "Applied",
     online_assessment: "OA",
@@ -123,21 +166,104 @@ const LABEL: Record<ApplicationStatus, string> = {
 
 // What a journey that stopped is called. Mostly the status label used elsewhere,
 // which reads as a state next to the shorter round names above. Sitting at
-// "applied" is really waiting to hear back, so it says so.
-const restingLabel = (step: ApplicationStatus) =>
-    step === "applied" ? "Awaiting reply" : STATUS_META[step].label;
+// "applied" is really waiting to hear back, so it says so. The other stages
+// have one name only.
+const restingLabel = (step: Step) => {
+    if (step === "applied") return "Awaiting reply";
+    return step in STATUS_META
+        ? STATUS_META[step as ApplicationStatus].label
+        : LABEL[step];
+};
+
+// Steps that come before an interview, and the interview itself, which is what
+// a ranking always follows.
+const BEFORE_INTERVIEW: Step[] = [
+    "not_applied",
+    "applied",
+    "online_assessment",
+    "takehome",
+];
+const INTERVIEWS: Step[] = ["interviewing", "onsite"];
+
+// Each ranking in the standard chart's terms. Ranked is neither an offer nor a
+// no: the employer would have taken the student had their first choice gone
+// elsewhere, and whoever ended it, it closed as a waitlist.
+const STANDARD_RANKING: Record<Exclude<Ranking, "not_selected">, Step> = {
+    ranked_first: "offer_in_progress",
+    ranked: "waitlisted",
+    not_ranked: "rejected",
+};
+
+// The status that records the same event as a ranking. Logged as well, it
+// would draw that event twice in a row.
+const SAME_EVENT: Partial<Record<Ranking, ApplicationStatus>> = {
+    ranked_first: "offer_in_progress",
+    not_ranked: "rejected",
+};
+
+// A ranking put into the statuses, as the step after the last interview. Only
+// interviewed students are ranked, so a journey with no interview gets one,
+// ahead of whatever its status says came next, the way an application that is
+// interviewing is taken to have been applied to. Whatever the status recorded
+// after the interview follows the ranking, so a first choice the student passed
+// on reads as Ranked 1 then Declined. Not selected is turned down before any
+// interview, which both charts draw as the rejection it is, unless the status
+// already says how it ended.
+const withRanking = (
+    steps: Step[],
+    ranking: Ranking,
+    kind: ChartKind,
+): Step[] => {
+    if (ranking === "not_selected") {
+        const settled = steps.some(
+            (step) =>
+                !BEFORE_INTERVIEW.includes(step) && !INTERVIEWS.includes(step),
+        );
+        return settled ? steps : [...steps, "rejected"];
+    }
+
+    let journey = steps;
+    let interview = steps.findLastIndex((step) => INTERVIEWS.includes(step));
+    if (interview < 0) {
+        const next = steps.findIndex(
+            (step) => !BEFORE_INTERVIEW.includes(step),
+        );
+        interview = next < 0 ? steps.length : next;
+        journey = [
+            ...steps.slice(0, interview),
+            "interviewing",
+            ...steps.slice(interview),
+        ];
+    }
+
+    const after = journey.slice(interview + 1);
+    if (after[0] === SAME_EVENT[ranking]) after.shift();
+    return [
+        ...journey.slice(0, interview + 1),
+        kind === "waterlooworks" ? ranking : STANDARD_RANKING[ranking],
+        ...after,
+    ];
+};
 
 // The statuses an application has held, in order. A status held twice in a row
 // is a round of it logged again, so it keeps both steps and reads as a second
 // interview rather than one long one. Reaching a status again later works the
 // same way, so a loop back to an earlier stage needs no flattening either.
-const journeyOf = (entry: FlowEntry): ApplicationStatus[] => {
-    const steps = [...entry.history];
+//
+// `kind` is set for a list that tracks WaterlooWorks rankings, and puts the
+// ranking in. The WaterlooWorks chart also opens on where the application was
+// made: a ranking only comes from that board, so a row with one was made there.
+const journeyOf = (entry: FlowEntry, kind?: ChartKind): Step[] => {
+    const ranking = kind ? entry.ranking : null;
+    const steps: Step[] = [...entry.history];
+    if (steps.length === 0) return steps;
 
     // Everything starts out not applied, so that status only says something
-    // about an application that never left it.
-    if (steps.length > 1 && steps[0] === "not_applied") steps.shift();
-    if (steps.length === 0) return steps;
+    // about an application that never left it. A ranking answers an
+    // application, so one that holds a ranking did leave it.
+    if (steps[0] === "not_applied" && (steps.length > 1 || ranking)) {
+        steps.shift();
+    }
 
     // An application that is interviewing was applied to, even when no one ever
     // recorded it passing through.
@@ -145,8 +271,18 @@ const journeyOf = (entry: FlowEntry): ApplicationStatus[] => {
     if (first !== "applied" && first !== "not_applied")
         steps.unshift("applied");
 
-    return steps;
+    const journey = ranking && kind ? withRanking(steps, ranking, kind) : steps;
+    if (kind === "waterlooworks" && journey[0] === "applied") {
+        journey[0] = ranking ? "waterlooworks" : "external";
+    }
+    return journey;
 };
+
+// Where a journey rests when it stopped at its opening step. Both sources are
+// that step, and an application still waiting on either is waiting all the
+// same, so they share one resting node.
+const restingStep = (step: Step): Step =>
+    step === "waterlooworks" || step === "external" ? "applied" : step;
 
 // `via` nodes are the invisible ones a long ribbon is threaded through, and
 // carry no bar or label of their own. A link records the ends it really joins
@@ -161,7 +297,7 @@ type FlowLink = {
 };
 
 // One point in one application's journey.
-type Visit = { step: ApplicationStatus; round: number; at: number };
+type Visit = { step: Step; round: number; at: number };
 
 // What makes two points in different journeys the same place: the status, and
 // which time round it is. Node ids end up in the gradient ids the exported SVG
@@ -180,7 +316,7 @@ const pinnedId = (visit: Visit) => `${visit.at}-${roundId(visit)}`;
 // got. Applications passing through a status keep their shared node and the
 // ones that stayed branch off it, so nobody's share is drawn inside a bar it
 // never leaves.
-const restId = (step: ApplicationStatus) => `rest-${step}`;
+const restId = (step: Step) => `rest-${step}`;
 
 // Prefixes a label with how many times the application has held that status, so
 // the first one is unnumbered and the rest read "2nd Interview", "3rd Interview".
@@ -194,18 +330,18 @@ const ordinal = (visit: number) => {
 };
 
 type Placed = {
-    step: ApplicationStatus;
+    step: Step;
     round: number;
     resting: boolean;
     via?: boolean;
 };
 
 // Every application's journey, each status tagged with which time round it is.
-const visitsOf = (flow: FlowEntry[]): Visit[][] =>
+const visitsOf = (flow: FlowEntry[], kind?: ChartKind): Visit[][] =>
     flow
         .map((entry) => {
-            const journey = journeyOf(entry);
-            const held = new Map<ApplicationStatus, number>();
+            const journey = journeyOf(entry, kind);
+            const held = new Map<Step, number>();
             return journey.map((step, at) => {
                 const round = (held.get(step) ?? 0) + 1;
                 held.set(step, round);
@@ -246,8 +382,16 @@ const SWEEPS = 8;
 // Which way round the statuses read down a column before any sweeping, so the
 // starting order is the pipeline's own rather than whatever order the
 // applications happened to arrive in.
-const STAGE = new Map(
-    APPLICATION_STATUSES.map((status, index) => [status, index]),
+const STAGE = new Map<Step, number>(
+    [
+        "waterlooworks",
+        "external",
+        ...APPLICATION_STATUSES.flatMap((status): Step[] =>
+            status === "onsite"
+                ? [status, "ranked_first", "ranked", "waitlisted", "not_ranked"]
+                : [status],
+        ),
+    ].map((step, index) => [step as Step, index]),
 );
 
 // How many pairs of ribbons cross. Two cross when the order of their two ends
@@ -585,8 +729,8 @@ const depthsOf = (ids: string[], links: FlowLink[]) => {
     return depth;
 };
 
-export const graphFrom = (flow: FlowEntry[]) => {
-    const journeys = visitsOf(flow);
+export const graphFrom = (flow: FlowEntry[], kind?: ChartKind) => {
+    const journeys = visitsOf(flow, kind);
 
     // How many points in a journey a status and round turns up at, which is how
     // many nodes pinning it would cost. Pinning one that only ever turns up at
@@ -623,7 +767,7 @@ export const graphFrom = (flow: FlowEntry[]) => {
                 return id;
             });
 
-            const ending = journey[journey.length - 1].step;
+            const ending = restingStep(journey[journey.length - 1].step);
             const rest = restId(ending);
             placed.set(rest, { step: ending, round: 1, resting: true });
             ids.push(rest);
@@ -1126,13 +1270,15 @@ const CHART_PROPS: Omit<
 const ExpandedChart = ({
     graph,
     columns,
+    margin,
     ref,
 }: {
     graph: FlowGraph;
     columns: number;
+    margin: Margin;
     ref?: Ref<HTMLDivElement>;
 }) => {
-    const width = expandedWidth(columns);
+    const width = expandedWidth(columns, margin);
 
     return (
         <div
@@ -1142,6 +1288,7 @@ const ExpandedChart = ({
         >
             <Sankey
                 {...CHART_PROPS}
+                margin={margin}
                 data={graph}
                 width={width}
                 height={EXPANDED_HEIGHT}
@@ -1233,21 +1380,69 @@ const ChartDownloadMenu = ({
     </DownloadMenu>
 );
 
+const KindIcon = ({ icon }: { icon: string }) => (
+    <span className="flex size-4 shrink-0 items-center justify-center">
+        <span aria-hidden="true" className={`${icon} size-3.5 text-muted`} />
+    </span>
+);
+
+// Named for who the chart is for: anyone at all, or someone who knows how
+// WaterlooWorks ranks.
+const CHART_KINDS: Option<ChartKind>[] = [
+    {
+        value: "standard",
+        label: "Standard",
+        icon: <KindIcon icon="icon-[lucide--globe]" />,
+    },
+    {
+        value: "waterlooworks",
+        label: "WaterlooWorks",
+        icon: <KindIcon icon="icon-[lucide--graduation-cap]" />,
+    },
+];
+
+// Held at the width of the longer label, so switching does not shove the rest
+// of the header along. A download saves whichever chart is showing.
+const ChartKindPicker = ({
+    kind,
+    onChange,
+}: {
+    kind: ChartKind;
+    onChange: (kind: ChartKind) => void;
+}) => (
+    <CellSelect
+        label="Chart to show"
+        value={kind}
+        options={CHART_KINDS}
+        onChange={onChange}
+        variant="form"
+        className="w-40 shrink-0"
+    />
+);
+
+// The stat strip above already says how many there are, so a phone, which has
+// no room for both, keeps the controls.
+const TOTAL_CLASS = "hidden text-xs text-sub tabular-nums sm:inline";
+
 // Native <dialog> rather than a hand-rolled overlay: showModal gives the focus
 // trap, Escape handling, inert background and top-layer stacking for free.
 const ExpandedDialog = ({
     graph,
     columns,
+    margin,
     total,
     busy,
+    picker,
     chartRef,
     onDownload,
     onClose,
 }: {
     graph: FlowGraph;
     columns: number;
+    margin: Margin;
     total: number;
     busy: boolean;
+    picker: ReactNode;
     chartRef: Ref<HTMLDivElement>;
     onDownload: (format: ExportFormat) => void;
     onClose: () => void;
@@ -1270,9 +1465,8 @@ const ExpandedDialog = ({
             <div className="flex h-10 shrink-0 items-center justify-between gap-6 border-b border-hairline px-4">
                 <h2 className="text-xs font-medium text-muted">Sankey</h2>
                 <div className="flex items-center gap-3">
-                    <span className="text-xs text-sub tabular-nums">
-                        {total} total
-                    </span>
+                    {picker}
+                    <span className={TOTAL_CLASS}>{total} total</span>
                     <ChartDownloadMenu busy={busy} onSelect={onDownload} />
                     <button
                         type="button"
@@ -1289,26 +1483,44 @@ const ExpandedDialog = ({
                 </div>
             </div>
             <div className="min-h-0 flex-1 overflow-auto p-4">
-                <ExpandedChart ref={chartRef} graph={graph} columns={columns} />
+                <ExpandedChart
+                    ref={chartRef}
+                    graph={graph}
+                    columns={columns}
+                    margin={margin}
+                />
             </div>
         </dialog>
     );
 };
 
+// `rankings` is the account's WaterlooWorks setting, which is what offers the
+// two charts. Without it the chart is drawn from statuses alone.
 export const PipelineFlow = ({
     flow,
     name,
+    rankings,
 }: {
     flow: FlowEntry[];
     name: string;
+    rankings: boolean;
 }) => {
     const exportRef = useRef<HTMLDivElement>(null);
     const [pending, setPending] = useState<ExportFormat | null>(null);
     const [expanded, setExpanded] = useState(false);
+    const [kind, setKind] = useState<ChartKind>("waterlooworks");
+    const shown = rankings ? kind : undefined;
+    const margin = marginFor(shown);
     // Hovering a bar re-renders, and untangling the order is far too much work
     // to redo for it.
-    const { columns, ...graph } = useMemo(() => graphFrom(flow), [flow]);
+    const { columns, ...graph } = useMemo(
+        () => graphFrom(flow, shown),
+        [flow, shown],
+    );
     const chartable = graph.links.length > 0;
+    const picker = rankings && (
+        <ChartKindPicker kind={kind} onChange={setKind} />
+    );
 
     useEffect(() => {
         if (!pending) return;
@@ -1333,9 +1545,8 @@ export const PipelineFlow = ({
             <div className="flex h-10 items-center justify-between border-b border-hairline px-4">
                 <h2 className="text-xs font-medium text-muted">Sankey</h2>
                 <div className="flex items-center gap-3">
-                    <span className="text-xs text-sub tabular-nums">
-                        {flow.length} total
-                    </span>
+                    {picker}
+                    <span className={TOTAL_CLASS}>{flow.length} total</span>
                     {chartable && (
                         <>
                             <button
@@ -1365,10 +1576,14 @@ export const PipelineFlow = ({
             ) : (
                 <div className="overflow-x-auto">
                     <div
-                        style={{ minWidth: chartWidth(columns) }}
+                        style={{ minWidth: chartWidth(columns, margin) }}
                         className="h-120 px-4 py-4 lg:h-160"
                     >
-                        <ResponsiveSankey {...CHART_PROPS} data={graph} />
+                        <ResponsiveSankey
+                            {...CHART_PROPS}
+                            margin={margin}
+                            data={graph}
+                        />
                     </div>
                 </div>
             )}
@@ -1376,8 +1591,10 @@ export const PipelineFlow = ({
                 <ExpandedDialog
                     graph={graph}
                     columns={columns}
+                    margin={margin}
                     total={flow.length}
                     busy={!!pending}
+                    picker={picker}
                     chartRef={exportRef}
                     onDownload={setPending}
                     onClose={() => setExpanded(false)}
@@ -1394,6 +1611,7 @@ export const PipelineFlow = ({
                         ref={exportRef}
                         graph={graph}
                         columns={columns}
+                        margin={margin}
                     />
                 </div>
             )}

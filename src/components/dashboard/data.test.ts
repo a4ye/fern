@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import {
     ADMIN_PATH,
     backHref,
+    countedStatus,
     FRIENDS_PATH,
     listRevision,
     SETTINGS_PATH,
@@ -106,5 +107,30 @@ describe("listRevision", () => {
 
     it("answers for a list with nothing in it", () => {
         expect(listRevision([])).toBe("0:");
+    });
+});
+
+describe("countedStatus", () => {
+    it("fills in the ending a ranking settles", () => {
+        expect(countedStatus("interviewing", "ranked_first")).toBe(
+            "offer_in_progress",
+        );
+        expect(countedStatus("applied", "not_selected")).toBe("rejected");
+        expect(countedStatus("interviewing", "not_ranked")).toBe("rejected");
+    });
+
+    // A waitlist is over once the match runs, and is neither an offer nor a no.
+    it("counts ranked as settled without counting it as anything", () => {
+        expect(countedStatus("interviewing", "ranked")).toBeNull();
+    });
+
+    it("leaves a status that recorded its own ending alone", () => {
+        expect(countedStatus("offer_accepted", "ranked")).toBe(
+            "offer_accepted",
+        );
+        expect(countedStatus("offer_declined", "ranked_first")).toBe(
+            "offer_declined",
+        );
+        expect(countedStatus("interviewing", null)).toBe("interviewing");
     });
 });
