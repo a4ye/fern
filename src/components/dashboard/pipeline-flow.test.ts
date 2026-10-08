@@ -158,7 +158,7 @@ describe("graphFrom", () => {
                 "rejected",
             ),
         ]);
-        expect(nameOf(graph, "interviewing-1")).toBe("Interview");
+        expect(nameOf(graph, "interviewing-1")).toBe("1st Interview");
         expect(nameOf(graph, "interviewing-2")).toBe("2nd Interview");
         expect(
             graph.links.some(
@@ -609,7 +609,7 @@ describe("graphFrom with WaterlooWorks rankings", () => {
         ];
         expect(routeOf(graphFrom(flow, "waterlooworks"))).toEqual([
             "WaterlooWorks",
-            "Interview",
+            "1st Interview",
             "2nd Interview",
             "Ranked 1",
         ]);

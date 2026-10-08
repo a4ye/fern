@@ -319,9 +319,11 @@ const pinnedId = (visit: Visit) => `${visit.at}-${roundId(visit)}`;
 const restId = (step: Step) => `rest-${step}`;
 
 // Prefixes a label with how many times the application has held that status, so
-// the first one is unnumbered and the rest read "2nd Interview", "3rd Interview".
-const ordinal = (visit: number) => {
-    if (visit < 2) return "";
+// the rest read "2nd Interview", "3rd Interview". The first is numbered only
+// when a later round is on the chart too, since "1st" next to nothing else is
+// noise but "Interview" beside "2nd Interview" leaves the reader to count.
+const ordinal = (visit: number, repeats: boolean) => {
+    if (visit < 2 && !repeats) return "";
     const teen = visit % 100 >= 11 && visit % 100 <= 13;
     const suffix = teen
         ? "th"
@@ -963,14 +965,21 @@ export const graphFrom = (flow: FlowEntry[], kind?: ChartKind) => {
         links.push({ ...link, source: last });
     }
 
+    const repeated = new Set<Step>();
+    for (const { step, round, via } of graph.placed.values()) {
+        if (round > 1 && !via) repeated.add(step);
+    }
+
     const nodes: FlowNode[] = sweptOrder(graph.placed, depth, links).map(
         (id) => {
             const { step, round, resting, via } = graph.placed.get(
                 id,
             ) as Placed;
-            // Shared resting nodes are always a first round, so the ordinal
+            // Shared resting nodes are always a first round and name where an
+            // application is now, not a round it went through, so the ordinal
             // only shows on a status node that turned out to be an ending.
-            const name = `${ordinal(round)}${
+            const counted = !resting || id !== restId(step);
+            const name = `${counted ? ordinal(round, repeated.has(step)) : ""}${
                 resting ? restingLabel(step) : LABEL[step]
             }`;
             // Nothing is drawn for a node a ribbon only passes through, so it
