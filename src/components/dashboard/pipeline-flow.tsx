@@ -1618,7 +1618,7 @@ export const PipelineFlow = ({
     const exportRef = useRef<HTMLDivElement>(null);
     const [pending, setPending] = useState<ExportFormat | null>(null);
     const [expanded, setExpanded] = useState(false);
-    const [kind, setKind] = useState<ChartKind>("waterlooworks");
+    const [kind, setKind] = useState<ChartKind>("standard");
     const shown = rankings ? kind : undefined;
     const margin = marginFor(shown);
     // Hovering a bar re-renders, and untangling the order is far too much work
