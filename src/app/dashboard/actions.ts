@@ -14,6 +14,7 @@ import {
     getListInsights,
     saveApplicationDetailAndSteps as saveApplicationDetailDb,
     setApplicationsArrangement as setApplicationsArrangementDb,
+    setApplicationsRanking as setApplicationsRankingDb,
     setApplicationsStatus as setApplicationsStatusDb,
     setListPinned,
     updateApplications as updateApplicationsDb,
@@ -83,6 +84,7 @@ import {
     importUrlSchema,
     listCreateSchema,
     listUpdateSchema,
+    rankingSchema,
     stepEditsSchema,
     timeZoneSchema,
     type ActionResult,
@@ -706,6 +708,27 @@ export const setApplicationsArrangement = async (
         applicationIds,
         arrangement,
     );
+    revalidatePath(`/dashboard/${listId}`);
+    revalidatePath("/dashboard");
+    return { ok: true };
+};
+
+export const setApplicationsRanking = async (
+    listId: string,
+    applicationIds: string[],
+    ranking: Ranking | null,
+): Promise<ActionResult> => {
+    const writer = await writingUser();
+    if (!writer.ok) return writer;
+    if (!validId(listId)) return { ok: false, error: LIST_GONE };
+    if (applicationIds.length === 0 || !validApplicationIds(applicationIds)) {
+        return { ok: false, error: INVALID_SELECTION };
+    }
+
+    const parsed = rankingSchema.safeParse(ranking);
+    if (!parsed.success) return { ok: false, error: firstIssue(parsed.error) };
+
+    await setApplicationsRankingDb(writer.userId, applicationIds, parsed.data);
     revalidatePath(`/dashboard/${listId}`);
     revalidatePath("/dashboard");
     return { ok: true };

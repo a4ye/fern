@@ -17,6 +17,7 @@ import {
     removeApplication,
     removeApplications,
     setApplicationsArrangement,
+    setApplicationsRanking,
     setApplicationsStatus,
     updateApplicationsBulk,
     type ApplicationDraft,
@@ -545,6 +546,11 @@ const STAGED_ARRANGEMENT_OPTIONS: Option<
     Arrangement | null | typeof UNCHANGED
 >[] = [{ value: UNCHANGED, label: "Leave unchanged" }, ...ARRANGEMENT_OPTIONS];
 
+const STAGED_RANKING_OPTIONS: Option<Ranking | null | typeof UNCHANGED>[] = [
+    { value: UNCHANGED, label: "Leave unchanged" },
+    ...RANKING_OPTIONS,
+];
+
 // The way back out of reading the column in one currency. Leaving it is a
 // choice like the currencies are and so is an option among them rather than a
 // second control beside the picker, and it carries a mark of its own so the
@@ -618,6 +624,9 @@ export const ApplicationsTable = ({
     const [stagedArrangement, setStagedArrangement] = useState<{
         value: Arrangement | null;
     } | null>(null);
+    const [stagedRanking, setStagedRanking] = useState<{
+        value: Ranking | null;
+    } | null>(null);
     const [confirmingDelete, setConfirmingDelete] = useState(false);
     const [adding, setAdding] = useState(false);
     const [importing, setImporting] = useState(false);
@@ -648,6 +657,11 @@ export const ApplicationsTable = ({
                       ids: Set<string>;
                       arrangement: Arrangement | null;
                   }
+                | {
+                      type: "ranking";
+                      ids: Set<string>;
+                      ranking: Ranking | null;
+                  }
                 | { type: "delete"; ids: Set<string> },
         ) => {
             if (action.type === "delete") {
@@ -664,6 +678,13 @@ export const ApplicationsTable = ({
                                       ? (app.appliedAt ?? action.appliedAt)
                                       : app.appliedAt,
                           }
+                        : app,
+                );
+            }
+            if (action.type === "ranking") {
+                return state.map((app) =>
+                    action.ids.has(app.id)
+                        ? { ...app, ranking: action.ranking }
                         : app,
                 );
             }
@@ -798,6 +819,7 @@ export const ApplicationsTable = ({
     const clearStaged = () => {
         setStagedStatus(null);
         setStagedArrangement(null);
+        setStagedRanking(null);
     };
 
     // A staged value belongs to the selection it was staged for, so emptying the
@@ -959,6 +981,17 @@ export const ApplicationsTable = ({
         });
     };
 
+    const applyRanking = (ranking: Ranking | null) => {
+        const ids = new Set(selection);
+        clearSelection();
+        startMutation(async () => {
+            applyOptimistic({ type: "ranking", ids, ranking });
+            reportRefusal(
+                await setApplicationsRanking(listId, [...ids], ranking),
+            );
+        });
+    };
+
     const deleteSelected = () => {
         const ids = new Set(selection);
         clearSelection();
@@ -968,11 +1001,12 @@ export const ApplicationsTable = ({
         });
     };
 
-    // Both appliers read the selection of this render and clear the staged
-    // values on their way out, so they can run back to back.
+    // Every applier reads the selection of this render and clears the staged
+    // values on its way out, so they can run back to back.
     const applyStaged = () => {
         if (stagedStatus) applyStatus(stagedStatus);
         if (stagedArrangement) applyArrangement(stagedArrangement.value);
+        if (stagedRanking) applyRanking(stagedRanking.value);
     };
 
     const selecting = selection.length > 0 && !bulkMode;
@@ -1032,10 +1066,38 @@ export const ApplicationsTable = ({
                                 className="w-36"
                                 variant="form"
                             />
+                            {/* Only where the column is: a ranking written
+                                here would otherwise land somewhere nobody can
+                                see it. */}
+                            {rankings && (
+                                <CellSelect
+                                    label="Set ranking for selected"
+                                    placeholder={
+                                        stagedRanking
+                                            ? undefined
+                                            : "Set ranking"
+                                    }
+                                    value={stagedRanking?.value ?? null}
+                                    options={STAGED_RANKING_OPTIONS}
+                                    onChange={(ranking) =>
+                                        setStagedRanking(
+                                            ranking === UNCHANGED
+                                                ? null
+                                                : { value: ranking },
+                                        )
+                                    }
+                                    className="w-32"
+                                    variant="form"
+                                />
+                            )}
                             <button
                                 type="button"
                                 onClick={applyStaged}
-                                disabled={!stagedStatus && !stagedArrangement}
+                                disabled={
+                                    !stagedStatus &&
+                                    !stagedArrangement &&
+                                    !stagedRanking
+                                }
                                 className={primaryButtonClass}
                             >
                                 Apply to {selection.length}

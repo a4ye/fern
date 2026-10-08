@@ -167,7 +167,9 @@ const appliedAtSchema = optionalText("Applied date", 10)
         `Applied date must fall between ${APPLIED_MIN_YEAR} and today.`,
     );
 
-const rankingSchema = z.enum(RANKINGS, "Choose a valid ranking.").nullable();
+export const rankingSchema = z
+    .enum(RANKINGS, "Choose a valid ranking.")
+    .nullable();
 
 export const applicationSchema = z.object({
     company: z

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, mock } from "bun:test";
 import { TOO_MANY_REQUESTS } from "@/lib/limits";
 import { VIEW_ONLY } from "@/lib/view-as";
+import type { Ranking } from "@/components/dashboard/data";
 
 const spy = () => mock(async (..._args: unknown[]) => {});
 
@@ -39,6 +40,7 @@ const db = {
     deleteApplications: spy(),
     setApplicationsStatus: spy(),
     setApplicationsArrangement: spy(),
+    setApplicationsRanking: spy(),
 };
 
 const revalidatePath = mock((..._args: unknown[]) => {});
@@ -131,6 +133,7 @@ const {
     clearListHistory,
     restoreListHistoryVersion,
     setApplicationsArrangement,
+    setApplicationsRanking,
     setApplicationsStatus,
     suggestFromUrl,
     togglePin,
@@ -598,6 +601,39 @@ describe("setApplicationsStatus", () => {
     });
 });
 
+describe("setApplicationsRanking", () => {
+    it("writes the ranking for the selection", async () => {
+        await setApplicationsRanking(LIST_ID, [APPLICATION_ID], "not_ranked");
+
+        expect(db.setApplicationsRanking.mock.calls[0]).toEqual([
+            "user-1",
+            [APPLICATION_ID],
+            "not_ranked",
+        ]);
+    });
+
+    it("clears the ranking when sent null", async () => {
+        await setApplicationsRanking(LIST_ID, [APPLICATION_ID], null);
+
+        expect(db.setApplicationsRanking.mock.calls[0]?.[2]).toBeNull();
+    });
+
+    it("rejects a ranking that does not exist before writing", async () => {
+        const result = await setApplicationsRanking(
+            LIST_ID,
+            [APPLICATION_ID],
+            "ranked_last" as Ranking,
+        );
+
+        expect(result).toEqual({
+            ok: false,
+            error: "Choose a valid ranking.",
+        });
+        expect(db.setApplicationsRanking).not.toHaveBeenCalled();
+        expect(revalidatePath).not.toHaveBeenCalled();
+    });
+});
+
 describe("viewing another account", () => {
     beforeEach(() => {
         viewAs = { admin: { id: "admin-1" } };
@@ -711,6 +747,12 @@ describe("application write revalidation", () => {
 
     it("refreshes the list detail and overview after changing arrangement", async () => {
         await setApplicationsArrangement(LIST_ID, [APPLICATION_ID], "remote");
+
+        expect(revalidated()).toEqual([`/dashboard/${LIST_ID}`, "/dashboard"]);
+    });
+
+    it("refreshes the list detail and overview after changing ranking", async () => {
+        await setApplicationsRanking(LIST_ID, [APPLICATION_ID], "ranked_first");
 
         expect(revalidated()).toEqual([`/dashboard/${LIST_ID}`, "/dashboard"]);
     });
