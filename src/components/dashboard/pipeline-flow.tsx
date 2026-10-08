@@ -394,23 +394,34 @@ const STAGE = new Map<Step, number>(
     ].map((step, index) => [step as Step, index]),
 );
 
-// How many pairs of ribbons cross. Two cross when the order of their two ends
-// disagrees, so counting them needs nothing but where each end sits. `at` has
-// to rank both ends of every link given, which a whole order always does and a
+// The pairs of ribbons that cross. Two cross when the order of their two ends
+// disagrees, so finding them needs nothing but where each end sits. `at` has to
+// rank both ends of every link given, which a whole order always does and a
 // single gap's own column positions do for the links across that gap.
-const tangles = (links: FlowLink[], at: Map<string, number>) => {
-    let total = 0;
+const crossingPairs = (links: FlowLink[], at: Map<string, number>) => {
+    const pairs: [FlowLink, FlowLink][] = [];
     for (const [index, one] of links.entries()) {
         for (const two of links.slice(index + 1)) {
             const source =
                 (at.get(one.source) ?? 0) - (at.get(two.source) ?? 0);
             const target =
                 (at.get(one.target) ?? 0) - (at.get(two.target) ?? 0);
-            if (source * target < 0) total += 1;
+            if (source * target < 0) pairs.push([one, two]);
         }
     }
-    return total;
+    return pairs;
 };
+
+// How badly the ribbons cross. A crossing costs the product of the two widths,
+// which is about the area where they overlap: a thread crossing a thread is
+// barely seen, and a wide ribbon crossing another is most of what makes the
+// figure look tangled. Counting every crossing the same let the sweep keep a
+// wide one to save two threads.
+const tangles = (links: FlowLink[], at: Map<string, number>) =>
+    crossingPairs(links, at).reduce(
+        (sum, [one, two]) => sum + one.value * two.value,
+        0,
+    );
 
 // Crossings over a whole order of the nodes. This is what the sweep below is
 // trying to reduce, which it only ever does indirectly, so it is also the only
@@ -447,22 +458,15 @@ const relocations = (column: string[], loose: Set<string>) => {
 };
 
 // The nodes a crossing ribbon ends on. Moving anything else cannot undo one.
-const caughtIn = (gap: FlowLink[], at: Map<string, number>) => {
-    const caught = new Set<string>();
-    for (const [index, one] of gap.entries()) {
-        for (const two of gap.slice(index + 1)) {
-            const source =
-                (at.get(one.source) ?? 0) - (at.get(two.source) ?? 0);
-            const target =
-                (at.get(one.target) ?? 0) - (at.get(two.target) ?? 0);
-            if (source * target >= 0) continue;
-            for (const id of [one.source, two.source, one.target, two.target]) {
-                caught.add(id);
-            }
-        }
-    }
-    return caught;
-};
+const caughtIn = (gap: FlowLink[], at: Map<string, number>) =>
+    new Set(
+        crossingPairs(gap, at).flatMap(([one, two]) => [
+            one.source,
+            two.source,
+            one.target,
+            two.target,
+        ]),
+    );
 
 // The sweep stops where no one column can be bettered on its own, which is not
 // always the tidiest order: the last crossings can need two columns to move at
@@ -503,7 +507,7 @@ const untangled = (
         for (const [index, right] of depths.slice(1).entries()) {
             const left = depths[index];
             const middle = gaps.get(left) ?? [];
-            const snarled = tangles(middle, at);
+            const snarled = crossingPairs(middle, at).length;
             if (snarled === 0 || snarled > SNARLS) continue;
 
             const nearby = [middle, gaps.get(left - 1), gaps.get(right)].filter(
@@ -697,7 +701,32 @@ const sweptOrder = (
     const [tidiest] = [settle("forwards"), settle("backwards")].sort(
         (one, two) => one.fewest - two.fewest,
     );
-    return sunk(untangled(tidiest.best, depth, links), depth, links);
+    const tidy = untangled(tidiest.best, depth, links);
+    return sunk(upright(tidy, depth, placed), depth, links);
+};
+
+// Turning every column upside down crosses exactly the same ribbons, so the
+// sweep is as likely to hand back the chart upside down as not. Stand it the
+// way the pipeline reads, with the opening column in stage order.
+const upright = (
+    order: string[],
+    depth: Map<string, number>,
+    placed: Map<string, Placed>,
+) => {
+    const opening = order.filter((id) => (depth.get(id) ?? 0) === 0);
+    const stage = (id: string) =>
+        STAGE.get((placed.get(id) as Placed).step) ?? 0;
+    const [first, last] = [opening[0], opening[opening.length - 1]];
+    if (opening.length < 2 || stage(first) <= stage(last)) return order;
+
+    const columns = new Map<number, string[]>();
+    for (const id of order) {
+        const level = depth.get(id) ?? 0;
+        columns.set(level, [id, ...(columns.get(level) ?? [])]);
+    }
+    return [...columns.keys()]
+        .sort((a, b) => a - b)
+        .flatMap((level) => columns.get(level) as string[]);
 };
 
 // How far from the opening column each node sits, counted along the longest

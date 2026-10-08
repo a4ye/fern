@@ -537,6 +537,41 @@ const ranked = (
     ...history: ApplicationStatus[]
 ): FlowEntry => ({ ...entry(...history), ranking });
 
+// A real WaterlooWorks season: most applications turned down without an
+// interview, a third of them made elsewhere and still waiting, and one long run
+// of interviews to an offer. The straight rejections are one ribbon over forty
+// wide, and every other ribbon on the chart is a handful or a thread.
+const WATERLOO_SEASON: FlowEntry[] = [
+    ...Array.from({ length: 42 }, () =>
+        ranked("not_selected", "applied", "rejected"),
+    ),
+    ranked("not_selected", "applied", "online_assessment", "rejected"),
+    ranked("not_selected", "applied", "interviewing", "rejected"),
+    ...Array.from({ length: 3 }, () =>
+        ranked("not_ranked", "applied", "interviewing", "rejected"),
+    ),
+    ...Array.from({ length: 2 }, () =>
+        ranked("ranked", "applied", "interviewing"),
+    ),
+    ranked(
+        "ranked_first",
+        "applied",
+        "interviewing",
+        "interviewing",
+        "interviewing",
+        "offer_in_progress",
+        "offer_accepted",
+    ),
+    ...many(16, "applied"),
+    ...many(2, "not_applied", "applied"),
+    ...many(5, "applied", "rejected"),
+    ...many(4, "applied", "online_assessment"),
+    entry("applied", "online_assessment", "takehome"),
+    entry("applied", "interviewing"),
+    entry("interviewing", "rejected"),
+    entry("applied", "interviewing", "offer_in_progress", "offer_declined"),
+];
+
 describe("graphFrom with WaterlooWorks rankings", () => {
     test("is the chart of statuses alone while the setting is off", () => {
         const flow = [ranked("ranked_first", "applied", "interviewing")];
@@ -690,5 +725,30 @@ describe("graphFrom with WaterlooWorks rankings", () => {
                 ),
             ),
         ).toEqual(["Applied", "Ghosted"]);
+    });
+    test("never crosses a wide ribbon to spare a few threads", () => {
+        // Every crossing used to count the same, so the straight rejections
+        // were crossed twice to save two crossings between single
+        // applications, which is most of what made the chart look tangled.
+        const graph = graphFrom(WATERLOO_SEASON, "waterlooworks");
+        const order = graph.nodes.map((node) => node.id);
+        const widest = graph.links.reduce((one, two) =>
+            two.value > one.value ? two : one,
+        );
+        const others = graph.links.filter((link) => link !== widest);
+        expect(widest.value).toBe(42);
+        expect(crossings({ ...graph, links: others }, order)).toBe(
+            crossings(graph, order),
+        );
+    });
+
+    test("opens with WaterlooWorks above External", () => {
+        // Upside down crosses the same ribbons, so nothing in the sweep says
+        // which way up the chart should stand.
+        const graph = graphFrom(WATERLOO_SEASON, "waterlooworks");
+        const opening = graph.nodes
+            .map((node) => node.name)
+            .filter((name) => name === "WaterlooWorks" || name === "External");
+        expect(opening).toEqual(["WaterlooWorks", "External"]);
     });
 });
