@@ -429,25 +429,18 @@ const tangles = (links: FlowLink[], at: Map<string, number>) =>
 const crossings = (order: string[], links: FlowLink[]) =>
     tangles(links, new Map(order.map((id, index) => [id, index])));
 
-// What the pass below will take on. It is there to pick out the last crossings
-// the sweep cannot reach, so a gap already crossed more times than SNARLS is
-// left alone: no order is going to read as untangled, and searching one costs
-// the chart a redraw.
-const SNARLS = 4;
-
-// And a ceiling on the search for the gaps it does take, counted in the ribbon
-// comparisons it would come to: arrangements to try, times the pairs of ribbons
-// each one is scored over. Counting only the arrangements would let a gap of a
-// hundred ribbons through, where scoring even a few is far too slow.
+// A ceiling on any one search below, counted in the ribbon comparisons it
+// would come to: arrangements to try, times the pairs of ribbons each one is
+// scored over. Counting only the arrangements would let a gap of a hundred
+// ribbons through, where scoring even a few is far too slow.
 const EFFORT = 500_000;
 
-// Every order reachable by lifting one of `loose` out of the column and
-// dropping it back somewhere else, the column itself first so that a pair of
-// columns can be searched with only one of the two moving.
-const relocations = (column: string[], loose: Set<string>) => {
+// Every order reachable by lifting one node out of the column and dropping it
+// back somewhere else, the column itself first so that a pair of columns can
+// be searched with only one of the two moving.
+const relocations = (column: string[]) => {
     const moved = [column];
     for (const [from, id] of column.entries()) {
-        if (!loose.has(id)) continue;
         const rest = [...column.slice(0, from), ...column.slice(from + 1)];
         for (let to = 0; to <= rest.length; to += 1) {
             if (to === from) continue;
@@ -457,29 +450,39 @@ const relocations = (column: string[], loose: Set<string>) => {
     return moved;
 };
 
-// The nodes a crossing ribbon ends on. Moving anything else cannot undo one.
-const caughtIn = (gap: FlowLink[], at: Map<string, number>) =>
-    new Set(
-        crossingPairs(gap, at).flatMap(([one, two]) => [
-            one.source,
-            two.source,
-            one.target,
-            two.target,
-        ]),
-    );
+// The room between two nodes in a column, as a share of the busiest column's
+// flow. The chart's node spacing comes to about this much of its height.
+const SPACING = 0.07;
+
+// What an order costs to look at. Crossings come first. Between orders that
+// cross the same, the one whose ribbons climb and fall less wins, weighted by
+// width like the crossings are: a dead end left mid-column, or a thread that
+// dives under three nodes to dodge one crossing it could have taken, crosses
+// nothing and still sends a ribbon the height of the figure.
+type Cost = { crossed: number; travel: number };
+
+const cheaper = (one: Cost, two: Cost) =>
+    one.crossed !== two.crossed
+        ? one.crossed < two.crossed
+        : one.travel < two.travel - 1e-6;
 
 // The sweep stops where no one column can be bettered on its own, which is not
 // always the tidiest order: the last crossings can need two columns to move at
 // once, with neither move paying off alone. A ribbon only stops crossing its
 // neighbours once both the bar it leaves and the bar it lands on have shifted,
 // so moving either one first scores no better and is never taken. Take each
-// neighbouring pair of columns and move a node in both together.
+// neighbouring pair of columns and move a node in both together, keeping
+// whatever costs least, until nothing does better.
 //
 // Only three gaps can change: the one between the pair, and the one outside
 // each of them. Ribbons run between neighbouring columns only, so every other
-// gap holds the same crossings whatever this pair does, and scoring them again
-// would say nothing.
-const untangled = (
+// gap holds the same whatever this pair does, and scoring it again would say
+// nothing.
+//
+// Heights are worked out the way the chart stacks them before it relaxes:
+// each node as tall as the flow through it, and the ribbons at a node stacked
+// by where they land, as ribbonEnds does.
+const refined = (
     order: string[],
     depth: Map<string, number>,
     links: FlowLink[],
@@ -495,106 +498,140 @@ const untangled = (
         gaps.set(level, [...(gaps.get(level) ?? []), link]);
     }
 
+    const arriving = new Map<string, number>();
+    const leaving = new Map<string, number>();
+    for (const link of links) {
+        arriving.set(
+            link.target,
+            (arriving.get(link.target) ?? 0) + link.value,
+        );
+        leaving.set(link.source, (leaving.get(link.source) ?? 0) + link.value);
+    }
+    const size = (id: string) =>
+        Math.max(arriving.get(id) ?? 0, leaving.get(id) ?? 0);
+
+    const spacing =
+        SPACING *
+        Math.max(
+            ...[...columns.values()].map((column) =>
+                column.reduce((sum, id) => sum + size(id), 0),
+            ),
+        );
+
     const at = new Map<string, number>();
-    const reindex = (column: string[]) =>
-        column.forEach((id, index) => at.set(id, index));
-    for (const column of columns.values()) reindex(column);
+    const top = new Map<string, number>();
+    const place = (column: string[]) => {
+        let y = 0;
+        for (const [index, id] of column.entries()) {
+            at.set(id, index);
+            top.set(id, y);
+            y += size(id) + spacing;
+        }
+    };
+    for (const column of columns.values()) place(column);
+
+    const costOf = (gap: FlowLink[]): Cost => {
+        const nodes = new Map<string, Stacked>();
+        const stacked = (id: string) => {
+            const y0 = top.get(id) ?? 0;
+            const node = nodes.get(id) ?? { id, y0, y1: y0 + size(id) };
+            nodes.set(id, node);
+            return node;
+        };
+        const joins = gap.map((link) => ({
+            source: stacked(link.source),
+            target: stacked(link.target),
+            thickness: link.value,
+        }));
+        const ends = ribbonEnds([...nodes.values()], joins);
+        const drops = joins
+            .map((join) => ({
+                by:
+                    (ends.arriving.get(join) ?? 0) -
+                    (ends.leaving.get(join) ?? 0),
+                weight: join.thickness,
+            }))
+            .sort((one, two) => one.by - two.by);
+
+        // The chart slides the next column up or down to meet this one, so
+        // a drop every ribbon shares costs nothing. What is left once the
+        // middle drop by width is taken off is the ribbons fanning apart.
+        const half = drops.reduce((sum, drop) => sum + drop.weight, 0) / 2;
+        let below = 0;
+        const middle = drops.find((drop) => (below += drop.weight) >= half);
+        const travel = drops.reduce(
+            (sum, drop) =>
+                sum + drop.weight * Math.abs(drop.by - (middle?.by ?? 0)),
+            0,
+        );
+        return { crossed: tangles(gap, at), travel };
+    };
+
+    // Searches the given columns together, and says whether it moved them.
+    // Too much work to search at all reads as nothing to move.
+    const search = (levels: number[]) => {
+        const nearby = [...new Set(levels.flatMap((l) => [l - 1, l]))]
+            .map((level) => gaps.get(level))
+            .filter((gap): gap is FlowLink[] => !!gap?.length);
+        const each = nearby.reduce((sum, gap) => sum + gap.length ** 2, 0);
+        const options = levels.map((level) =>
+            relocations(columns.get(level) as string[]),
+        );
+        const tries = options.reduce((total, one) => total * one.length, 1);
+        if (tries * each > EFFORT) return null;
+
+        const score = () =>
+            nearby.reduce(
+                (sum, gap) => {
+                    const cost = costOf(gap);
+                    return {
+                        crossed: sum.crossed + cost.crossed,
+                        travel: sum.travel + cost.travel,
+                    };
+                },
+                { crossed: 0, travel: 0 },
+            );
+        const combos = options.reduce<string[][][]>(
+            (sofar, one) =>
+                sofar.flatMap((combo) =>
+                    one.map((column) => [...combo, column]),
+                ),
+            [[]],
+        );
+
+        let [best, cheapest, moved] = [combos[0], score(), false];
+        for (const combo of combos) {
+            for (const [index, level] of levels.entries()) {
+                columns.set(level, combo[index]);
+                place(combo[index]);
+            }
+            const cost = score();
+            if (cheaper(cost, cheapest)) {
+                [best, cheapest, moved] = [combo, cost, true];
+            }
+        }
+        for (const [index, level] of levels.entries()) {
+            columns.set(level, best[index]);
+            place(best[index]);
+        }
+        return moved;
+    };
 
     const depths = [...columns.keys()].sort((a, b) => a - b);
-
     for (let pass = 0; pass < SWEEPS; pass += 1) {
         let improved = false;
         for (const [index, right] of depths.slice(1).entries()) {
             const left = depths[index];
-            const middle = gaps.get(left) ?? [];
-            const snarled = crossingPairs(middle, at).length;
-            if (snarled === 0 || snarled > SNARLS) continue;
-
-            const nearby = [middle, gaps.get(left - 1), gaps.get(right)].filter(
-                (gap): gap is FlowLink[] => !!gap?.length,
-            );
-            const score = () =>
-                nearby.reduce((sum, gap) => sum + tangles(gap, at), 0);
-
-            const caught = caughtIn(middle, at);
-            const [wasLeft, wasRight] = [
-                columns.get(left) as string[],
-                columns.get(right) as string[],
-            ];
-            const [ones, twos] = [
-                relocations(wasLeft, caught),
-                relocations(wasRight, caught),
-            ];
-            const each = nearby.reduce((sum, gap) => sum + gap.length ** 2, 0);
-            if (ones.length * twos.length * each > EFFORT) continue;
-
-            let best = [wasLeft, wasRight];
-            let fewest = score();
-            for (const one of ones) {
-                reindex(one);
-                for (const two of twos) {
-                    reindex(two);
-                    const crossed = score();
-                    if (crossed < fewest) {
-                        [best, fewest, improved] = [[one, two], crossed, true];
-                    }
-                }
-            }
-            columns.set(left, best[0]);
-            columns.set(right, best[1]);
-            reindex(best[0]);
-            reindex(best[1]);
+            // A pair too big to search together still gets each column
+            // searched on its own.
+            const moved =
+                search([left, right]) ??
+                [search([left]), search([right])].some(Boolean);
+            improved ||= moved;
         }
         if (!improved) break;
     }
     return depths.flatMap((level) => columns.get(level) as string[]);
-};
-
-// A node with nothing leaving it is a dead end, and one sitting in the middle
-// of a column splits the flow carrying on either side of it. Crossings cannot
-// see this: a ribbon running past a dead end never meets another ribbon, so
-// every order here scores the same and the sweep picks between them on nothing.
-// What it costs is travel. Most of a season is usually still awaiting a reply,
-// so that one node is most of its column, and leaving it in the middle pushes
-// the ribbons that do carry on to opposite ends and makes one of them sweep the
-// height of the figure to land.
-//
-// So sink the dead ends under the flow that continues, which leaves the ribbons
-// that carry on next to each other, and only where it costs no crossings. The
-// closing column is all dead ends and has nothing to separate.
-const sunk = (
-    order: string[],
-    depth: Map<string, number>,
-    links: FlowLink[],
-) => {
-    const carries = new Set(links.map((link) => link.source));
-    const columns = new Map<number, string[]>();
-    for (const id of order) {
-        const level = depth.get(id) ?? 0;
-        columns.set(level, [...(columns.get(level) ?? []), id]);
-    }
-
-    const depths = [...columns.keys()].sort((a, b) => a - b);
-    const flat = () =>
-        depths.flatMap((level) => columns.get(level) as string[]);
-
-    let fewest = crossings(order, links);
-    for (const level of depths) {
-        const column = columns.get(level) as string[];
-        const going = column.filter((id) => carries.has(id));
-        if (going.length === 0 || going.length === column.length) continue;
-
-        // A stable partition, so whatever the sweep settled on within each of
-        // the two groups is left alone.
-        columns.set(level, [
-            ...going,
-            ...column.filter((id) => !carries.has(id)),
-        ]);
-        const crossed = crossings(flat(), links);
-        if (crossed <= fewest) fewest = crossed;
-        else columns.set(level, column);
-    }
-    return flat();
 };
 
 // Order the nodes in each column so that ribbons run as flat as they can.
@@ -701,32 +738,67 @@ const sweptOrder = (
     const [tidiest] = [settle("forwards"), settle("backwards")].sort(
         (one, two) => one.fewest - two.fewest,
     );
-    const tidy = untangled(tidiest.best, depth, links);
-    return sunk(upright(tidy, depth, placed), depth, links);
+    return upright(refined(tidiest.best, depth, links), depth, placed, links);
 };
 
-// Turning every column upside down crosses exactly the same ribbons, so the
-// sweep is as likely to hand back the chart upside down as not. Stand it the
-// way the pipeline reads, with the opening column in stage order.
+// Turning every column upside down crosses the same ribbons and moves them as
+// far, so the search is as likely to hand back the chart upside down as not.
+// Stand it the way the pipeline reads, with the opening column in stage order.
+// A chart that opens on one node says nothing that way, so it stands with its
+// earliest dead ends under the flow that carries on: what is still moving
+// first, what stopped below it. The earliest, because the eye reads from the
+// left and most of a season usually stops at the first step.
 const upright = (
     order: string[],
     depth: Map<string, number>,
     placed: Map<string, Placed>,
+    links: FlowLink[],
 ) => {
-    const opening = order.filter((id) => (depth.get(id) ?? 0) === 0);
-    const stage = (id: string) =>
-        STAGE.get((placed.get(id) as Placed).step) ?? 0;
-    const [first, last] = [opening[0], opening[opening.length - 1]];
-    if (opening.length < 2 || stage(first) <= stage(last)) return order;
-
     const columns = new Map<number, string[]>();
     for (const id of order) {
         const level = depth.get(id) ?? 0;
-        columns.set(level, [id, ...(columns.get(level) ?? [])]);
+        columns.set(level, [...(columns.get(level) ?? []), id]);
     }
-    return [...columns.keys()]
-        .sort((a, b) => a - b)
-        .flatMap((level) => columns.get(level) as string[]);
+    const depths = [...columns.keys()].sort((a, b) => a - b);
+
+    const stage = (id: string) =>
+        STAGE.get((placed.get(id) as Placed).step) ?? 0;
+    const opening = columns.get(0) ?? [];
+    const leanings = [
+        opening.length < 2
+            ? 0
+            : stage(opening[0]) - stage(opening[opening.length - 1]),
+    ];
+
+    // How far above the middle of its column each dead end sits, by flow. The
+    // closing column is all dead ends and has nothing to say.
+    const arriving = new Map<string, number>();
+    const carries = new Set(links.map((link) => link.source));
+    for (const link of links) {
+        arriving.set(
+            link.target,
+            (arriving.get(link.target) ?? 0) + link.value,
+        );
+    }
+    for (const level of depths.slice(0, -1)) {
+        const column = columns.get(level) as string[];
+        leanings.push(
+            column.reduce(
+                (sum, id, index) =>
+                    carries.has(id)
+                        ? sum
+                        : sum +
+                          (arriving.get(id) ?? 0) *
+                              ((column.length - 1) / 2 - index),
+                0,
+            ),
+        );
+    }
+
+    if ((leanings.find((lean) => lean !== 0) ?? 0) <= 0) return order;
+    return depths.flatMap((level) =>
+        [...(columns.get(level) as string[])].reverse(),
+    );
 };
 
 // How far from the opening column each node sits, counted along the longest

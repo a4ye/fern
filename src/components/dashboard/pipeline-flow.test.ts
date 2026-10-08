@@ -742,6 +742,16 @@ describe("graphFrom with WaterlooWorks rankings", () => {
         );
     });
 
+    test("finds the order that crosses nothing when there is one", () => {
+        // The big rejection only clears every other ribbon by running between
+        // the interview and the OA, which takes several moves at once, each
+        // worth nothing alone, across a gap the search used to skip as too
+        // tangled to bother with.
+        const graph = graphFrom(WATERLOO_SEASON, "standard");
+        const order = graph.nodes.map((node) => node.id);
+        expect(crossings(graph, order)).toBe(0);
+    });
+
     test("opens with WaterlooWorks above External", () => {
         // Upside down crosses the same ribbons, so nothing in the sweep says
         // which way up the chart should stand.
