@@ -151,6 +151,32 @@ describe("candidatesFor", () => {
         ).toEqual([]);
     });
 
+    // "University" and "of" are two parts present, but neither says which
+    // university.
+    test("will not match a name on its small joining words", () => {
+        expect(
+            keptFor(
+                ["University of Pikeville"],
+                email({
+                    from: "ceehub@uwaterloo.ca",
+                    body: "Co-operative Education, University of Waterloo",
+                }),
+            ),
+        ).toEqual([]);
+        expect(
+            keptFor(
+                ["University of Pikeville"],
+                email({ subject: "Pikeville University offer" }),
+            ),
+        ).toEqual(["University of Pikeville"]);
+    });
+
+    test("keeps a name made only of small words", () => {
+        expect(keptFor(["On"], email({ from: "careers@on.com" }))).toEqual([
+            "On",
+        ]);
+    });
+
     test("leaves out everyone when the email names nobody tracked", () => {
         expect(
             keptFor(
@@ -170,6 +196,22 @@ describe("candidatesFor", () => {
             "Ramp",
             "Figma",
         ]);
+    });
+
+    // The lists are shared, so being kept is not the same as being named by
+    // a given email.
+    test("tells which kept email names which kept application", () => {
+        const kept = candidatesFor(companies(["Ramp", "Stripe", "Figma"]), [
+            email({ id: "bill", subject: "Your electricity bill is ready" }),
+            email({ id: "a", subject: "Ramp interview" }),
+            email({ id: "b", subject: "Figma take-home" }),
+        ]);
+
+        expect(kept.names(0, 0)).toBe(true);
+        expect(kept.names(0, 1)).toBe(false);
+        expect(kept.names(1, 0)).toBe(false);
+        expect(kept.names(1, 1)).toBe(true);
+        expect(kept.names(2, 0)).toBe(false);
     });
 
     test("holds the order the applications came in", () => {
@@ -213,11 +255,11 @@ describe("candidatesFor", () => {
     });
 
     test("has nothing to offer when there is nothing to match", () => {
-        expect(candidatesFor([], [email({})])).toEqual({
+        expect(candidatesFor([], [email({})])).toMatchObject({
             applications: [],
             emails: [],
         });
-        expect(candidatesFor(companies(["Ramp"]), [])).toEqual({
+        expect(candidatesFor(companies(["Ramp"]), [])).toMatchObject({
             applications: [],
             emails: [],
         });

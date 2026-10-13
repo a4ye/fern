@@ -128,6 +128,14 @@ export const syncEmailInbox = async (
             const email = candidates.emails[match.emailIndex];
             const application = candidates.applications[match.applicationIndex];
             if (!email || !application) continue;
+            // The model reads every kept email beside every kept application,
+            // so it can pin an email that names no employer on a company
+            // another email in the batch brought in: a co-op "you've been
+            // matched" notice landing on the one offer in progress. Only a
+            // company the email itself names is taken.
+            if (!candidates.names(match.emailIndex, match.applicationIndex)) {
+                continue;
+            }
             // Landing on the status already held is a second round at that
             // step, which is a real move, or it is another email about the
             // step the application is already on, which is nothing.

@@ -49,6 +49,13 @@ const LEGAL_WORDS = new Set([
     "and",
 ]);
 
+// Small words that join a name together without telling one company from
+// another. Left in, "University of Pikeville" meets every email from the
+// University of Waterloo on "university" and "of", two parts present. A name
+// made of nothing else, such as "On", still keeps them, or it would match
+// nothing at all.
+const FILLER_WORDS = new Set(["of", "for", "at", "in", "on", "to", "de"]);
+
 type CompanyKeys = {
     // The parts of the name worth searching for. Legal words go, and so do
     // single letters, which match everywhere and mean nothing.
@@ -62,9 +69,11 @@ type CompanyKeys = {
 };
 
 const companyKeysFor = (company: string): CompanyKeys => {
-    const parts = normalize(company)
+    const words = normalize(company)
         .split(" ")
         .filter((word) => word.length > 1 && !LEGAL_WORDS.has(word));
+    const named = words.filter((word) => !FILLER_WORDS.has(word));
+    const parts = named.length > 0 ? named : words;
 
     const glued: string[] = [];
     // Runs of neighbouring parts, which is how a name meets the shortened form
@@ -180,6 +189,11 @@ const walkGlued = (
 export type Candidates<T> = {
     applications: T[];
     emails: NormalizedEmail[];
+    // Whether that one email names that one application, both indexed into
+    // the narrowed lists above. The lists are shared by the whole batch, so an
+    // application is there because some email named it, not necessarily this
+    // one.
+    names: (emailIndex: number, applicationIndex: number) => boolean;
 };
 
 // Both sides of the same question: which applications and which emails could
@@ -195,14 +209,13 @@ export const candidatesFor = <T extends { company: string }>(
     emails: readonly NormalizedEmail[],
 ): Candidates<T> => {
     const index = indexCompanies(applications);
-    const named = new Set<number>();
-    const naming = new Set<number>();
+    // The applications each email names, by their place in the full list.
+    const namedBy = emails.map(() => new Set<number>());
 
     emails.forEach((email, by) => {
         const words = wordsIn(email);
         const keep = (at: number) => {
-            named.add(at);
-            naming.add(by);
+            namedBy[by].add(at);
         };
 
         // Searched with the spacing taken out of both sides, which is how a
@@ -236,8 +249,22 @@ export const candidatesFor = <T extends { company: string }>(
         }
     });
 
+    // Where each kept entry sat in the full list, in the order it came in.
+    const named = new Set(namedBy.flatMap((set) => [...set]));
+    const applicationAt = applications.flatMap((_, at) =>
+        named.has(at) ? [at] : [],
+    );
+    const emailAt = emails.flatMap((_, by) =>
+        namedBy[by].size > 0 ? [by] : [],
+    );
+
     return {
-        applications: applications.filter((_, at) => named.has(at)),
-        emails: emails.filter((_, by) => naming.has(by)),
+        applications: applicationAt.map((at) => applications[at]),
+        emails: emailAt.map((by) => emails[by]),
+        names: (emailIndex, applicationIndex) => {
+            const by = emailAt[emailIndex];
+            const at = applicationAt[applicationIndex];
+            return by !== undefined && at !== undefined && namedBy[by].has(at);
+        },
     };
 };

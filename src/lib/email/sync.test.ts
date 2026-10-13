@@ -334,6 +334,64 @@ describe("syncEmailInbox", () => {
         expect(completeEmailSyncMessages.mock.calls[0]?.[2]).toEqual([]);
     });
 
+    // The co-op notice names no employer, only the Discord server it links.
+    // Tower reaches the prompt through the other email, and the model ties
+    // the notice to it as the one offer in progress.
+    it("drops a match the email never names", async () => {
+        getApplicationsForUser.mockImplementationOnce(async () => [
+            {
+                id: "application-1",
+                company: "Discord",
+                role: "Engineer",
+                status: "applied",
+                appliedAt: null,
+            },
+            {
+                id: "application-2",
+                company: "Tower Research Capital",
+                role: "Quant Intern",
+                status: "offer_in_progress",
+                appliedAt: null,
+            },
+        ]);
+        pendingBatches = [["m-1", "m-2"]];
+        const messages: NormalizedEmail[] = [
+            {
+                id: "m-1",
+                from: "recruiting@towerresearch.com",
+                subject: "Your offer from Tower Research",
+                snippet: "",
+                body: "Please review the attached offer.",
+                receivedAt: new Date("2026-08-31T12:00:00.000Z"),
+            },
+            {
+                id: "m-2",
+                from: "Co-operative Education <ceehub@uwaterloo.ca>",
+                subject: "Congratulations on a match!",
+                snippet: "",
+                body: "Join co-op students on the Co-op Connection Discord.",
+                receivedAt: new Date("2026-08-31T12:00:00.000Z"),
+            },
+        ];
+        classifyEmails.mockImplementationOnce(async () => [
+            {
+                emailIndex: 1,
+                applicationIndex: 1,
+                suggestedStatus: "offer_accepted",
+                newRound: false,
+                confidence: 0.9,
+                reasoning: "You have been matched with a job.",
+            },
+        ]);
+
+        await syncEmailInbox("user-1", {
+            ...provider(["m-1", "m-2"]),
+            fetchMessages: mock(async () => messages),
+        });
+
+        expect(completeEmailSyncMessages.mock.calls[0]?.[2]).toEqual([]);
+    });
+
     // The model is the only part of a sync that costs money per call, and most
     // of an inbox is nothing to do with any application.
     it("never pays the model for a batch that names nobody tracked", async () => {
