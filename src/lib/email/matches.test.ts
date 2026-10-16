@@ -24,22 +24,46 @@ const raw = (overrides: Partial<RawMatch> = {}): RawMatch => ({
     ...overrides,
 });
 
+const inbox = (...subjects: string[]) =>
+    subjects.map((subject) => ({ subject }));
+
 describe("usableMatches", () => {
     it("keeps a repeat of a status that can be held twice", () => {
         const [match] = usableMatches(
             [raw()],
             [application("interviewing")],
-            1,
+            inbox("Rox next steps"),
         );
 
         expect(match.newRound).toBe(true);
+    });
+
+    // Every repeat this inbox has produced, with the answer the user gave it.
+    // The three replies were all dismissed, and all three are the same mail:
+    // the arranging of a round that was already offered.
+    it.each([
+        "Re: Next Steps with Imbue",
+        "Re: Jevis placed on the Rox API track — $2,000 + next week with our engineers",
+        "Fwd: Next Steps with Imbue",
+    ])("drops the flag for a round claimed in a reply: %p", (subject) => {
+        const [match] = usableMatches(
+            [raw()],
+            [application("interviewing")],
+            inbox(subject),
+        );
+
+        expect(match.newRound).toBe(false);
     });
 
     // The model reports where the application got to, not where it was, so a
     // repeat of a status it does not hold is a plain move that arrived with the
     // flag set by mistake.
     it("drops the flag when the status is not the one already held", () => {
-        const [match] = usableMatches([raw()], [application("applied")], 1);
+        const [match] = usableMatches(
+            [raw()],
+            [application("applied")],
+            inbox("Benchling - Interview"),
+        );
 
         expect(match.newRound).toBe(false);
         expect(match.suggestedStatus).toBe("interviewing");
@@ -51,7 +75,7 @@ describe("usableMatches", () => {
         const [match] = usableMatches(
             [raw({ suggestedStatus: "rejected" })],
             [application("rejected")],
-            1,
+            inbox("Waymo Internship Update"),
         );
 
         expect(match.newRound).toBe(false);
@@ -61,7 +85,7 @@ describe("usableMatches", () => {
         const found = usableMatches(
             [raw({ applicationIndex: 4 }), raw({ emailIndex: -1 })],
             [application("interviewing")],
-            1,
+            inbox("Rox next steps"),
         );
 
         expect(found).toEqual([]);

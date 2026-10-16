@@ -1,4 +1,5 @@
 import type { ApplicationStatus } from "@/components/dashboard/data";
+import type { NormalizedEmail } from "@/lib/email/types";
 
 export type ClassifierApplication = {
     company: string;
@@ -42,20 +43,34 @@ const REPEATABLE_STATUSES = new Set<ApplicationStatus>([
     "onsite",
 ]);
 
+// A company opens a round with a message of its own. What arrives in the
+// thread about the round already arranged is the arranging: the time, the
+// link, the reschedule. The model reads that thread whole, quoted history and
+// all, so the earlier round's wording is in front of it and it answers that a
+// further round was offered.
+//
+// Measured against every suggestion this inbox has produced, the three repeats
+// that arrived as replies were all dismissed and the one that did not was
+// accepted. The reply prefix is a proxy for the thread headers, which are not
+// read today; it is the signal the stored suggestions can be checked against.
+const isReply = (subject: string): boolean =>
+    /^\s*(re|fwd?)\s*:/i.test(subject);
+
 // Drops entries pointing outside the lists the model was given, and bounds the
 // repeat each one claims. The model is asked whether an email opens a further
 // round but is not trusted to judge it: a claim that an application repeated a
-// step it is not on, or repeated a step nobody repeats, is a plain move.
+// step it is not on, repeated a step nobody repeats, or opened a round in a
+// reply, is a plain move.
 export const usableMatches = (
     raw: RawMatch[],
     applications: ClassifierApplication[],
-    emailCount: number,
+    emails: readonly Pick<NormalizedEmail, "subject">[],
 ): EmailMatch[] =>
     raw
         .filter(
             (match) =>
                 match.emailIndex >= 0 &&
-                match.emailIndex < emailCount &&
+                match.emailIndex < emails.length &&
                 match.applicationIndex >= 0 &&
                 match.applicationIndex < applications.length,
         )
@@ -69,7 +84,8 @@ export const usableMatches = (
                     match.newRound &&
                     suggestedStatus ===
                         applications[match.applicationIndex].currentStatus &&
-                    REPEATABLE_STATUSES.has(suggestedStatus),
+                    REPEATABLE_STATUSES.has(suggestedStatus) &&
+                    !isReply(emails[match.emailIndex].subject),
                 confidence: match.confidence,
                 reasoning: match.reasoning,
             };

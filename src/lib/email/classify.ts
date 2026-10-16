@@ -76,6 +76,11 @@ const SYSTEM_PROMPT = [
     "such detail, pick the row with the most recent applied date, and if none of",
     "the candidates has an applied date, pick the last one listed. Do not refuse",
     "a clear status change just because the company appears more than once.",
+    "A company writing about its own record-keeping reports no change: a",
+    "privacy or consent notice, a data retention or policy update, an account",
+    "or newsletter mail. Return no entry for one, even where it says the",
+    "application details will be removed. A rejection has to be stated, not",
+    "read into a company tidying its records.",
     "An application can reach the same status twice. When an email invites a",
     "further round at the status the application already holds, return that",
     "same status and set newRound. Set newRound only for a genuine additional",
@@ -137,5 +142,5 @@ export const classifyEmails = async (
         prompt: buildPrompt(applications, emails),
     });
 
-    return usableMatches(object.matches, applications, emails.length);
+    return usableMatches(object.matches, applications, emails);
 };

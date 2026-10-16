@@ -15,6 +15,7 @@ import {
 } from "@/lib/email/types";
 import { candidatesFor } from "@/lib/email/candidates";
 import type { EmailMatch } from "@/lib/email/matches";
+import { isAdministrativeNotice } from "@/lib/email/notices";
 import { MAX_EMAILS_PER_SYNC } from "@/lib/limits";
 
 const INITIAL_LOOKBACK_DAYS = 90;
@@ -93,12 +94,21 @@ export const syncEmailInbox = async (
         applications = applicationsForBatch;
         const emails = await emailsPromise;
 
+        // A company writing about its own record-keeping says nothing about
+        // where an application stands, however much the mail sounds like a
+        // decision. It is dropped before the narrowing rather than after the
+        // model, because asking costs a whole message body and the answer is
+        // known in advance.
+        const readable = emails.filter(
+            (email) => !isAdministrativeNotice(email),
+        );
+
         // Only the applications one of these emails names, and only the emails
         // that name one. A tracked list runs to thousands and a batch carries
         // twenty-five whole message bodies, so handing over both in full buries
         // the few that matter. A batch where the two never meet leaves nothing
         // to ask about, so the call is not made at all.
-        const candidates = candidatesFor(applicationsForBatch, emails);
+        const candidates = candidatesFor(applicationsForBatch, readable);
 
         let matches: EmailMatch[] = [];
         if (candidates.applications.length > 0) {

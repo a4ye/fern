@@ -392,6 +392,34 @@ describe("syncEmailInbox", () => {
         expect(completeEmailSyncMessages.mock.calls[0]?.[2]).toEqual([]);
     });
 
+    // Naming the company and proposing a move it has not made, this one gets
+    // past every other guard, so it has to be stopped before the model reads
+    // it at all.
+    it("never asks about a company's privacy notice", async () => {
+        pendingBatches = [["m-1"]];
+        const notice: NormalizedEmail = {
+            id: "m-1",
+            from: "no-reply@us.greenhouse-mail.io",
+            subject: "Privacy and Compliance Notification from Acme",
+            snippet: "We require your consent to keep storing your details",
+            body: "In line with data protection laws, Acme requires your consent to keep storing your personal details for recruitment purposes.",
+            receivedAt: new Date("2026-08-31T12:00:00.000Z"),
+        };
+
+        const result = await syncEmailInbox("user-1", {
+            ...provider(),
+            fetchMessages: mock(async () => [notice]),
+        });
+
+        expect(classifyEmails).not.toHaveBeenCalled();
+        expect(completeEmailSyncMessages).toHaveBeenCalledWith(
+            "user-1",
+            ["m-1"],
+            [],
+        );
+        expect(result.scanned).toBe(0);
+    });
+
     // The model is the only part of a sync that costs money per call, and most
     // of an inbox is nothing to do with any application.
     it("never pays the model for a batch that names nobody tracked", async () => {
