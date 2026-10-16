@@ -6,7 +6,7 @@ interface Client {
 
 export const getUserSettingsQuery = `-- name: GetUserSettings :one
 select default_currency, clean_links, employer_links, tidy_titles,
-    waterloo_rankings
+    waterloo_rankings, email_classifier
 from user_settings
 where user_id = $1`;
 
@@ -20,6 +20,7 @@ export interface GetUserSettingsRow {
     employerLinks: boolean;
     tidyTitles: boolean;
     waterlooRankings: boolean;
+    emailClassifier: string;
 }
 
 export async function getUserSettings(client: Client, args: GetUserSettingsArgs): Promise<GetUserSettingsRow | null> {
@@ -37,19 +38,21 @@ export async function getUserSettings(client: Client, args: GetUserSettingsArgs)
         cleanLinks: row[1],
         employerLinks: row[2],
         tidyTitles: row[3],
-        waterlooRankings: row[4]
+        waterlooRankings: row[4],
+        emailClassifier: row[5]
     };
 }
 
 export const saveUserSettingsQuery = `-- name: SaveUserSettings :exec
-insert into user_settings (user_id, default_currency, clean_links, employer_links, tidy_titles, waterloo_rankings)
-values ($1, $2, $3, $4, $5, $6)
+insert into user_settings (user_id, default_currency, clean_links, employer_links, tidy_titles, waterloo_rankings, email_classifier)
+values ($1, $2, $3, $4, $5, $6, $7)
 on conflict (user_id) do update
 set default_currency = excluded.default_currency,
     clean_links = excluded.clean_links,
     employer_links = excluded.employer_links,
     tidy_titles = excluded.tidy_titles,
     waterloo_rankings = excluded.waterloo_rankings,
+    email_classifier = excluded.email_classifier,
     updated_at = now()`;
 
 export interface SaveUserSettingsArgs {
@@ -59,12 +62,13 @@ export interface SaveUserSettingsArgs {
     employerLinks: boolean;
     tidyTitles: boolean;
     waterlooRankings: boolean;
+    emailClassifier: string;
 }
 
 export async function saveUserSettings(client: Client, args: SaveUserSettingsArgs): Promise<void> {
     await client.query({
         text: saveUserSettingsQuery,
-        values: [args.userId, args.defaultCurrency, args.cleanLinks, args.employerLinks, args.tidyTitles, args.waterlooRankings],
+        values: [args.userId, args.defaultCurrency, args.cleanLinks, args.employerLinks, args.tidyTitles, args.waterlooRankings, args.emailClassifier],
         rowMode: "array"
     });
 }

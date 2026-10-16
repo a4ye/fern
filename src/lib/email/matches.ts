@@ -18,7 +18,9 @@ export type EmailMatch = {
     // a second interview is indistinguishable from a reminder about the first.
     newRound: boolean;
     confidence: number;
-    reasoning: string;
+    // Absent where the classifier writes no text at all. Nothing renders this,
+    // and the column it lands in is nullable.
+    reasoning: string | null;
 };
 
 // One entry as the model returns it, before its indexes have been checked
@@ -29,7 +31,7 @@ export type RawMatch = {
     suggestedStatus: string;
     newRound: boolean;
     confidence: number;
-    reasoning: string;
+    reasoning: string | null;
 };
 
 // Statuses an application can genuinely hold twice. A second interview or a

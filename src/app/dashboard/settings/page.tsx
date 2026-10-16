@@ -4,10 +4,12 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import {
     auth,
+    emailSyncEnabled,
     getRequestSession,
     getViewAs,
     GITHUB_PROVIDER_ID,
 } from "@/lib/auth";
+import { isEmailSyncApproved } from "@/lib/email/access";
 import { getUserSettings } from "@/db/settings";
 import { githubUsername } from "@/lib/github";
 import { backHref, SETTINGS_PATH } from "@/components/dashboard/data";
@@ -71,6 +73,10 @@ const SettingsPage = async ({
                 employerLinks={settings.employerLinks}
                 tidyTitles={settings.tidyTitles}
                 waterlooRankings={settings.waterlooRankings}
+                emailClassifier={settings.emailClassifier}
+                inboxSync={
+                    emailSyncEnabled && isEmailSyncApproved(session.user.email)
+                }
             />
         </div>
     );

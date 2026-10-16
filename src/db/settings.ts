@@ -1,6 +1,11 @@
 import { getPool } from "@/db/client";
 import * as gen from "@/db/gen/settings_sql";
 import { DEFAULT_CURRENCY } from "@/lib/pay";
+import {
+    DEFAULT_CLASSIFIER,
+    isClassifier,
+    type Classifier,
+} from "@/lib/email/classifier";
 
 export type UserSettings = {
     defaultCurrency: string;
@@ -8,6 +13,7 @@ export type UserSettings = {
     employerLinks: boolean;
     tidyTitles: boolean;
     waterlooRankings: boolean;
+    emailClassifier: Classifier;
 };
 
 // A user who has never changed a preference has no row, so a read falls back to
@@ -18,6 +24,7 @@ const DEFAULT_SETTINGS: UserSettings = {
     employerLinks: false,
     tidyTitles: false,
     waterlooRankings: false,
+    emailClassifier: DEFAULT_CLASSIFIER,
 };
 
 export const getUserSettings = async (
@@ -31,6 +38,12 @@ export const getUserSettings = async (
               employerLinks: row.employerLinks,
               tidyTitles: row.tidyTitles,
               waterlooRankings: row.waterlooRankings,
+              // The column is an enum the database enforces, but it reaches
+              // here as a plain string, so an unknown value falls back rather
+              // than being handed on as a model nobody can call.
+              emailClassifier: isClassifier(row.emailClassifier)
+                  ? row.emailClassifier
+                  : DEFAULT_CLASSIFIER,
           }
         : DEFAULT_SETTINGS;
 };
@@ -46,6 +59,7 @@ export const saveUserSettings = async (
         employerLinks: settings.employerLinks,
         tidyTitles: settings.tidyTitles,
         waterlooRankings: settings.waterlooRankings,
+        emailClassifier: settings.emailClassifier,
     });
 };
 

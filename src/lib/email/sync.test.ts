@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, mock } from "bun:test";
 import { MAX_EMAILS_PER_SYNC } from "@/lib/limits";
 import type { UserApplication } from "@/db/email";
-import type { EmailMatch } from "./matches";
+import type { ClassifierApplication, EmailMatch } from "./matches";
 import type { EmailProvider, NormalizedEmail } from "./types";
 import { EmailHistoryExpiredError } from "./types";
 
@@ -33,16 +33,20 @@ const getApplicationsForUser = mock(async (): Promise<UserApplication[]> => [
 const completeEmailSyncMessages = mock(
     async (..._args: [string, string[], unknown[]]) => 1,
 );
-const classifyEmails = mock(async (): Promise<EmailMatch[]> => [
-    {
-        emailIndex: 0,
-        applicationIndex: 0,
-        suggestedStatus: "interviewing",
-        newRound: false,
-        confidence: 0.9,
-        reasoning: "The recruiter requested an interview.",
-    },
-]);
+const classifyEmails = mock(
+    async (
+        ..._args: [ClassifierApplication[], readonly NormalizedEmail[]]
+    ): Promise<EmailMatch[]> => [
+        {
+            emailIndex: 0,
+            applicationIndex: 0,
+            suggestedStatus: "interviewing",
+            newRound: false,
+            confidence: 0.9,
+            reasoning: "The recruiter requested an interview.",
+        },
+    ],
+);
 
 mock.module("@/db/email", () => ({
     getEmailSyncState,
@@ -52,7 +56,19 @@ mock.module("@/db/email", () => ({
     getApplicationsForUser,
     completeEmailSyncMessages,
 }));
-mock.module("@/lib/email/classify", () => ({ classifyEmails }));
+// `classifyEmails` above stands in for Jev, which is the default, so every
+// test about how a sync is organised reaches it without saying so. Gemini gets
+// its own so the one test that cares which was picked can tell them apart.
+const geminiClassify = mock(
+    async (
+        ..._args: [ClassifierApplication[], readonly NormalizedEmail[]]
+    ): Promise<EmailMatch[]> => [],
+);
+
+mock.module("@/lib/email/classify-jev", () => ({ classifyEmails }));
+mock.module("@/lib/email/classify", () => ({
+    classifyEmails: geminiClassify,
+}));
 
 const { syncEmailInbox } = await import("./sync");
 
@@ -94,6 +110,7 @@ beforeEach(() => {
     getApplicationsForUser.mockClear();
     completeEmailSyncMessages.mockClear();
     classifyEmails.mockClear();
+    geminiClassify.mockClear();
 });
 
 describe("syncEmailInbox", () => {
@@ -165,6 +182,103 @@ describe("syncEmailInbox", () => {
             remaining: 5,
             hasMore: true,
         });
+    });
+
+    // A Gmail round of twenty-five leaves about eleven emails that name
+    // anybody tracked. Tying a model call to a round would send every one of
+    // them less than half full and pay the same for it, so the survivors are
+    // collected across rounds instead.
+    it("fills one model call from several Gmail rounds", async () => {
+        // Five of every twenty-five name the tracked company.
+        const ids = (round: number) =>
+            Array.from({ length: 25 }, (_, at) =>
+                at < 5 ? `keep-${round}-${at}` : `drop-${round}-${at}`,
+            );
+        const bill = (id: string): NormalizedEmail => ({
+            id,
+            from: "billing@hydroone.com",
+            subject: "Your electricity bill is ready",
+            snippet: "Your balance is due",
+            body: "Your account balance is due on the 15th.",
+            receivedAt: new Date("2026-08-31T12:00:00.000Z"),
+        });
+        pendingBatches = [ids(1), ids(2)];
+
+        const result = await syncEmailInbox("user-1", {
+            ...provider(),
+            fetchMessages: mock(async (requested: string[]) =>
+                requested.map((id) =>
+                    id.startsWith("keep-") ? email(id) : bill(id),
+                ),
+            ),
+        });
+
+        // One call, not one per round, and it carries both rounds' survivors.
+        expect(classifyEmails).toHaveBeenCalledTimes(1);
+        expect(classifyEmails.mock.calls[0]?.[1]).toHaveLength(10);
+        expect(result.scanned).toBe(10);
+
+        // The mail naming nobody is settled per round, so it is never fetched
+        // again while the survivors wait for a group to fill.
+        const settled = completeEmailSyncMessages.mock.calls.map(
+            (call) => call[1],
+        );
+        expect(settled[0]).toEqual(ids(1).slice(5));
+        expect(settled[1]).toEqual(ids(2).slice(5));
+        expect(settled[2]).toEqual([
+            ...ids(1).slice(0, 5),
+            ...ids(2).slice(0, 5),
+        ]);
+    });
+
+    it("runs two model calls at once", async () => {
+        let active = 0;
+        let mostAtOnce = 0;
+        // Registered per call rather than as the implementation, so the shared
+        // default is still there for the tests that follow.
+        const watched = async (): Promise<EmailMatch[]> => {
+            active += 1;
+            mostAtOnce = Math.max(mostAtOnce, active);
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            active -= 1;
+            return [];
+        };
+        classifyEmails.mockImplementationOnce(watched);
+        classifyEmails.mockImplementationOnce(watched);
+
+        // Two full groups, so the second is scheduled while the first is still
+        // waiting on the model.
+        const ids = Array.from({ length: 50 }, (_, at) => `m-${at}`);
+        pendingBatches = [ids.slice(0, 25), ids.slice(25)];
+
+        await syncEmailInbox("user-1", {
+            ...provider(ids),
+            fetchMessages: mock(async (requested: string[]) =>
+                requested.map(email),
+            ),
+        });
+
+        expect(classifyEmails).toHaveBeenCalledTimes(2);
+        expect(mostAtOnce).toBe(2);
+    });
+
+    // The setting names which model reads the inbox, and the two are loaded
+    // separately so a sync never pulls in the SDK behind the one it is not
+    // using.
+    it("asks the classifier the settings name", async () => {
+        pendingBatches = [["m-1"]];
+        await syncEmailInbox("user-1", provider(["m-1"]), "gemini");
+
+        expect(geminiClassify).toHaveBeenCalledTimes(1);
+        expect(classifyEmails).not.toHaveBeenCalled();
+    });
+
+    it("reads the inbox with Jev unless told otherwise", async () => {
+        pendingBatches = [["m-1"]];
+        await syncEmailInbox("user-1", provider(["m-1"]));
+
+        expect(classifyEmails).toHaveBeenCalledTimes(1);
+        expect(geminiClassify).not.toHaveBeenCalled();
     });
 
     it("uses the stored history cursor for later discovery", async () => {

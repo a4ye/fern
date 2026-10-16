@@ -18,6 +18,16 @@ import {
 } from "@/components/dashboard/table-controls";
 import { APP_NAME } from "@/lib/site";
 import { DISPLAY_NAME_MAX } from "@/lib/constraints";
+import {
+    CLASSIFIERS,
+    CLASSIFIER_LABELS,
+    type Classifier,
+} from "@/lib/email/classifier";
+
+const CLASSIFIER_OPTIONS = CLASSIFIERS.map((value) => ({
+    value,
+    label: CLASSIFIER_LABELS[value],
+}));
 
 const Section = ({
     title,
@@ -87,6 +97,8 @@ export const AccountSettings = ({
     employerLinks,
     tidyTitles,
     waterlooRankings,
+    emailClassifier,
+    inboxSync,
 }: {
     name: string;
     signedInAs: string;
@@ -96,6 +108,11 @@ export const AccountSettings = ({
     employerLinks: boolean;
     tidyTitles: boolean;
     waterlooRankings: boolean;
+    emailClassifier: Classifier;
+    // Whether this account can sync an inbox at all. The model is only ever
+    // asked anything during a sync, so for anybody without one the choice is
+    // between two things that never run.
+    inboxSync: boolean;
 }) => {
     const router = useRouter();
     const [draftName, setDraftName] = useState(name);
@@ -104,6 +121,7 @@ export const AccountSettings = ({
     const [draftEmployerLinks, setDraftEmployerLinks] = useState(employerLinks);
     const [draftTidyTitles, setDraftTidyTitles] = useState(tidyTitles);
     const [draftRankings, setDraftRankings] = useState(waterlooRankings);
+    const [draftClassifier, setDraftClassifier] = useState(emailClassifier);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -116,7 +134,8 @@ export const AccountSettings = ({
         draftCleanLinks !== cleanLinks ||
         draftEmployerLinks !== employerLinks ||
         draftTidyTitles !== tidyTitles ||
-        draftRankings !== waterlooRankings;
+        draftRankings !== waterlooRankings ||
+        draftClassifier !== emailClassifier;
 
     const save = async () => {
         if (saving || !changed) return;
@@ -130,6 +149,7 @@ export const AccountSettings = ({
                 employerLinks: draftEmployerLinks,
                 tidyTitles: draftTidyTitles,
                 waterlooRankings: draftRankings,
+                emailClassifier: draftClassifier,
             });
             if (result.ok) {
                 toast.success("Settings saved.");
@@ -258,6 +278,27 @@ export const AccountSettings = ({
                     />
                 </Row>
             </Section>
+
+            {/* Only where an inbox can actually be synced. Everywhere else
+                this would be a choice between two models that never run. */}
+            {inboxSync && (
+                <Section title="Inbox">
+                    <Row
+                        label="Reader"
+                        hint="Reads your inbox and suggests status changes for you to confirm. Jev is the newer one and is faster. Gemini is the older one and takes longer."
+                    >
+                        <CellSelect
+                            label="Reader"
+                            value={draftClassifier}
+                            options={CLASSIFIER_OPTIONS}
+                            onChange={(value) =>
+                                setDraftClassifier(value as Classifier)
+                            }
+                            variant="form"
+                        />
+                    </Row>
+                </Section>
+            )}
 
             <div className="mt-8 flex items-center justify-end gap-3 border-t border-hairline pt-6">
                 {error && (

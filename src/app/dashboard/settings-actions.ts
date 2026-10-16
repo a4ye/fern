@@ -8,6 +8,7 @@ import { deleteAccount as deleteAccountDb } from "@/db/account";
 import { markOnboarded, saveUserSettings } from "@/db/settings";
 import { withinBudget } from "@/db/rate-limit";
 import { TOO_MANY_REQUESTS } from "@/lib/limits";
+import type { Classifier } from "@/lib/email/classifier";
 import {
     accountSettingsSchema,
     firstIssue,
@@ -23,6 +24,7 @@ export const saveAccountSettings = async (input: {
     employerLinks: boolean;
     tidyTitles: boolean;
     waterlooRankings: boolean;
+    emailClassifier: Classifier;
 }): Promise<ActionResult> => {
     const requestHeaders = await headers();
     const session = await getRequestSession();
@@ -43,6 +45,7 @@ export const saveAccountSettings = async (input: {
         employerLinks: parsed.data.employerLinks,
         tidyTitles: parsed.data.tidyTitles,
         waterlooRankings: parsed.data.waterlooRankings,
+        emailClassifier: parsed.data.emailClassifier,
     });
 
     // The name lives on the account record better-auth owns, and its endpoint

@@ -27,7 +27,9 @@
         "cities:build": "bun run scripts/build-city-data.ts",
         "map:build": "bun run scripts/build-map-detail.ts",
         "flags:sync": "bun run scripts/sync-flags.ts",
-        "metrics": "bun run scripts/metrics.ts"
+        "metrics": "bun run scripts/metrics.ts",
+        "bench:classify": "bun run scripts/bench-classify.ts",
+        "corpus:build": "bun run scripts/build-email-corpus.ts"
     },
     "dependencies": {
         "@ai-sdk/google": "^4.0.23",

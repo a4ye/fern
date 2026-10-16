@@ -25,6 +25,7 @@ import {
     type ActionResult,
 } from "@/lib/validation";
 import { isEmailSyncApproved } from "@/lib/email/access";
+import { getUserSettings } from "@/db/settings";
 
 export type SyncResult =
     | {
@@ -109,7 +110,8 @@ export const syncInbox = async (): Promise<SyncResult> => {
     try {
         const provider = createGmailProvider(accessToken);
         const { syncEmailInbox } = await import("@/lib/email/sync");
-        const outcome = await syncEmailInbox(userId, provider);
+        const { emailClassifier } = await getUserSettings(userId);
+        const outcome = await syncEmailInbox(userId, provider, emailClassifier);
         // What the model was given and what it proposed, which together are the
         // only measure of whether it is worth paying for. What becomes of each
         // proposal is counted where the user answers it.

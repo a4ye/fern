@@ -82,6 +82,23 @@ export const RATE_LIMITS = {
 
 export type RateLimitName = keyof typeof RATE_LIMITS;
 
+// What TypeSafe allows, which is published on the key's own dashboard rather
+// than guessed at. Both are per second, and both are shared: the limits apply
+// across every key in the organisation and count simultaneous requests, so this
+// is a ceiling on the whole app at once rather than on any one caller.
+//
+// The two bind at different request sizes. Divided into each other they cross
+// at 1,250 input tokens a request: under that the request count runs out first,
+// over it the token budget does. An email carrying its body sits well over, so
+// what actually holds this app back is tokens, and it never reaches eighty
+// calls a second.
+//
+// Being throttled takes the feature away from everyone at once and is not
+// something this app can undo, which is why these stay at the published figures
+// rather than at whatever the API would quietly tolerate.
+export const TYPESAFE_REQUESTS_PER_SECOND = 80;
+export const TYPESAFE_INPUT_TOKENS_PER_SECOND = 100_000;
+
 // One account's share of the database. A list per season with a few thousand
 // applications in it is a heavy year; these allow more than a decade of that.
 export const MAX_LISTS = 100;

@@ -8,26 +8,11 @@ import {
     type EmailMatch,
 } from "./matches";
 import type { NormalizedEmail } from "./types";
+import { SUGGESTABLE_STATUSES } from "@/lib/email/statuses";
 
 // Calls the Google Generative AI API directly (reads GOOGLE_GENERATIVE_AI_API_KEY).
 // No gateway or other third party sits in front of it.
 const MODEL = google("gemini-2.5-flash");
-
-// Statuses the model is allowed to propose. Terminal-by-neglect states like
-// "ghosted" or "not_applied" can't be inferred from a single email, so they are
-// left off the menu.
-const SUGGESTABLE_STATUSES = [
-    "applied",
-    "online_assessment",
-    "takehome",
-    "interviewing",
-    "onsite",
-    "offer_in_progress",
-    "offer_accepted",
-    "offer_declined",
-    "offer_rescinded",
-    "rejected",
-] as const;
 
 const matchSchema = z.object({
     emailIndex: z

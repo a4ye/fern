@@ -9,6 +9,7 @@ import {
 } from "@/lib/metrics";
 import { POSTING_SOURCES } from "@/lib/job-import/shared";
 import { LINK_DURATION_VALUES } from "@/lib/share";
+import { CLASSIFIERS } from "@/lib/email/classifier";
 import {
     APPLICATION_STATUSES,
     ARRANGEMENTS,
@@ -331,6 +332,7 @@ export const accountSettingsSchema = z.object({
     employerLinks: z.boolean(),
     tidyTitles: z.boolean(),
     waterlooRankings: z.boolean(),
+    emailClassifier: z.enum(CLASSIFIERS),
 });
 
 // What the browser says a pasted link did. This is the one thing the app records
