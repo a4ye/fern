@@ -42,6 +42,7 @@ import {
 import { placesFrom } from "@/lib/application-places";
 import { parsePay } from "@/lib/pay";
 import {
+    MAX_APPLICATIONS_READ_PER_ACCOUNT,
     MAX_APPLICATIONS_READ_PER_LIST,
     MAX_EVENTS_READ_PER_APPLICATION,
 } from "@/lib/limits";
@@ -857,6 +858,34 @@ export const getListDetail = async (
     };
 };
 
+// A row as it is shown, plus the list it sits in, which only matters once rows
+// from several lists are in hand at once.
+export type AccountApplication = ApplicationRow & {
+    listId: string;
+    listName: string;
+};
+
+// Every application on the account. The read above answers for one list, which
+// a caller holding a list id can ask of each in turn; this answers for a caller
+// that has none and wants to look across all of them at once.
+//
+// Nothing is narrowed here. Which rows are wanted is a question with many
+// shapes and the same answer each time, so it is settled over the rows rather
+// than in a query that would grow a clause per shape.
+export const getAllApplications = async (
+    userId: string,
+): Promise<AccountApplication[]> => {
+    const rows = await gen.allApplicationsForUser(getPool(), {
+        userId,
+        maxApplications: MAX_APPLICATIONS_READ_PER_ACCOUNT,
+    });
+    return rows.map((row) => ({
+        ...toApplicationRow(row),
+        listId: row.listId,
+        listName: row.listName,
+    }));
+};
+
 // A list's own columns, without the applications under it. What an edit that
 // names only some of them merges into, and far less to read than the whole list
 // when the rows are not what is wanted.
@@ -936,6 +965,9 @@ export const getListInsights = async (
     const flow: FlowEntry[] = applicationRows.map((row) => {
         const status = row.status as ApplicationStatus;
         return {
+            id: row.id,
+            company: row.companyName,
+            role: row.roleTitle,
             status,
             history: historyOf(row.id, status).map((step) => step.status),
             ranking: row.ranking as Ranking | null,

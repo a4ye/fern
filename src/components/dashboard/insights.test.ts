@@ -6,11 +6,22 @@ import type {
     FunnelStageKey,
 } from "@/components/dashboard/data";
 
-const entry = (...history: ApplicationStatus[]): FlowEntry => ({
-    status: history[history.length - 1],
-    history,
-    ranking: null,
-});
+// The funnel counts journeys and never reads the identity, so these stand in
+// for it. They are distinct per entry all the same, since a count that quietly
+// folded two rows into one would otherwise look right.
+let made = 0;
+
+const entry = (...history: ApplicationStatus[]): FlowEntry => {
+    made += 1;
+    return {
+        id: `app-${made}`,
+        company: `Company ${made}`,
+        role: null,
+        status: history[history.length - 1],
+        history,
+        ranking: null,
+    };
+};
 
 const stageOf = (flow: FlowEntry[], key: FunnelStageKey) => {
     const stage = funnelFrom(flow).stages.find((one) => one.key === key);

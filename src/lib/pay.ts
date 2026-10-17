@@ -355,6 +355,31 @@ export const PER_YEAR: Record<PayPeriod, number> = {
     one_time: 1,
 };
 
+// What a pay line is worth over a year, in the currency every rate is quoted
+// against. Two figures only ever compare on the same clock and in the same
+// money, so both are settled here rather than at each place that needs to rank
+// or filter by pay.
+//
+// An amount with no period, and a one-off, are taken as written. A figure whose
+// period could be read from its size carries one by the time it is stored, so
+// what is left is a figure nothing could settle, and a year is where it sits
+// least oddly.
+//
+// The low end is what a pay cell leads with, so it is what this reads by. Null
+// means nothing here can say: a row with no amounts, or one written in a
+// currency the rates do not quote. A caller treats that as unknown rather than
+// as zero; no answer at all beats one built on a rate this app has invented.
+export const annualPay = (
+    figures: Pick<PayFields, "payMin" | "payMax" | "payCurrency" | "payPeriod">,
+    rates: ExchangeRates,
+): number | null => {
+    const amount = figures.payMin ?? figures.payMax;
+    if (amount === null) return null;
+    const yearly =
+        Number(amount) * (figures.payPeriod ? PER_YEAR[figures.payPeriod] : 1);
+    return inBaseCurrency(yearly, figures.payCurrency || RATE_BASE, rates);
+};
+
 // A posting that writes "60 USD" and stops has still said which period it meant,
 // because nobody is paid 60 dollars a year and nobody is paid 120,000 an hour.
 // So an amount is read back through the clock: a period is possible when it

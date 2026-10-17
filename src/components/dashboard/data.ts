@@ -606,7 +606,15 @@ export type Funnel = { applied: number; stages: FunnelStage[] };
 // One application's status history, so the flow chart can show where things
 // travelled rather than only where they ended up. `history` is chronological,
 // earliest first, and ends on the current status. It may revisit a status.
+//
+// The charts count journeys and never read the identity, but this is the only
+// read that hands back every trail at once. Carrying the row it belongs to is
+// what lets a caller asking which applications took a path answer in names
+// rather than in a number.
 export type FlowEntry = {
+    id: string;
+    company: string;
+    role: string | null;
     status: ApplicationStatus;
     history: ApplicationStatus[];
     ranking: Ranking | null;

@@ -146,6 +146,11 @@ export const MAX_EVENTS_PER_APPLICATION = 40;
 export const MAX_EVENTS_READ_PER_APPLICATION = 60;
 export const MAX_APPLICATIONS_READ_PER_LIST = 10_100;
 
+// What one search across every list will read, for the same reason and with the
+// same headroom over `MAX_APPLICATIONS`. A search that walked an account of any
+// size would put no ceiling at all on a single request.
+export const MAX_APPLICATIONS_READ_PER_ACCOUNT = 25_100;
+
 // How many applications one request may create, edit, or delete at once. The
 // table can select every row it shows, so this has to clear a full list.
 export const MAX_APPLICATION_BATCH = 2_000;

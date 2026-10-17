@@ -2,11 +2,22 @@ import { describe, expect, test } from "bun:test";
 import { graphFrom, ribbonEnds } from "@/components/dashboard/pipeline-flow";
 import type { ApplicationStatus, FlowEntry } from "@/components/dashboard/data";
 
-const entry = (...history: ApplicationStatus[]): FlowEntry => ({
-    status: history[history.length - 1],
-    history,
-    ranking: null,
-});
+// The graph counts journeys and never reads the identity, so these stand in
+// for it. They are distinct per entry all the same, since a ribbon that quietly
+// folded two rows into one would otherwise look right.
+let made = 0;
+
+const entry = (...history: ApplicationStatus[]): FlowEntry => {
+    made += 1;
+    return {
+        id: `app-${made}`,
+        company: `Company ${made}`,
+        role: null,
+        status: history[history.length - 1],
+        history,
+        ranking: null,
+    };
+};
 
 const many = (count: number, ...history: ApplicationStatus[]) =>
     Array.from({ length: count }, () => entry(...history));

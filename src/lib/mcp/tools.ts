@@ -6,6 +6,7 @@ import {
     deleteApplications,
     deleteList,
     findDuplicateApplications,
+    getAllApplications,
     getApplication,
     getApplicationExtras,
     getList,
@@ -21,6 +22,9 @@ import {
     updateList,
 } from "@/db/dashboard";
 import { getUserSettings, saveUserSettings } from "@/db/settings";
+import { getExchangeRates } from "@/db/exchange-rates";
+import { annualPay } from "@/lib/pay";
+import type { ExchangeRates } from "@/lib/exchange";
 import {
     getListHistory,
     restoreHistoryVersion,
@@ -40,6 +44,7 @@ import {
     ARRANGEMENTS,
     RANKINGS,
     LIST_SORTS,
+    type ApplicationRow,
 } from "@/components/dashboard/data";
 import {
     applicationIdSchema,
@@ -143,6 +148,44 @@ const listIdSchema = rowIdSchema;
 // that does not say.
 const timeZoneArg = timeZoneSchema.default("UTC");
 
+// What "search" means in a read, written once so that every read means the same
+// thing by it. Company and role are matched as one text, so "stripe backend"
+// finds a backend role at Stripe.
+const matchesSearch = (
+    application: Pick<ApplicationRow, "company" | "role">,
+    search: string | undefined,
+): boolean => {
+    const needle = search?.trim().toLowerCase();
+    if (!needle) return true;
+    return `${application.company} ${application.role ?? ""}`
+        .toLowerCase()
+        .includes(needle);
+};
+
+// A pay line is written on whatever clock and in whatever money the posting
+// used, so two of them do not compare until both are rewritten. The caller is a
+// model, which would otherwise have to invent a week's hours and a rate it
+// cannot look up; this hands it the same figure the table sorts by. Null where
+// nothing can say, which is a row with no amounts or one in a currency the
+// rates do not quote.
+const withAnnualPay = <
+    T extends Pick<
+        ApplicationRow,
+        "payMin" | "payMax" | "payCurrency" | "payPeriod"
+    >,
+>(
+    application: T,
+    rates: ExchangeRates,
+): T & { payAnnualUsd: number | null } => ({
+    ...application,
+    payAnnualUsd: annualPay(application, rates),
+});
+
+// Said on every tool that hands back `payAnnualUsd`, because a figure carried
+// up to a year rests on assumptions the caller cannot see in the number.
+const ANNUAL_PAY_NOTE =
+    "payAnnualUsd is the low end of the pay carried up to a year and converted to US dollars, which is the figure to compare by. An hourly rate is read as a 40-hour week of a 52-week year, and a one-off payment is taken as written rather than carried up. It is null where the application records no amount, or records one in a currency this app has no rate for.";
+
 export const registerFernTools = (server: McpServer): void => {
     server.registerTool(
         "list_lists",
@@ -175,7 +218,8 @@ export const registerFernTools = (server: McpServer): void => {
         {
             title: "Read a list",
             description:
-                "One list and the applications in it. Filter by status or search company and role text to narrow what comes back.",
+                "One list and the applications in it. Filter by status or search company and role text to narrow what comes back. To look across every list at once, use find_applications instead. " +
+                ANNUAL_PAY_NOTE,
             inputSchema: z.object({
                 listId: listIdSchema,
                 status: z.enum(APPLICATION_STATUSES).optional(),
@@ -185,17 +229,16 @@ export const registerFernTools = (server: McpServer): void => {
             annotations: { readOnlyHint: true },
         },
         async ({ listId, status, search, limit }, context) => {
-            const detail = await getListDetail(accountOf(context), listId);
+            const [detail, rates] = await Promise.all([
+                getListDetail(accountOf(context), listId),
+                getExchangeRates(),
+            ]);
             if (!detail) return refuse(NOT_FOUND);
 
-            const needle = search?.trim().toLowerCase();
             const matching = detail.applications.filter(
                 (application) =>
                     (!status || application.status === status) &&
-                    (!needle ||
-                        `${application.company} ${application.role ?? ""}`
-                            .toLowerCase()
-                            .includes(needle)),
+                    matchesSearch(application, search),
             );
 
             return reply({
@@ -205,7 +248,9 @@ export const registerFernTools = (server: McpServer): void => {
                 status: detail.status,
                 stats: detail.stats,
                 matched: matching.length,
-                applications: matching.slice(0, limit),
+                applications: matching
+                    .slice(0, limit)
+                    .map((application) => withAnnualPay(application, rates)),
             });
         },
     );
@@ -215,18 +260,99 @@ export const registerFernTools = (server: McpServer): void => {
         {
             title: "Read an application",
             description:
-                "Every stored field of one application, including notes and the status steps it has recorded.",
+                "Every stored field of one application, including notes and the status steps it has recorded. " +
+                ANNUAL_PAY_NOTE,
             inputSchema: z.object({ applicationId: applicationIdSchema }),
             annotations: { readOnlyHint: true },
         },
         async ({ applicationId }, context) => {
             const userId = accountOf(context);
-            const [application, extras] = await Promise.all([
+            const [application, extras, rates] = await Promise.all([
                 getApplication(userId, applicationId),
                 getApplicationExtras(userId, applicationId),
+                getExchangeRates(),
             ]);
             if (!application) return refuse(NOT_FOUND);
-            return reply({ ...application, history: extras?.history ?? [] });
+            return reply({
+                ...withAnnualPay(application, rates),
+                history: extras?.history ?? [],
+            });
+        },
+    );
+
+    server.registerTool(
+        "find_applications",
+        {
+            title: "Find applications across every list",
+            description:
+                "Search every list on the account at once, without needing a list id. Every filter named has to hold, and each row comes back naming the list it sits in. Prefer this to reading each list in turn. " +
+                ANNUAL_PAY_NOTE,
+            inputSchema: z.object({
+                search: z
+                    .string()
+                    .max(100)
+                    .optional()
+                    .describe(
+                        "Matched against company and role together, so 'stripe backend' finds a backend role at Stripe.",
+                    ),
+                statuses: z.array(z.enum(APPLICATION_STATUSES)).optional(),
+                rankings: z.array(z.enum(RANKINGS)).optional(),
+                arrangements: z.array(z.enum(ARRANGEMENTS)).optional(),
+                listId: listIdSchema.optional(),
+                minAnnualPayUsd: z.number().nonnegative().optional(),
+                maxAnnualPayUsd: z.number().nonnegative().optional(),
+                limit: z.number().int().min(1).max(2000).default(200),
+            }),
+            annotations: { readOnlyHint: true },
+        },
+        async (
+            {
+                search,
+                statuses,
+                rankings,
+                arrangements,
+                listId,
+                minAnnualPayUsd,
+                maxAnnualPayUsd,
+                limit,
+            },
+            context,
+        ) => {
+            const [rows, rates] = await Promise.all([
+                getAllApplications(accountOf(context)),
+                getExchangeRates(),
+            ]);
+
+            // A pay bound asks about a figure the row may not have, and a row
+            // that cannot say has not met the bound. Dropping it is the honest
+            // answer: naming it among the matches would say its pay is in
+            // range, which nothing here knows.
+            const matching = rows
+                .map((row) => withAnnualPay(row, rates))
+                .filter(
+                    (row) =>
+                        matchesSearch(row, search) &&
+                        (!statuses || statuses.includes(row.status)) &&
+                        (!rankings ||
+                            (row.ranking !== null &&
+                                rankings.includes(row.ranking))) &&
+                        (!arrangements ||
+                            (row.arrangement !== null &&
+                                arrangements.includes(row.arrangement))) &&
+                        (!listId || row.listId === listId) &&
+                        (minAnnualPayUsd === undefined ||
+                            (row.payAnnualUsd !== null &&
+                                row.payAnnualUsd >= minAnnualPayUsd)) &&
+                        (maxAnnualPayUsd === undefined ||
+                            (row.payAnnualUsd !== null &&
+                                row.payAnnualUsd <= maxAnnualPayUsd)),
+                );
+
+            return reply({
+                searched: rows.length,
+                matched: matching.length,
+                applications: matching.slice(0, limit),
+            });
         },
     );
 
@@ -235,7 +361,7 @@ export const registerFernTools = (server: McpServer): void => {
         {
             title: "Read list insights",
             description:
-                "The funnel, the volume over time, and where the applications went, as numbers rather than as a chart.",
+                "The funnel, the volume over time, and where the applications went, as numbers rather than as a chart. `flow` carries every application in the list with the full run of statuses it has moved through, naming each one, so a question about what a path led to is answered here in one call rather than by reading each application in turn.",
             inputSchema: z.object({ listId: listIdSchema }),
             annotations: { readOnlyHint: true },
         },

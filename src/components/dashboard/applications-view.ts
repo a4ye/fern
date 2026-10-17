@@ -16,13 +16,8 @@ import {
     type Arrangement,
 } from "@/components/dashboard/data";
 import { containsMatch } from "@/lib/fuzzy";
-import {
-    RATE_BASE,
-    convertAmount,
-    inBaseCurrency,
-    type ExchangeRates,
-} from "@/lib/exchange";
-import { PER_YEAR } from "@/lib/pay";
+import { RATE_BASE, convertAmount, type ExchangeRates } from "@/lib/exchange";
+import { annualPay } from "@/lib/pay";
 
 export type SortKey =
     | "company"
@@ -63,28 +58,6 @@ const ARRANGEMENT_RANK = new Map(
 const RANKING_RANK = new Map(
     RANKINGS.map((ranking, index) => [ranking, index] as const),
 );
-
-// A rate compares against another only once both are on the same clock, so
-// everything is carried up to a year first. An amount with no period, and a
-// one-off, are taken as written. A figure whose period could be read from its
-// size carries one by the time it is stored, so what is left here is a figure
-// nothing could settle, and a year is where it sorts least oddly.
-//
-// The low end is the figure the cell leads with, so it is what the column reads
-// by. Once on a yearly clock it is carried into one currency as well, since a
-// number and a number are only ever comparable in the same money. A row the
-// rates cannot cover sorts where an empty cell sorts, at the bottom: no order
-// at all beats an order built on a currency this app has guessed the size of.
-const annualPay = (
-    app: ApplicationRow,
-    rates: ExchangeRates,
-): number | null => {
-    const amount = app.payMin ?? app.payMax;
-    if (amount === null) return null;
-    const yearly =
-        Number(amount) * (app.payPeriod ? PER_YEAR[app.payPeriod] : 1);
-    return inBaseCurrency(yearly, app.payCurrency || RATE_BASE, rates);
-};
 
 // The same range written in one currency, for a column read down rather than a
 // row read across. Null wherever there is nothing to rewrite: a row with no
@@ -144,6 +117,8 @@ const sortValue = (
             return app.arrangement === null
                 ? null
                 : (ARRANGEMENT_RANK.get(app.arrangement) ?? null);
+        // A row the rates cannot cover sorts where an empty cell sorts, at the
+        // bottom, since `annualPay` answers null rather than guessing at it.
         case "pay":
             return annualPay(app, rates);
         case "appliedAt":

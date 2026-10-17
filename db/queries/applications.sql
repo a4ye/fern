@@ -201,6 +201,40 @@ where l.user_id = @user_id
 order by a.updated_at desc
 limit 2000;
 
+-- Every application on the account, with the list each one sits in. The read
+-- above it carries only what matching an inbox message needs; this carries
+-- what a row is shown as, so a caller holding no list id can look across all
+-- of them at once instead of asking each list in turn.
+--
+-- Narrowing happens over the rows this returns rather than in the where
+-- clause, which is how one list's own read is already narrowed, and keeps the
+-- two answering the same question the same way.
+-- name: AllApplicationsForUser :many
+select
+    a.id,
+    a.company_name,
+    a.role_title,
+    a.status,
+    a.url,
+    a.location,
+    a.arrangement,
+    a.ranking,
+    a.pay_min,
+    a.pay_max,
+    a.pay_currency,
+    a.pay_period,
+    a.bonus_amount,
+    a.pay_note,
+    a.applied_at,
+    a.updated_at,
+    l.id as list_id,
+    l.name as list_name
+from applications a
+join lists l on l.id = a.list_id
+where l.user_id = sqlc.arg(user_id)
+order by a.updated_at desc
+limit sqlc.arg(max_applications)::int;
+
 -- name: GetApplicationForUser :one
 select a.id, a.status
 from applications a

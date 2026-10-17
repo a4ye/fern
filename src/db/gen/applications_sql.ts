@@ -380,6 +380,88 @@ export async function applicationsForUser(client: Client, args: ApplicationsForU
     });
 }
 
+export const allApplicationsForUserQuery = `-- name: AllApplicationsForUser :many
+select
+    a.id,
+    a.company_name,
+    a.role_title,
+    a.status,
+    a.url,
+    a.location,
+    a.arrangement,
+    a.ranking,
+    a.pay_min,
+    a.pay_max,
+    a.pay_currency,
+    a.pay_period,
+    a.bonus_amount,
+    a.pay_note,
+    a.applied_at,
+    a.updated_at,
+    l.id as list_id,
+    l.name as list_name
+from applications a
+join lists l on l.id = a.list_id
+where l.user_id = $1
+order by a.updated_at desc
+limit $2::int`;
+
+export interface AllApplicationsForUserArgs {
+    userId: string;
+    maxApplications: number;
+}
+
+export interface AllApplicationsForUserRow {
+    id: string;
+    companyName: string;
+    roleTitle: string | null;
+    status: string;
+    url: string | null;
+    location: string | null;
+    arrangement: string | null;
+    ranking: string | null;
+    payMin: string | null;
+    payMax: string | null;
+    payCurrency: string;
+    payPeriod: string | null;
+    bonusAmount: string | null;
+    payNote: string | null;
+    appliedAt: Date | null;
+    updatedAt: Date;
+    listId: string;
+    listName: string;
+}
+
+export async function allApplicationsForUser(client: Client, args: AllApplicationsForUserArgs): Promise<AllApplicationsForUserRow[]> {
+    const result = await client.query({
+        text: allApplicationsForUserQuery,
+        values: [args.userId, args.maxApplications],
+        rowMode: "array"
+    });
+    return result.rows.map(row => {
+        return {
+            id: row[0],
+            companyName: row[1],
+            roleTitle: row[2],
+            status: row[3],
+            url: row[4],
+            location: row[5],
+            arrangement: row[6],
+            ranking: row[7],
+            payMin: row[8],
+            payMax: row[9],
+            payCurrency: row[10],
+            payPeriod: row[11],
+            bonusAmount: row[12],
+            payNote: row[13],
+            appliedAt: row[14],
+            updatedAt: row[15],
+            listId: row[16],
+            listName: row[17]
+        };
+    });
+}
+
 export const getApplicationForUserQuery = `-- name: GetApplicationForUser :one
 select a.id, a.status
 from applications a

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { formatPay, type PayPeriod } from "@/components/dashboard/data";
-import { CURRENCIES, currencyForCountry, parsePay } from "@/lib/pay";
+import { annualPay, CURRENCIES, currencyForCountry, parsePay } from "@/lib/pay";
 
 describe("parsePay", () => {
     it("reads a plain hourly rate", () => {
@@ -392,5 +392,100 @@ describe("currencyForCountry", () => {
         expect(currencyForCountry("CI")).toBeNull();
         expect(currencyForCountry("ZZ")).toBeNull();
         expect(currencyForCountry(null)).toBeNull();
+    });
+});
+
+// The pay column sorts by this, and the MCP hands it to a caller as the figure
+// to filter by, so what it answers is the one number two pay lines are compared
+// on anywhere in the app.
+describe("annualPay", () => {
+    // One US dollar buys this much of each, which is the shape rates are
+    // published and cached in.
+    const RATES = { CAD: 1.4, EUR: 0.9 };
+
+    const figures = (over: Partial<Parameters<typeof annualPay>[0]> = {}) => ({
+        payMin: null,
+        payMax: null,
+        payCurrency: "USD",
+        payPeriod: null as PayPeriod | null,
+        ...over,
+    });
+
+    it("carries a rate up to a year", () => {
+        expect(
+            annualPay(figures({ payMin: "50.00", payPeriod: "hourly" }), RATES),
+        ).toBe(50 * 40 * 52);
+        expect(
+            annualPay(
+                figures({ payMin: "9000.00", payPeriod: "monthly" }),
+                RATES,
+            ),
+        ).toBe(108_000);
+    });
+
+    it("reads a range by its low end, which is what a pay cell leads with", () => {
+        expect(
+            annualPay(
+                figures({
+                    payMin: "120000.00",
+                    payMax: "140000.00",
+                    payPeriod: "yearly",
+                }),
+                RATES,
+            ),
+        ).toBe(120_000);
+    });
+
+    it("falls back to the high end when there is no low one", () => {
+        expect(
+            annualPay(
+                figures({ payMax: "140000.00", payPeriod: "yearly" }),
+                RATES,
+            ),
+        ).toBe(140_000);
+    });
+
+    it("carries the figure into one currency", () => {
+        expect(
+            annualPay(
+                figures({
+                    payMin: "140000.00",
+                    payCurrency: "CAD",
+                    payPeriod: "yearly",
+                }),
+                RATES,
+            ),
+        ).toBe(100_000);
+    });
+
+    // A rate this app does not hold is a number it would have to invent, and a
+    // row sorted or filtered on an invented rate is worse than one left out.
+    it("answers for no currency it has no rate for", () => {
+        expect(
+            annualPay(
+                figures({
+                    payMin: "5000000.00",
+                    payCurrency: "JPY",
+                    payPeriod: "yearly",
+                }),
+                RATES,
+            ),
+        ).toBeNull();
+    });
+
+    it("answers for no row that records an amount nowhere", () => {
+        expect(annualPay(figures(), RATES)).toBeNull();
+    });
+
+    // A one-off is not a rate, so multiplying it by anything says nothing. It
+    // is taken as written, the same as an amount whose period nothing settled.
+    it("takes a one-off and an unsaid period as written", () => {
+        expect(
+            annualPay(
+                figures({ payMin: "5000.00", payPeriod: "one_time" }),
+                RATES,
+            ),
+        ).toBe(5_000);
+        expect(annualPay(figures({ payMin: "5000.00" }), RATES)).toBe(5_000);
     });
 });
