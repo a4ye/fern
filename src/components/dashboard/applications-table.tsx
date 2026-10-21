@@ -1,12 +1,14 @@
 "use client";
 
 import {
+    memo,
     useEffect,
     useMemo,
     useOptimistic,
     useRef,
     useState,
     useTransition,
+    type PointerEvent as ReactPointerEvent,
 } from "react";
 import dynamic from "next/dynamic";
 import { toast } from "sonner";
@@ -30,6 +32,8 @@ import {
     applicationGrid,
 } from "@/components/dashboard/applications-columns";
 import { useRowWindow } from "@/components/dashboard/use-row-window";
+import { useTooltip } from "@/components/dashboard/tooltip";
+import { useDragSelect } from "@/components/dashboard/use-drag-select";
 import { ApplicationsFilterMenu } from "@/components/dashboard/applications-filter";
 import type { ExportFormat } from "@/components/dashboard/applications-export";
 import {
@@ -290,20 +294,94 @@ const ACTION_CLASS =
 const REVEAL_CLASS =
     "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100";
 
-const ReadRow = ({
+// Where the gestures are made known. Somebody about to select rows is already
+// looking at this column, and the box at the head of it is the one thing in it
+// that answers a pointer, so what it can do rides along with what it says.
+// The bar below repeats the short of it once a row is held, which is the other
+// moment a reader is about to want a second one.
+const SelectAllBox = ({
+    showing,
+    all,
+    some,
+    onChange,
+}: {
+    showing: number;
+    all: boolean;
+    // Some but not all, which a tick box can only say through a property. It is
+    // set here rather than by the table, so nothing outside has to hold a
+    // reference to this box to say it.
+    some: boolean;
+    onChange: () => void;
+}) => {
+    const { triggerProps, tooltip, tooltipId, open } =
+        useTooltip<HTMLSpanElement>(
+            <>
+                Select all {showing} showing.
+                <br />
+                Drag the tick column to select a run, Alt-drag to remove,
+                Shift-click to extend.
+            </>,
+        );
+    const box = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        if (box.current) box.current.indeterminate = some;
+    }, [some]);
+
+    return (
+        <>
+            {/* The hint hangs on the cell rather than the box, so it is raised
+                by a pointer anywhere in a column the box itself fills a
+                quarter of. Focus carries up to here too, so reaching the box
+                by keyboard reads the same hint. */}
+            <span {...triggerProps} className="flex items-center">
+                <input
+                    ref={box}
+                    type="checkbox"
+                    checked={all}
+                    onChange={onChange}
+                    autoComplete="off"
+                    // A filter is often the fastest way to a selection, so this
+                    // box says how many it would take rather than leaving the
+                    // reader to go by the count in the heading.
+                    aria-label={`Select all ${showing} applications showing`}
+                    aria-describedby={open ? tooltipId : undefined}
+                    className={checkboxClass}
+                />
+            </span>
+            {tooltip}
+        </>
+    );
+};
+
+// What a row can ask the table to do. One object for the life of the table, so
+// a row that has not changed is not redrawn by the row beside it: ticking one
+// box has no business running the other thirty-seven rows through React again.
+// Everything here takes the row it is about, since nothing in it may be built
+// per row without giving that up. See rowActions.
+type RowActions = {
+    select: (index: number, selected: boolean, extend: boolean) => void;
+    press: (event: ReactPointerEvent, index: number) => void;
+    edit: (id: string) => void;
+    prefetch: (id: string) => void;
+    remove: (id: string) => void;
+};
+
+const Row = ({
     app,
+    index,
     columns,
     rankings,
     convertedPay,
     selected,
     opening,
     viewing,
-    onSelect,
-    onEdit,
-    onPrefetch,
-    onDelete,
+    actions,
 }: {
     app: ApplicationRow;
+    // Where the row stands in the table as it is showing, which is what a
+    // range of rows is counted in.
+    index: number;
     columns: string;
     rankings: boolean;
     convertedPay: string | null;
@@ -313,10 +391,7 @@ const ReadRow = ({
     // with them while an admin is viewing this account. The drawer stays, since
     // notes and the status trail are not on the row, and opens flat.
     viewing: boolean;
-    onSelect: (selected: boolean) => void;
-    onEdit: () => void;
-    onPrefetch: () => void;
-    onDelete: () => void;
+    actions: RowActions;
 }) => {
     const meta = STATUS_META[app.status];
     return (
@@ -326,16 +401,66 @@ const ReadRow = ({
             {viewing ? (
                 <span />
             ) : (
-                <input
-                    type="checkbox"
-                    checked={selected}
-                    onChange={(event) => onSelect(event.target.checked)}
-                    // Firefox restores tick marks across a reload, which would
-                    // outlive the selection state that drives the rest of the UI.
-                    autoComplete="off"
-                    aria-label={`Select ${app.company}`}
-                    className={checkboxClass}
-                />
+                // The box is 14px across, which is a fair target for a press
+                // and a poor one for the start of a drag, so the whole gutter
+                // cell takes the press.
+                //
+                // `touch-none` is what lets a finger dragged from here select
+                // rows rather than scroll the table, and it is asked for only
+                // where there is a finger. `touch-action` governs touch alone,
+                // so on a mouse it buys nothing, and it is not free: Firefox
+                // cannot hit-test an element with a non-default
+                // `touch-action` on the compositor and has to ask the main
+                // thread about it instead. One on every drawn row put much of
+                // the table on that slow path, and input through it dragged.
+                // Chrome does not do this, which is why it only ever showed up
+                // in Firefox, and no measurement here caught it because a
+                // scripted `click()` skips hit-testing altogether.
+                <span
+                    onPointerDown={(event) => actions.press(event, index)}
+                    onMouseDown={(event) => {
+                        // A shift-press extends the window's text selection
+                        // from wherever the last press left the caret, which
+                        // paints the table blue. Cancelling it is the only way
+                        // to stop that, and cancelling also cancels the focus
+                        // the press would have given the box, so that is put
+                        // back by hand.
+                        //
+                        // An ordinary press is left alone. Cancelling every
+                        // press, and reaching into the cell to focus the box
+                        // again afterwards, was work charged to a gesture that
+                        // never needed it: a drag holds text selection off the
+                        // document for its duration instead. See useDragSelect.
+                        if (!event.shiftKey) return;
+                        event.preventDefault();
+                        event.currentTarget
+                            .querySelector("input")
+                            ?.focus({ preventScroll: true });
+                    }}
+                    className="flex select-none items-center self-stretch pointer-coarse:touch-none"
+                >
+                    <input
+                        type="checkbox"
+                        checked={selected}
+                        // Handled on the click rather than the change, which is
+                        // the event that carries the shift. A tick box raises
+                        // one from the keyboard too, with the shift reading
+                        // false, so the space bar keeps working.
+                        readOnly
+                        onClick={(event) =>
+                            actions.select(
+                                index,
+                                event.currentTarget.checked,
+                                event.shiftKey,
+                            )
+                        }
+                        // Firefox restores tick marks across a reload, which would
+                        // outlive the selection state that drives the rest of the UI.
+                        autoComplete="off"
+                        aria-label={`Select ${app.company}`}
+                        className={checkboxClass}
+                    />
+                </span>
             )}
             <Cell value={app.company} className="font-medium text-ink" />
             <Cell value={app.role} />
@@ -398,9 +523,9 @@ const ReadRow = ({
                     press. It keeps its box either way. */}
                 <button
                     type="button"
-                    onClick={onEdit}
-                    onMouseEnter={onPrefetch}
-                    onFocus={onPrefetch}
+                    onClick={() => actions.edit(app.id)}
+                    onMouseEnter={() => actions.prefetch(app.id)}
+                    onFocus={() => actions.prefetch(app.id)}
                     disabled={opening}
                     title={viewing ? "Open application" : "Edit application"}
                     aria-label={
@@ -420,7 +545,7 @@ const ReadRow = ({
                 {viewing ? null : (
                     <button
                         type="button"
-                        onClick={onDelete}
+                        onClick={() => actions.remove(app.id)}
                         title="Delete application"
                         aria-label="Delete application"
                         className={`${ACTION_CLASS} ${REVEAL_CLASS} cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`}
@@ -435,6 +560,12 @@ const ReadRow = ({
         </li>
     );
 };
+
+// A selection redraws the table, and every row drawn but the one or two it
+// touched is unchanged by it. Comparing the props of a row costs far less than
+// building it again, which is why nothing a row is handed may be made fresh
+// per render: see RowActions.
+const ReadRow = memo(Row);
 
 const BulkRow = ({
     draft,
@@ -637,9 +768,22 @@ export const ApplicationsTable = ({
     // Null to begin with: a row reads in the money it was offered in until
     // somebody asks for a currency to read the whole column in.
     const [convertTo, setConvertTo] = useState<string | null>(null);
-    const selectAllRef = useRef<HTMLInputElement>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
     const listRef = useRef<HTMLUListElement>(null);
+    // The row a range is measured from: the last one ticked by hand, or the one
+    // a drag came to rest on. Null until something has been ticked, so the
+    // first shift-click is read as an ordinary one rather than as a range from
+    // the top of a table the reader never looked at.
+    //
+    // Held as the row rather than as its place in the table. Sorting a column,
+    // or a filter that drops a row above it, renumbers everything below, and an
+    // anchor kept as a number would quietly come to mean a different row than
+    // the one that was ticked.
+    const anchor = useRef<string | null>(null);
+    // The selection as it stood when a drag began. Every frame of the drag is
+    // applied to this rather than to what the frame before it left, which is
+    // what lets a drag give rows back as it shrinks.
+    const dragBase = useRef<Set<string>>(new Set());
 
     const [optimisticApplications, applyOptimistic] = useOptimistic(
         applications,
@@ -743,13 +887,6 @@ export const ApplicationsTable = ({
     const allSelected =
         view.rows.length > 0 && selection.length === view.rows.length;
 
-    useEffect(() => {
-        if (selectAllRef.current) {
-            selectAllRef.current.indeterminate =
-                selection.length > 0 && !allSelected;
-        }
-    }, [selection.length, allSelected]);
-
     // The row itself is looked up rather than held, so the panel redraws from
     // the list when a saved change comes back from the server.
     const editingRow = editing
@@ -836,20 +973,132 @@ export const ApplicationsTable = ({
 
     const clearSelection = () => setSelection(new Set());
 
-    const toggleSelected = (id: string, isSelected: boolean) => {
-        const next = new Set(selected);
-        if (isSelected) {
-            next.add(id);
-        } else {
-            next.delete(id);
+    // Every row from `from` to `to` takes `isSelected`, counting in the order
+    // the table is showing rather than the order it was stored in, so a range
+    // is the run the reader can see between the two rows they pointed at.
+    const runOver = (
+        base: Set<string>,
+        from: number,
+        to: number,
+        isSelected: boolean,
+    ) => {
+        const next = new Set(base);
+        for (let i = Math.min(from, to); i <= Math.max(from, to); i++) {
+            const row = view.rows[i];
+            if (!row) continue;
+            if (isSelected) {
+                next.add(row.id);
+            } else {
+                next.delete(row.id);
+            }
         }
-        setSelection(next);
+        return next;
     };
 
-    const toggleAll = (isSelected: boolean) =>
+    // Where the anchor row stands in the table as it is showing now, or -1 if
+    // it has since been sorted out of sight by a filter.
+    const anchorIndex = () =>
+        anchor.current === null
+            ? -1
+            : view.rows.findIndex((app) => app.id === anchor.current);
+
+    const setAnchor = (index: number) => {
+        anchor.current = view.rows[index]?.id ?? null;
+    };
+
+    // Shift extends from the last row ticked, which is what the gesture means
+    // in every other list. The rows between take the state the pressed box is
+    // going to, so a shift-click clears a run as readily as it fills one.
+    const toggleSelected = (
+        index: number,
+        isSelected: boolean,
+        extend: boolean,
+    ) => {
+        const anchored = anchorIndex();
+        const from = extend && anchored >= 0 ? anchored : index;
+        setAnchor(index);
+        setSelection(runOver(selected, from, index, isSelected));
+    };
+
+    const toggleAll = (isSelected: boolean) => {
+        anchor.current = null;
         setSelection(
             isSelected ? new Set(view.rows.map((app) => app.id)) : new Set(),
         );
+    };
+
+    const startDrag = useDragSelect({
+        scrollRef,
+        listRef,
+        rowRem: ROW_REM,
+        count: view.rows.length,
+        onPaint: (from, to, isSelected) =>
+            setSelection(runOver(dragBase.current, from, to, isSelected)),
+        onSettle: setAnchor,
+    });
+
+    // The rows are memoised, so what they are handed has to hold still from one
+    // render to the next or the memo buys nothing. These reach the current
+    // render through a ref instead: handing a row a fresh closure would redraw
+    // every row on every tick, and letting a row keep an old one would have
+    // shift-click measure a range against a selection that has moved on.
+    const live = useRef({
+        toggleSelected,
+        startDrag,
+        openPanel,
+        prefetchExtras,
+        selected,
+    });
+    useEffect(() => {
+        live.current = {
+            toggleSelected,
+            startDrag,
+            openPanel,
+            prefetchExtras,
+            selected,
+        };
+    });
+
+    const rowActions = useMemo<RowActions>(
+        () => ({
+            select: (index, isSelected, extend) =>
+                live.current.toggleSelected(index, isSelected, extend),
+            press: (event, index) => {
+                // The run a drag paints is laid over the selection as it stood
+                // when the press landed, so here is where that is taken.
+                dragBase.current = live.current.selected;
+                live.current.startDrag(event, index, !event.altKey);
+            },
+            edit: (id) => live.current.openPanel(id),
+            prefetch: (id) => live.current.prefetchExtras(id),
+            remove: (id) => setDeletingId(id),
+        }),
+        [],
+    );
+
+    // Escape leaves a selection, since every other way out of one is a button
+    // somewhere in the bar. Anything laid over the table answers the key first
+    // and this stands down for it, so Escape always shuts the nearest thing.
+    const overlaid =
+        Boolean(editing || permanentDelete || deletingId) ||
+        confirmingDelete ||
+        adding ||
+        importing;
+    const escapeClears = selection.length > 0 && !bulkMode && !overlaid;
+    // Held in a ref so the key binding does not have to be torn down and laid
+    // again on every render just to reach the selection of the latest one.
+    const clearRef = useRef(clearSelection);
+    useEffect(() => {
+        clearRef.current = clearSelection;
+    });
+    useEffect(() => {
+        if (!escapeClears) return;
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Escape") clearRef.current();
+        };
+        window.addEventListener("keydown", onKeyDown);
+        return () => window.removeEventListener("keydown", onKeyDown);
+    }, [escapeClears]);
 
     // A refused write leaves the optimistic row to be discarded when the
     // transition ends, which puts the table back the way it was. Saying so is
@@ -1115,6 +1364,25 @@ export const ApplicationsTable = ({
                             />
                             Delete
                         </button>
+                        {/* Said at the one moment it can be acted on: a reader
+                            holding a single row is about to reach for the
+                            second. It goes once the range exists, so it never
+                            settles in as another fixed word in the bar.
+
+                            The bar wraps, and a line of it wrapping would
+                            shove the table down the moment a row was ticked,
+                            so the hint is dropped at any width that cannot
+                            spare it. A Ranking column takes a picker's worth
+                            of that width, which is why it waits for a wider
+                            window. */}
+                        {selection.length === 1 && (
+                            <p
+                                className={`ml-auto text-xs text-muted ${rankings ? "max-2xl:hidden" : "max-xl:hidden"}`}
+                            >
+                                Drag or shift-click for a range, Alt-drag to
+                                remove
+                            </p>
+                        )}
                         <button
                             type="button"
                             onClick={clearSelection}
@@ -1364,16 +1632,13 @@ export const ApplicationsTable = ({
                         selectAll={
                             !bulkMode &&
                             !viewing && (
-                                <input
-                                    ref={selectAllRef}
-                                    type="checkbox"
-                                    checked={allSelected}
+                                <SelectAllBox
+                                    showing={view.rows.length}
+                                    all={allSelected}
+                                    some={selection.length > 0 && !allSelected}
                                     onChange={() =>
                                         toggleAll(selection.length === 0)
                                     }
-                                    autoComplete="off"
-                                    aria-label="Select all applications"
-                                    className={checkboxClass}
                                 />
                             )
                         }
@@ -1389,7 +1654,11 @@ export const ApplicationsTable = ({
                         )}
                         {view.rows
                             .slice(rowWindow.start, rowWindow.end)
-                            .map((app) => {
+                            .map((app, drawn) => {
+                                // Where the row stands in the whole table, not
+                                // in the handful drawn, since that is what a
+                                // range is counted in.
+                                const index = rowWindow.start + drawn;
                                 const draft = drafts?.get(app.id);
                                 if (draft) {
                                     return (
@@ -1438,17 +1707,11 @@ export const ApplicationsTable = ({
                                             convertTo &&
                                             payInCurrency(app, convertTo, rates)
                                         }
+                                        index={index}
                                         selected={selected.has(app.id)}
                                         viewing={viewing}
-                                        onSelect={(isSelected) =>
-                                            toggleSelected(app.id, isSelected)
-                                        }
                                         opening={openingId === app.id}
-                                        onEdit={() => openPanel(app.id)}
-                                        onPrefetch={() =>
-                                            prefetchExtras(app.id)
-                                        }
-                                        onDelete={() => setDeletingId(app.id)}
+                                        actions={rowActions}
                                     />
                                 );
                             })}

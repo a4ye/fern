@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { windowFor } from "@/components/dashboard/use-row-window";
+import { firstGuess, windowFor } from "@/components/dashboard/use-row-window";
 
 // A 40px row in a 400px viewport: ten rows fit, and eight more are drawn past
 // each edge.
@@ -62,5 +62,45 @@ describe("windowFor", () => {
             padTop: 0,
             padBottom: 0,
         });
+    });
+});
+
+// The real table's rows, 2.5rem tall, which the browser default makes 40px.
+const ROW_REM = 2.5;
+
+describe("firstGuess", () => {
+    test("draws a screenful of a long list, not the whole thing", () => {
+        const drawn = firstGuess(1146, ROW_REM);
+        expect(drawn.start).toBe(0);
+        // A 1600px guess holds 40 rows at 40px, plus the overscan below them.
+        expect(drawn.end).toBe(48);
+        expect(drawn.padBottom).toBe(1098);
+    });
+
+    test("covers the tallest screen the table could be capped at 70vh of", () => {
+        // 48 rows is 1920px of table, past the 1512px a 2160-tall screen
+        // shows, so nothing is left to fill in under the last row.
+        expect(firstGuess(1146, ROW_REM).end * ROW_REM * 16).toBeGreaterThan(
+            2160 * 0.7,
+        );
+    });
+
+    test("leaves a short list whole, so find-in-page still reaches it", () => {
+        expect(firstGuess(150, ROW_REM)).toEqual({
+            start: 0,
+            end: 150,
+            padTop: 0,
+            padBottom: 0,
+        });
+    });
+
+    test("holds the guess steady however long the list is", () => {
+        // A list past the threshold is windowed, and what the server draws for
+        // it does not grow with it: that is what keeps a 2,000-row list from
+        // costing 2,000 rows of render and hydration.
+        const widest = firstGuess(500, ROW_REM).end;
+        for (const count of [500, 1146, 2000]) {
+            expect(firstGuess(count, ROW_REM).end).toBe(widest);
+        }
     });
 });
