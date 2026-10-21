@@ -1299,6 +1299,89 @@ describe("history wording", () => {
     });
 });
 
+describe("a status set to the one already held", () => {
+    const step = (applicationId: string, status: string) => ({
+        id: `event-${applicationId}`,
+        application_id: applicationId,
+        from_status: status,
+        to_status: status,
+        note: null,
+        occurred_at: "2026-01-01T00:00:00.000Z",
+        history_action_id: "1",
+    });
+
+    it("names the status the step was recorded at", () => {
+        expect(
+            historyTitleFor(
+                historyAction({
+                    kind: HISTORY_KIND.status,
+                    data: {
+                        n: "NotionGraph",
+                        g: [
+                            step(
+                                "00000000-0000-4000-8000-000000000001",
+                                "interviewing",
+                            ),
+                        ],
+                    },
+                }),
+            ),
+        ).toBe("Moved NotionGraph to Interviewing");
+    });
+
+    it("shows the step it recorded, which is all the change did", () => {
+        expect(
+            historyChangeDetailsFor(
+                historyAction({
+                    kind: HISTORY_KIND.status,
+                    data: {
+                        n: "NotionGraph",
+                        g: [
+                            step(
+                                "00000000-0000-4000-8000-000000000001",
+                                "interviewing",
+                            ),
+                        ],
+                    },
+                }),
+            ),
+        ).toMatchObject([
+            {
+                kind: "statusEntry",
+                description: "Added Interviewing to status history",
+                statusEntryChange: {
+                    action: "added",
+                    subject: "NotionGraph",
+                    from: "interviewing",
+                    to: "interviewing",
+                },
+            },
+        ]);
+    });
+
+    it("leaves a bulk move's repeat steps unnamed rather than naming the wrong row", () => {
+        const bulk = historyAction({
+            kind: HISTORY_KIND.status,
+            affectedCount: 2,
+            data: {
+                a: [
+                    {
+                        i: "00000000-0000-4000-8000-000000000001",
+                        n: "NotionGraph",
+                        f: { s: ["applied", "rejected"] },
+                    },
+                ],
+                g: [step("00000000-0000-4000-8000-000000000002", "rejected")],
+            },
+        });
+
+        expect(historyTitleFor(bulk)).toBe("Moved 2 applications to Rejected");
+        expect(
+            historyChangeDetailsFor(bulk).at(-1)?.statusEntryChange?.subject,
+        ).toBeNull();
+    });
+});
+
 const storedApplication = (
     overrides: Partial<StoredApplication> = {},
 ): StoredApplication => ({

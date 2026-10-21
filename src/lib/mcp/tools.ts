@@ -14,10 +14,10 @@ import {
     getListInsights,
     getListsForUser,
     importApplications,
+    logStatusSteps,
     saveApplicationDetailPatch,
     setApplicationsArrangement,
     setApplicationsRanking,
-    setApplicationsStatus,
     setListPinned,
     updateList,
 } from "@/db/dashboard";
@@ -125,10 +125,10 @@ const NOT_FOUND = "That is no longer available.";
 // did not move and why.
 const statusTargets = async (
     applicationIds: string[],
-): Promise<{ moved: string[]; atCap: string[] }> => {
+): Promise<{ targets: string[]; atCap: string[] }> => {
     const capped = await applicationsAtEventCap(applicationIds);
     return {
-        moved: applicationIds.filter((id) => !capped.has(id)),
+        targets: applicationIds.filter((id) => !capped.has(id)),
         atCap: applicationIds.filter((id) => capped.has(id)),
     };
 };
@@ -544,11 +544,12 @@ export const registerFernTools = (server: McpServer): void => {
                 if (!room.ok) return refuse(room.error);
             }
 
-            const { moved, atCap } = await statusTargets(applicationIds);
-            if (moved.length > 0) {
-                await setApplicationsStatus(userId, moved, status, timeZone);
-            }
-            return reply({ moved: moved.length, atCap });
+            const { targets, atCap } = await statusTargets(applicationIds);
+            const moved =
+                targets.length > 0
+                    ? await logStatusSteps(userId, targets, status, timeZone)
+                    : 0;
+            return reply({ moved, atCap });
         },
     );
 

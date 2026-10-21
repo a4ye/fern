@@ -652,6 +652,33 @@ export const setApplicationsStatus = async (
         },
     });
 
+// A bulk move that records a step for every application it is given, including
+// one already standing at that status, the way the detail panel's history
+// editor does for a single application. Returns how many rows recorded a step,
+// which is every one the user still owns.
+export const logStatusSteps = async (
+    userId: string,
+    applicationIds: string[],
+    status: ApplicationStatus,
+    timeZone: string,
+): Promise<number> =>
+    recordApplicationChange({
+        userId,
+        applicationIds,
+        kind: HISTORY_KIND.status,
+        trackAddedEvents: true,
+        mutation: async (client, historyActionId) => {
+            const rows = await gen.logStatusSteps(client, {
+                applicationIds,
+                userId,
+                status,
+                timeZone,
+                historyActionId,
+            });
+            return rows.length;
+        },
+    });
+
 export const setApplicationsArrangement = async (
     userId: string,
     applicationIds: string[],

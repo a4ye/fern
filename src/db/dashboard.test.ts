@@ -78,6 +78,35 @@ const applyStatusStepEditsQuery = mock(
 const lockApplicationsForUser = mock(async (..._args: unknown[]) => []);
 const insertStatusEvents = mock(async (..._args: unknown[]) => undefined);
 const setApplicationsStatus = mock(async (..._args: unknown[]) => undefined);
+// The status each application is standing at, and the steps the statement
+// below has recorded, so a repeat status is a different input from a new one.
+let statuses: Record<string, string> = {};
+let recordedSteps: { id: string; from: string; to: string }[] = [];
+// Stands in for LogStatusSteps: a step for every row the caller owns, whatever
+// status it already holds, and those rows come back.
+const logStatusStepsQuery = mock(
+    async (
+        _client: unknown,
+        args: {
+            applicationIds: string[];
+            userId: string;
+            status: string;
+            timeZone: string;
+            historyActionId: string;
+        },
+    ) => {
+        const owned = args.applicationIds.filter((id) => id in statuses);
+        for (const id of owned) {
+            recordedSteps.push({
+                id,
+                from: statuses[id],
+                to: args.status,
+            });
+            statuses[id] = args.status;
+        }
+        return owned.map((id) => ({ id }));
+    },
+);
 const setApplicationsRankingQuery = mock(
     async (..._args: unknown[]) => undefined,
 );
@@ -149,18 +178,20 @@ mock.module("@/db/settings", () => ({
         waterlooRankings,
     }),
 }));
+const HISTORY_KIND = {
+    create: 1,
+    import: 2,
+    edit: 3,
+    status: 4,
+    arrangement: 5,
+    delete: 6,
+    list: 7,
+    steps: 8,
+    undo: 9,
+};
+
 mock.module("@/db/history", () => ({
-    HISTORY_KIND: {
-        create: 1,
-        import: 2,
-        edit: 3,
-        status: 4,
-        arrangement: 5,
-        delete: 6,
-        list: 7,
-        steps: 8,
-        undo: 9,
-    },
+    HISTORY_KIND,
     recordApplicationChange,
     recordApplicationChangeWithClient: mock(
         async (
@@ -204,6 +235,7 @@ mock.module("@/db/queries", () => ({
     lockApplicationsForUser,
     insertStatusEvents,
     setApplicationsStatus,
+    logStatusSteps: logStatusStepsQuery,
     getApplicationForUser,
     applicationDetailForUser,
     insertApplicationEvent,
@@ -218,6 +250,7 @@ const {
     getListDetail,
     getListInsights,
     getListsForUser,
+    logStatusSteps,
     removeStatusStep,
     saveApplicationDetailAndSteps,
     setApplicationsRanking,
@@ -254,6 +287,9 @@ beforeEach(() => {
     applicationEvents = [];
     applicationNotes = null;
     applicationEventCount = 0;
+    statuses = {};
+    recordedSteps = [];
+    logStatusStepsQuery.mockClear();
     countListsForUser.mockClear();
     listListsForUser.mockClear();
     listsPageForUser.mockClear();
@@ -601,6 +637,86 @@ describe("applyStatusStepEdits", () => {
         );
 
         expect(applyStatusStepEditsQuery).not.toHaveBeenCalled();
+    });
+});
+
+describe("logStatusSteps", () => {
+    it("records another round when the application already holds the status", async () => {
+        statuses = { "app-1": "interviewing" };
+
+        const moved = await logStatusSteps(
+            "user-1",
+            ["app-1"],
+            "interviewing",
+            TIME_ZONE,
+        );
+
+        expect(moved).toBe(1);
+        expect(recordedSteps).toEqual([
+            { id: "app-1", from: "interviewing", to: "interviewing" },
+        ]);
+    });
+
+    it("records the step as history, which a repeat has nothing else to show", async () => {
+        statuses = { "app-1": "interviewing" };
+
+        await logStatusSteps("user-1", ["app-1"], "interviewing", TIME_ZONE);
+
+        expect(recordApplicationChange.mock.calls[0]?.[0]).toMatchObject({
+            kind: HISTORY_KIND.status,
+            trackAddedEvents: true,
+            applicationIds: ["app-1"],
+        });
+    });
+
+    it("records the move when the status is a new one", async () => {
+        statuses = { "app-1": "applied" };
+
+        const moved = await logStatusSteps(
+            "user-1",
+            ["app-1"],
+            "interviewing",
+            TIME_ZONE,
+        );
+
+        expect(moved).toBe(1);
+        expect(recordedSteps).toEqual([
+            { id: "app-1", from: "applied", to: "interviewing" },
+        ]);
+        expect(statuses["app-1"]).toBe("interviewing");
+    });
+
+    it("counts only the rows that recorded a step", async () => {
+        statuses = { "app-1": "applied", "app-2": "rejected" };
+
+        const moved = await logStatusSteps(
+            "user-1",
+            ["app-1", "app-2", "app-gone"],
+            "rejected",
+            TIME_ZONE,
+        );
+
+        expect(moved).toBe(2);
+        expect(recordedSteps.map((step) => step.id)).toEqual([
+            "app-1",
+            "app-2",
+        ]);
+    });
+
+    it("writes the steps in one transaction", async () => {
+        statuses = { "app-1": "applied" };
+
+        await logStatusSteps("user-1", ["app-1"], "rejected", TIME_ZONE);
+
+        expect(withTransaction).toHaveBeenCalledTimes(1);
+        expect(logStatusStepsQuery.mock.calls[0]?.[0]).toBe(transactionClient);
+        expect(logStatusStepsQuery.mock.calls[0]?.[1]).toEqual({
+            applicationIds: ["app-1"],
+            userId: "user-1",
+            status: "rejected",
+            timeZone: TIME_ZONE,
+            historyActionId: "101",
+        });
     });
 });
 

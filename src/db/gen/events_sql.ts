@@ -315,3 +315,65 @@ export async function applyStatusStepEdits(client: Client, args: ApplyStatusStep
     });
 }
 
+export const logStatusStepsQuery = `-- name: LogStatusSteps :many
+with locked as materialized (
+    select a.id, a.status
+    from applications a
+    join lists l on l.id = a.list_id
+    where a.id = any($3::uuid[])
+        and l.user_id = $4
+    order by a.id
+    for update of a
+),
+inserted as (
+    insert into application_events (
+        application_id, from_status, to_status, occurred_at, history_action_id
+    )
+    select
+        locked.id,
+        locked.status,
+        $1::application_status,
+        statement_timestamp(),
+        $5::bigint
+    from locked
+    returning application_id
+)
+update applications a
+set
+    status = $1::application_status,
+    applied_at = case
+        when $1::application_status = 'applied' then coalesce(
+            a.applied_at,
+            (current_timestamp at time zone $2::text)::date
+        )
+        else a.applied_at
+    end
+from inserted
+where a.id = inserted.application_id
+returning a.id`;
+
+export interface LogStatusStepsArgs {
+    status: string;
+    timeZone: string;
+    applicationIds: string[];
+    userId: string;
+    historyActionId: string;
+}
+
+export interface LogStatusStepsRow {
+    id: string;
+}
+
+export async function logStatusSteps(client: Client, args: LogStatusStepsArgs): Promise<LogStatusStepsRow[]> {
+    const result = await client.query({
+        text: logStatusStepsQuery,
+        values: [args.status, args.timeZone, args.applicationIds, args.userId, args.historyActionId],
+        rowMode: "array"
+    });
+    return result.rows.map(row => {
+        return {
+            id: row[0]
+        };
+    });
+}
+

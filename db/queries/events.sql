@@ -184,3 +184,47 @@ where a.id = @application_id
         exists (select 1 from deleted)
         or exists (select 1 from inserted)
     );
+
+-- The bulk sibling of ApplyStatusStepEdits. A step is recorded for every
+-- application named, including one already standing at that status: the status
+-- it already holds is a valid step, and is how a second interview round is
+-- logged. The rows it recorded a step for come back, so a caller can say how
+-- many moved. Locking, the insert, and the status write are one statement, so
+-- the insert reads the status each application is leaving before the update
+-- overwrites it.
+-- name: LogStatusSteps :many
+with locked as materialized (
+    select a.id, a.status
+    from applications a
+    join lists l on l.id = a.list_id
+    where a.id = any(@application_ids::uuid[])
+        and l.user_id = @user_id
+    order by a.id
+    for update of a
+),
+inserted as (
+    insert into application_events (
+        application_id, from_status, to_status, occurred_at, history_action_id
+    )
+    select
+        locked.id,
+        locked.status,
+        @status::application_status,
+        statement_timestamp(),
+        @history_action_id::bigint
+    from locked
+    returning application_id
+)
+update applications a
+set
+    status = @status::application_status,
+    applied_at = case
+        when @status::application_status = 'applied' then coalesce(
+            a.applied_at,
+            (current_timestamp at time zone @time_zone::text)::date
+        )
+        else a.applied_at
+    end
+from inserted
+where a.id = inserted.application_id
+returning a.id;

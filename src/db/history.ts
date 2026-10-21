@@ -715,6 +715,12 @@ type ApplicationChangeInput<Result> = {
         | typeof HISTORY_KIND.arrangement
         | typeof HISTORY_KIND.steps;
     trackRemovedEvents?: boolean;
+    /**
+     * Record the steps the change wrote, for a kind that does not already. A
+     * step on an application whose status did not move is the whole of what the
+     * change did, so without this the action is written off as a no-op.
+     */
+    trackAddedEvents?: boolean;
     mutation: (client: QueryClient, actionId: string) => Promise<Result>;
     onRecorded?: (actionId: string) => void;
 };
@@ -740,8 +746,10 @@ export const recordApplicationChangeWithClient = async <Result>(
     );
     const patches = changesBetween(before, after);
 
+    const tracksAdded =
+        input.trackAddedEvents || input.kind === HISTORY_KIND.steps;
     const eventsAfter =
-        input.trackRemovedEvents || input.kind === HISTORY_KIND.steps
+        input.trackRemovedEvents || tracksAdded
             ? await applicationEvents(
                   client,
                   input.userId,
@@ -755,12 +763,22 @@ export const recordApplicationChangeWithClient = async <Result>(
             .filter((event) => !remaining.has(event.id))
             .map(storedEvent);
     }
-    const added =
-        input.kind === HISTORY_KIND.steps
-            ? eventsAfter
-                  .filter((event) => event.historyActionId === id)
-                  .map(storedEvent)
-            : [];
+    // A step on an application the change also moved is already in the patch
+    // above, so it is left out rather than said twice. One on an application
+    // standing where it was is the only trace the change left, and is kept.
+    const movedByThisChange = new Set(
+        patches.filter((patch) => patch.f.s).map((patch) => patch.i),
+    );
+    const added = tracksAdded
+        ? eventsAfter
+              .filter(
+                  (event) =>
+                      event.historyActionId === id &&
+                      (input.kind === HISTORY_KIND.steps ||
+                          !movedByThisChange.has(event.applicationId)),
+              )
+              .map(storedEvent)
+        : [];
 
     if (patches.length > 0 || removed.length > 0 || added.length > 0) {
         const listId = before[0]?.listId ?? after[0]?.listId;
@@ -779,7 +797,12 @@ export const recordApplicationChangeWithClient = async <Result>(
                     ...(patches.length > 0 ? { a: patches } : {}),
                     ...(removed.length > 0 ? { e: removed } : {}),
                     ...(added.length > 0 ? { g: added } : {}),
-                    ...(input.kind === HISTORY_KIND.steps &&
+                    // The name a step is listed under. Only when the change
+                    // touched one application: with several, the first of them
+                    // is not whose step it is.
+                    ...((input.kind === HISTORY_KIND.steps ||
+                        added.length > 0) &&
+                    input.applicationIds.length === 1 &&
                     (before[0] ?? after[0])
                         ? { n: (before[0] ?? after[0]).companyName }
                         : {}),
@@ -1069,9 +1092,14 @@ export const historyTitleFor = (row: StoredHistoryAction): string => {
                 ? `Updated ${firstName}`
                 : `Updated details for ${count.toLocaleString()} ${noun}`;
         case HISTORY_KIND.status: {
-            const statuses = new Set(
-                patches.flatMap((patch) => (patch.f.s ? [patch.f.s[1]] : [])),
-            );
+            // A step recorded on an application already standing at the status
+            // changes no field, so where it went is read off the step itself.
+            const statuses = new Set([
+                ...patches.flatMap((patch) =>
+                    patch.f.s ? [patch.f.s[1]] : [],
+                ),
+                ...(data.g ?? []).map((event) => event.to_status),
+            ]);
             if (statuses.size > 1) {
                 return `Changed the status of ${count.toLocaleString()} ${noun}`;
             }
@@ -1517,7 +1545,14 @@ export const historyChangeDetailsFor = (
             ...statusEntryChanges(
                 data.g,
                 direction === 1 ? "added" : "removed",
-                data.n ?? patches[0]?.n ?? null,
+                // A bulk move's first patch names whichever application sorted
+                // first, which is not the one these steps belong to. Only a
+                // history edit, which is always one application, can fall back
+                // to it.
+                data.n ??
+                    (row.kind === HISTORY_KIND.steps
+                        ? (patches[0]?.n ?? null)
+                        : null),
             ),
         );
     }
