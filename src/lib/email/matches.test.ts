@@ -81,6 +81,49 @@ describe("usableMatches", () => {
         expect(match.newRound).toBe(false);
     });
 
+    // Both of these arrived in one sync. A duplicate-application notice read
+    // against an accepted offer, and a thread quoting an interview that was
+    // held before the offer came. Each named the right stage for the mail and
+    // the wrong one for the application.
+    it.each([
+        ["offer_accepted", "applied"],
+        ["offer_in_progress", "interviewing"],
+        ["interviewing", "applied"],
+        ["rejected", "online_assessment"],
+    ] as const)(
+        "discards a move back down the funnel: %s to %s",
+        (currentStatus, suggestedStatus) => {
+            expect(
+                usableMatches(
+                    [raw({ suggestedStatus })],
+                    [application(currentStatus)],
+                    inbox("Re: Duplicate application"),
+                ),
+            ).toEqual([]);
+        },
+    );
+
+    // The middle of the funnel is flat: a take-home set after a phone screen
+    // is the next step, not a step back.
+    it.each([
+        ["interviewing", "takehome"],
+        ["onsite", "interviewing"],
+        ["applied", "offer_in_progress"],
+        ["onsite", "rejected"],
+        ["ghosted", "interviewing"],
+    ] as const)(
+        "keeps a move onward: %s to %s",
+        (currentStatus, suggestedStatus) => {
+            const [match] = usableMatches(
+                [raw({ suggestedStatus })],
+                [application(currentStatus)],
+                inbox("Imbue next steps"),
+            );
+
+            expect(match.suggestedStatus).toBe(suggestedStatus);
+        },
+    );
+
     it("discards matches pointing outside the lists it was given", () => {
         const found = usableMatches(
             [raw({ applicationIndex: 4 }), raw({ emailIndex: -1 })],

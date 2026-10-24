@@ -45,6 +45,45 @@ const REPEATABLE_STATUSES = new Set<ApplicationStatus>([
     "onsite",
 ]);
 
+// How far through the hiring process each status sits. Statuses that share a
+// rank are the same point reached by a different route: a company that runs a
+// take-home after a phone screen has not gone backwards, so the middle of the
+// funnel is deliberately flat and only the ends are ordered.
+//
+// "Ghosted" and "other" are left out. Neither says where an application got
+// to, so neither can rule anything out: a reply to a ghosted application is
+// exactly how one comes back to life.
+const STAGE_RANK: Partial<Record<ApplicationStatus, number>> = {
+    not_applied: 0,
+    applied: 1,
+    online_assessment: 2,
+    takehome: 2,
+    interviewing: 2,
+    onsite: 2,
+    offer_in_progress: 3,
+    offer_accepted: 4,
+    offer_declined: 4,
+    offer_rescinded: 4,
+    rejected: 4,
+};
+
+// An email cannot walk an application back down the funnel. The model is
+// reading one message against a row whose history it cannot see, so a thread
+// that quotes the application receipt under an offer, or a subject that names
+// an interview held weeks ago, reads to it as the stage that mail is about.
+// It is right about the stage and wrong about the move.
+//
+// Rejection stays reachable from anywhere, because it sits at the end: every
+// rank is at or below it.
+const movesForward = (
+    current: ApplicationStatus,
+    suggested: ApplicationStatus,
+): boolean => {
+    const from = STAGE_RANK[current];
+    const to = STAGE_RANK[suggested];
+    return from === undefined || to === undefined || to >= from;
+};
+
 // A company opens a round with a message of its own. What arrives in the
 // thread about the round already arranged is the arranging: the time, the
 // link, the reschedule. The model reads that thread whole, quoted history and
@@ -58,11 +97,11 @@ const REPEATABLE_STATUSES = new Set<ApplicationStatus>([
 const isReply = (subject: string): boolean =>
     /^\s*(re|fwd?)\s*:/i.test(subject);
 
-// Drops entries pointing outside the lists the model was given, and bounds the
-// repeat each one claims. The model is asked whether an email opens a further
-// round but is not trusted to judge it: a claim that an application repeated a
-// step it is not on, repeated a step nobody repeats, or opened a round in a
-// reply, is a plain move.
+// Drops entries pointing outside the lists the model was given or back down
+// the funnel, and bounds the repeat each one claims. The model is asked whether
+// an email opens a further round but is not trusted to judge it: a claim that
+// an application repeated a step it is not on, repeated a step nobody repeats,
+// or opened a round in a reply, is a plain move.
 export const usableMatches = (
     raw: RawMatch[],
     applications: ClassifierApplication[],
@@ -74,7 +113,11 @@ export const usableMatches = (
                 match.emailIndex >= 0 &&
                 match.emailIndex < emails.length &&
                 match.applicationIndex >= 0 &&
-                match.applicationIndex < applications.length,
+                match.applicationIndex < applications.length &&
+                movesForward(
+                    applications[match.applicationIndex].currentStatus,
+                    match.suggestedStatus as ApplicationStatus,
+                ),
         )
         .map((match) => {
             const suggestedStatus = match.suggestedStatus as ApplicationStatus;
