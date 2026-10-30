@@ -188,6 +188,61 @@ describe("Gmail discovery", () => {
 });
 
 describe("Gmail message reads", () => {
+    it("limits concurrent reads while preserving requested order", async () => {
+        let active = 0;
+        let peak = 0;
+        const ids = Array.from({ length: 25 }, (_, index) => `m-${index}`);
+        globalThis.fetch = mock(async (input: RequestInfo | URL) => {
+            const id = new URL(String(input)).pathname.split("/").at(-1);
+            active += 1;
+            peak = Math.max(peak, active);
+            // Different response times make completion order differ from input.
+            await new Promise((resolve) =>
+                setTimeout(resolve, id === "m-0" ? 15 : 1),
+            );
+            active -= 1;
+            return json({ id });
+        }) as unknown as typeof fetch;
+
+        const messages = await createGmailProvider("token").fetchMessages(ids);
+
+        expect(peak).toBeLessThanOrEqual(10);
+        expect(peak).toBeGreaterThan(1);
+        expect(active).toBe(0);
+        expect(messages.map((message) => message.id)).toEqual(ids);
+    });
+
+    it("drains an unsuccessful round and never starts the next one", async () => {
+        let active = 0;
+        let started = 0;
+        globalThis.fetch = mock(async () => {
+            const index = started++;
+            active += 1;
+            await new Promise((resolve) =>
+                setTimeout(resolve, index === 0 ? 1 : 15),
+            );
+            active -= 1;
+            return index === 0
+                ? json(
+                      {
+                          error: {
+                              message: "Too many concurrent requests for user.",
+                          },
+                      },
+                      429,
+                  )
+                : json({ id: `m-${index}` });
+        }) as unknown as typeof fetch;
+
+        await expect(
+            createGmailProvider("token").fetchMessages(
+                Array.from({ length: 25 }, (_, index) => `m-${index}`),
+            ),
+        ).rejects.toThrow("Too many concurrent requests for user.");
+        expect(started).toBe(10);
+        expect(active).toBe(0);
+    });
+
     it("normalizes fetched messages in the requested order", async () => {
         responses = [
             json({

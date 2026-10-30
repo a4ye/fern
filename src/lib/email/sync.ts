@@ -19,6 +19,7 @@ import type { EmailMatch } from "@/lib/email/matches";
 import { isAdministrativeNotice } from "@/lib/email/notices";
 import { MAX_EMAILS_PER_SYNC } from "@/lib/limits";
 import { DEFAULT_CLASSIFIER, type Classifier } from "@/lib/email/classifier";
+import { createSyncProgress, type EmailSyncProgress } from "./progress";
 
 const INITIAL_LOOKBACK_DAYS = 90;
 
@@ -27,8 +28,8 @@ const INITIAL_LOOKBACK_DAYS = 90;
 // cursor only advances to the last record staged, so the next sync resumes.
 const HISTORY_PAGE_LIMIT = 500;
 
-// Messages per round of Gmail reads. Gmail allows one account 250 quota units a
-// second and a message read costs 5, so 25 at once spends half of that.
+// Messages per round of fetching and filtering. The Gmail provider subdivides
+// these into smaller read rounds to limit simultaneous requests per mailbox.
 const FETCH_BATCH_LIMIT = 25;
 
 // Emails per model call. Raising it hands the model more indexes to keep
@@ -70,7 +71,13 @@ export const syncEmailInbox = async (
     userId: string,
     provider: EmailProvider,
     classifier: Classifier = DEFAULT_CLASSIFIER,
+    onProgress?: (progress: EmailSyncProgress) => void,
 ): Promise<EmailSyncOutcome> => {
+    const progress = createSyncProgress(onProgress, {
+        groupSize: CLASSIFY_GROUP_LIMIT,
+        concurrency: CONCURRENT_CLASSIFY_LIMIT,
+    });
+    progress.start();
     const state = await getEmailSyncState(userId);
     let rebuiltHistory = !state.historyId;
     let discovery: EmailDiscovery;
@@ -91,6 +98,15 @@ export const syncEmailInbox = async (
         discovery.historyId,
     );
 
+    // Freeze this run's work before starting concurrent reviews. Pending IDs
+    // remain pending until their review commits, so re-querying each round
+    // could fetch the same waiting or in-flight messages again.
+    const pending = await listPendingEmailSyncMessageIds(
+        userId,
+        MAX_EMAILS_PER_SYNC,
+    );
+    progress.discover(pending.length);
+
     let applications: UserApplication[] | null = null;
     let found = 0;
     let scanned = 0;
@@ -104,6 +120,7 @@ export const syncEmailInbox = async (
         group: NormalizedEmail[],
         tracked: UserApplication[],
     ): Promise<void> => {
+        const reviewed = progress.review(group.length);
         // Only the applications one of these emails names. A tracked list runs
         // to thousands and a group carries twenty-five whole message bodies, so
         // handing over both in full buries the few that matter. Every email
@@ -191,6 +208,7 @@ export const syncEmailInbox = async (
             suggestions,
         );
         found += inserted;
+        reviewed(inserted);
         // What the model was actually given, which is what it is paid for.
         // Messages the narrowing dropped were read from the inbox but never
         // sent on, and are counted by `processed` like any other.
@@ -227,17 +245,13 @@ export const syncEmailInbox = async (
     const waiting: NormalizedEmail[] = [];
 
     try {
-        while (processed < MAX_EMAILS_PER_SYNC && !failure) {
-            const batchLimit = Math.min(
-                FETCH_BATCH_LIMIT,
-                MAX_EMAILS_PER_SYNC - processed,
+        while (processed < pending.length && !failure) {
+            const messageIds = pending.slice(
+                processed,
+                processed + FETCH_BATCH_LIMIT,
             );
-            const messageIds = await listPendingEmailSyncMessageIds(
-                userId,
-                batchLimit,
-            );
-            if (messageIds.length === 0) break;
 
+            const readStartedAt = Date.now();
             const emailsPromise = provider.fetchMessages(messageIds);
             const tracked: UserApplication[] =
                 applications ?? (await getApplicationsForUser(userId));
@@ -254,6 +268,11 @@ export const syncEmailInbox = async (
             );
             const survivors = candidatesFor(tracked, readable).emails;
             waiting.push(...survivors);
+            progress.read(
+                messageIds.length,
+                survivors.length,
+                Date.now() - readStartedAt,
+            );
 
             // Everything this round that no model call will ever read: the
             // notices, the mail naming nobody tracked, and any ID Gmail no
@@ -264,6 +283,7 @@ export const syncEmailInbox = async (
             const settled = messageIds.filter((id) => !held.has(id));
             if (settled.length > 0) {
                 await completeEmailSyncMessages(userId, settled, []);
+                progress.settle(settled.length);
             }
 
             processed += messageIds.length;
@@ -274,10 +294,6 @@ export const syncEmailInbox = async (
                     tracked,
                 );
             }
-
-            // Discovery has already staged every ID, so a short batch means the
-            // local backlog is drained without another database round trip.
-            if (messageIds.length < batchLimit) break;
         }
 
         // Whatever never filled a group. One short call at the end of a sync is
@@ -291,6 +307,7 @@ export const syncEmailInbox = async (
 
     if (failure) throw failure;
 
+    progress.finish();
     if (processed === 0) {
         await completeEmailSyncMessages(userId, [], []);
     }

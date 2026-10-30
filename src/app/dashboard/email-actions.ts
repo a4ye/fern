@@ -1,23 +1,14 @@
 "use server";
 
-import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
-import {
-    auth,
-    emailSyncEnabled,
-    getRequestSession,
-    getViewAs,
-    GOOGLE_PROVIDER_ID,
-} from "@/lib/auth";
+import { getRequestSession, getViewAs } from "@/lib/auth";
 import { VIEW_ONLY } from "@/lib/view-as";
 import { applySuggestion, dismissSuggestion } from "@/db/email";
-import { createGmailProvider } from "@/lib/email/gmail";
 import { EMAIL_SYNC_COPY } from "@/lib/email/copy";
-import { EmailAuthError } from "@/lib/email/types";
 import { recordMetrics } from "@/db/metrics";
 import { withinBudget } from "@/db/rate-limit";
-import { INBOX_SCAN, INBOX_SUGGESTION, record } from "@/lib/metrics";
+import { INBOX_SUGGESTION, record } from "@/lib/metrics";
 import { TOO_MANY_REQUESTS } from "@/lib/limits";
 import {
     applicationIdSchema,
@@ -25,123 +16,12 @@ import {
     type ActionResult,
 } from "@/lib/validation";
 import { isEmailSyncApproved } from "@/lib/email/access";
-import { getUserSettings } from "@/db/settings";
 
-export type SyncResult =
-    | {
-          ok: true;
-          found: number;
-          scanned: number;
-          remaining: number;
-          hasMore: boolean;
-          initialScanLimited: boolean;
-      }
-    | {
-          ok: false;
-          reason:
-              | "unauthenticated"
-              | "not_approved"
-              | "not_connected"
-              | "auth_expired"
-              | "ai_unconfigured"
-              | "error";
-          message: string;
-      };
+export type { SyncResult } from "@/lib/email/sync-result";
 
-export const syncInbox = async (): Promise<SyncResult> => {
-    const requestHeaders = await headers();
-    const session = await getRequestSession();
-    if (!session) {
-        return {
-            ok: false,
-            reason: "unauthenticated",
-            message: EMAIL_SYNC_COPY.signIn,
-        };
-    }
-
-    // A sync reads the inbox of whoever is really signed in, so running one
-    // while looking at somebody else would file an admin's mail under their
-    // account.
-    if (await getViewAs()) {
-        return { ok: false, reason: "error", message: VIEW_ONLY };
-    }
-
-    if (!isEmailSyncApproved(session.user.email)) {
-        return {
-            ok: false,
-            reason: "not_approved",
-            message: EMAIL_SYNC_COPY.notApproved,
-        };
-    }
-
-    if (!emailSyncEnabled) {
-        return {
-            ok: false,
-            reason: "ai_unconfigured",
-            message: EMAIL_SYNC_COPY.unconfigured,
-        };
-    }
-
-    // Taken before Google is asked for anything. A sync reads an inbox and then
-    // pays a model to read it, which is the only work here that costs money per
-    // call, so it is budgeted ahead of the token rather than after it.
-    if (!(await withinBudget(session.user.id, "inbox"))) {
-        return { ok: false, reason: "error", message: TOO_MANY_REQUESTS };
-    }
-
-    let accessToken: string;
-    try {
-        const token = await auth.api.getAccessToken({
-            body: { providerId: GOOGLE_PROVIDER_ID },
-            headers: requestHeaders,
-        });
-        if (!token.accessToken) throw new EmailAuthError();
-        accessToken = token.accessToken;
-    } catch {
-        return {
-            ok: false,
-            reason: "not_connected",
-            message: EMAIL_SYNC_COPY.connectGoogle,
-        };
-    }
-
-    const userId = session.user.id;
-
-    try {
-        const provider = createGmailProvider(accessToken);
-        const { syncEmailInbox } = await import("@/lib/email/sync");
-        const { emailClassifier } = await getUserSettings(userId);
-        const outcome = await syncEmailInbox(userId, provider, emailClassifier);
-        // What the model was given and what it proposed, which together are the
-        // only measure of whether it is worth paying for. What becomes of each
-        // proposal is counted where the user answers it.
-        after(() =>
-            recordMetrics([
-                record(INBOX_SCAN, "read", { total: outcome.scanned }),
-                record(INBOX_SUGGESTION, "offered", {
-                    count: outcome.found,
-                }),
-            ]),
-        );
-        revalidatePath("/dashboard", "layout");
-        return { ok: true, ...outcome };
-    } catch (error) {
-        if (error instanceof EmailAuthError) {
-            return {
-                ok: false,
-                reason: "auth_expired",
-                message: EMAIL_SYNC_COPY.accessExpired,
-            };
-        }
-        return {
-            ok: false,
-            reason: "error",
-            message:
-                error instanceof Error
-                    ? error.message
-                    : EMAIL_SYNC_COPY.genericFailure,
-        };
-    }
+export const syncInbox = async () => {
+    const { runInboxSync } = await import("@/lib/email/run-sync");
+    return runInboxSync();
 };
 
 // Answering a suggestion resolves it for the one account that owns it, and

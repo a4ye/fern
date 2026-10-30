@@ -14,8 +14,14 @@ import { EMAIL_SYNC_COPY, emailSyncSuccessMessage } from "@/lib/email/copy";
 import {
     acceptSuggestion,
     dismissSuggestionAction,
-    syncInbox,
 } from "@/app/dashboard/email-actions";
+import { initialSyncProgress } from "@/lib/email/progress";
+import { readSyncStream } from "@/lib/email/sync-stream";
+import type { SyncResult } from "@/lib/email/sync-result";
+import {
+    EmailSyncProgressPanel,
+    type SyncDisplay,
+} from "./email-sync-progress";
 import {
     STATUS_META,
     browserTimeZone,
@@ -164,7 +170,7 @@ const SyncNowButton = ({
             >
                 <span
                     aria-hidden="true"
-                    className={`icon-[lucide--refresh-cw] size-3.5 ${isSyncing ? "animate-spin" : ""}`}
+                    className={`icon-[lucide--refresh-cw] size-3.5 ${isSyncing ? "animate-spin motion-reduce:animate-none" : ""}`}
                 />
                 {isSyncing ? "Syncing" : "Sync now"}
             </button>
@@ -174,6 +180,7 @@ const SyncNowButton = ({
 };
 
 type EmailSyncPopoverProps = {
+    run: SyncDisplay | null;
     panel: EmailSyncPanel;
     suggestions: EmailSuggestion[];
     needsReconnect: boolean;
@@ -186,6 +193,7 @@ type EmailSyncPopoverProps = {
 };
 
 const EmailSyncPopover = ({
+    run,
     panel,
     suggestions,
     needsReconnect,
@@ -198,9 +206,9 @@ const EmailSyncPopover = ({
 }: EmailSyncPopoverProps) => (
     <div
         data-open={open ? true : undefined}
-        className="popup absolute right-0 top-full z-50 mt-2 w-full flex-col border border-hairline bg-background shadow-sm sm:w-[28rem]"
+        className="popup absolute right-0 top-full z-50 mt-2 max-h-[calc(100dvh-6rem)] w-full flex-col overflow-y-auto border border-hairline bg-background shadow-sm sm:w-[28rem]"
     >
-        <div className="flex h-14 items-center justify-between gap-3 border-b border-hairline px-4">
+        <div className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-hairline px-4">
             <div className="flex min-w-0 items-center gap-2">
                 <span
                     aria-hidden="true"
@@ -236,6 +244,8 @@ const EmailSyncPopover = ({
                 </span>
             )}
         </div>
+
+        {run && <EmailSyncProgressPanel run={run} />}
 
         {!panel.enabled ? (
             <p className="px-4 py-6 text-sm text-sub">
@@ -274,7 +284,7 @@ const EmailSyncPopover = ({
             </div>
         ) : panel.connected ? (
             suggestions.length > 0 ? (
-                <ul className="max-h-[60vh] overflow-y-auto">
+                <ul>
                     {suggestions.map((suggestion) => (
                         <SuggestionRow
                             key={suggestion.id}
@@ -283,12 +293,12 @@ const EmailSyncPopover = ({
                         />
                     ))}
                 </ul>
-            ) : (
+            ) : !run ? (
                 <p className="px-4 py-6 text-center text-sm text-sub">
                     No changes to review. Sync to check your inbox for
                     application updates.
                 </p>
-            )
+            ) : null
         ) : (
             <div className="px-4 py-5">
                 <h3 className="text-sm font-semibold text-balance text-ink">
@@ -335,10 +345,12 @@ const EmailSyncPopover = ({
 );
 
 const EmailSyncTrigger = ({
+    isSyncing,
     count,
     open,
     onToggle,
 }: {
+    isSyncing: boolean;
     count: number;
     open: boolean;
     onToggle: () => void;
@@ -348,13 +360,16 @@ const EmailSyncTrigger = ({
         onClick={onToggle}
         aria-haspopup="dialog"
         aria-expanded={open}
+        aria-label={isSyncing ? "Inbox syncing" : "Inbox sync"}
         className="focus-frame relative inline-flex h-8 w-8 cursor-pointer items-center justify-center gap-2 border border-hairline bg-background text-sm text-ink transition-colors after:absolute after:-inset-1 after:content-[''] hover:border-tile-border sm:w-auto sm:px-3 sm:after:inset-x-0"
     >
         <span
             aria-hidden="true"
-            className="icon-[lucide--mail] size-4 shrink-0 text-accent"
+            className={`size-4 shrink-0 text-accent ${isSyncing ? "icon-[lucide--refresh-cw] animate-spin motion-reduce:animate-none" : "icon-[lucide--mail]"}`}
         />
-        <span className="hidden sm:inline">Inbox sync</span>
+        <span className="hidden sm:inline">
+            {isSyncing ? "Syncing inbox" : "Inbox sync"}
+        </span>
         {count > 0 && (
             <span className="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center bg-accent px-1 text-xs font-medium tabular-nums text-background outline-2 outline-background">
                 {count}
@@ -367,6 +382,8 @@ export const EmailSyncMenu = ({ panel }: { panel: EmailSyncPanel }) => {
     const router = useRouter();
     const [isConnecting, startConnect] = useTransition();
     const [isSyncing, startSync] = useTransition();
+    const [run, setRun] = useState<SyncDisplay | null>(null);
+    const syncInFlight = useRef(false);
     const [, startResolve] = useTransition();
     const [needsReconnect, setNeedsReconnect] = useState(false);
     const [open, setOpen] = useState(false);
@@ -413,9 +430,47 @@ export const EmailSyncMenu = ({ panel }: { panel: EmailSyncPanel }) => {
             });
         });
 
-    const sync = () =>
+    const sync = () => {
+        if (syncInFlight.current) return;
+        syncInFlight.current = true;
+        const startedAt = Date.now();
+        setRun({
+            progress: initialSyncProgress(),
+            startedAt,
+            updatedAt: startedAt,
+        });
         startSync(async () => {
-            const result = await syncInbox();
+            let result: SyncResult;
+            try {
+                const response = await fetch("/api/email/sync", {
+                    method: "POST",
+                });
+                if (!response.ok || !response.body)
+                    throw new Error("Sync unavailable");
+                result = await readSyncStream(response.body, (progress) => {
+                    setRun(
+                        (current) =>
+                            current && {
+                                ...current,
+                                progress,
+                                updatedAt: Date.now(),
+                            },
+                    );
+                });
+            } catch {
+                result = {
+                    ok: false,
+                    reason: "error",
+                    message:
+                        "Lost the sync connection. Try syncing again shortly.",
+                };
+            } finally {
+                syncInFlight.current = false;
+            }
+            setRun(
+                (current) =>
+                    current && { ...current, endedAt: Date.now(), result },
+            );
             if (result.ok) {
                 setNeedsReconnect(false);
                 toast.success(emailSyncSuccessMessage(result));
@@ -436,8 +491,11 @@ export const EmailSyncMenu = ({ panel }: { panel: EmailSyncPanel }) => {
                           }
                         : undefined,
                 );
+                // A failed later batch may follow batches that already saved.
+                router.refresh();
             }
         });
+    };
 
     // The accepted status lands on a page this popover is not showing, so the
     // toast is the only word that it moved and goes up with the row leaving
@@ -462,11 +520,13 @@ export const EmailSyncMenu = ({ panel }: { panel: EmailSyncPanel }) => {
     return (
         <div ref={ref} className="static sm:relative">
             <EmailSyncTrigger
+                isSyncing={isSyncing}
                 count={count}
                 open={open}
                 onToggle={() => setOpen((previous) => !previous)}
             />
             <EmailSyncPopover
+                run={run}
                 panel={panel}
                 suggestions={suggestions}
                 needsReconnect={needsReconnect}

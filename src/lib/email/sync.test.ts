@@ -4,8 +4,9 @@ import type { UserApplication } from "@/db/email";
 import type { ClassifierApplication, EmailMatch } from "./matches";
 import type { EmailProvider, NormalizedEmail } from "./types";
 import { EmailHistoryExpiredError } from "./types";
+import type { EmailSyncProgress } from "./progress";
 
-// Mirrors PROCESSING_BATCH_LIMIT, which sync.ts keeps to itself.
+// Mirrors the fetch and review group sizes in sync.ts.
 const BATCH_SIZE = 25;
 
 let historyId: string | null = null;
@@ -18,7 +19,8 @@ const getEmailSyncState = mock(async () => ({
 }));
 const stageEmailSyncMessages = mock(async () => undefined);
 const listPendingEmailSyncMessageIds = mock(
-    async (..._args: [string, number]) => pendingBatches.shift() ?? [],
+    async (_userId: string, limit: number) =>
+        pendingBatches.flat().slice(0, limit),
 );
 const countPendingEmailSyncMessages = mock(async () => remaining);
 const getApplicationsForUser = mock(async (): Promise<UserApplication[]> => [
@@ -133,23 +135,18 @@ describe("syncEmailInbox", () => {
             messageIds,
             "100",
         );
-        expect(listPendingEmailSyncMessageIds).toHaveBeenNthCalledWith(
-            1,
+        expect(listPendingEmailSyncMessageIds).toHaveBeenCalledTimes(1);
+        expect(listPendingEmailSyncMessageIds).toHaveBeenCalledWith(
             "user-1",
-            25,
+            MAX_EMAILS_PER_SYNC,
         );
-        expect(listPendingEmailSyncMessageIds).toHaveBeenNthCalledWith(
-            2,
-            "user-1",
-            25,
-        );
+        expect(gmail.fetchMessages).toHaveBeenCalledTimes(2);
         expect(completeEmailSyncMessages).toHaveBeenCalledTimes(2);
-        expect(completeEmailSyncMessages.mock.calls[0]?.[1]).toEqual(
-            messageIds.slice(0, 25),
+        const savedGroups = completeEmailSyncMessages.mock.calls.map(
+            (call) => call[1],
         );
-        expect(completeEmailSyncMessages.mock.calls[1]?.[1]).toEqual(
-            messageIds.slice(25),
-        );
+        expect(savedGroups).toContainEqual(messageIds.slice(0, 25));
+        expect(savedGroups).toContainEqual(messageIds.slice(25));
         expect(result).toMatchObject({
             found: 2,
             scanned: 30,
@@ -170,11 +167,18 @@ describe("syncEmailInbox", () => {
         pendingBatches = Array.from({ length: batches }, (_, index) =>
             messageIds.slice(index * BATCH_SIZE, (index + 1) * BATCH_SIZE),
         );
+        pendingBatches.push([
+            "extra-1",
+            "extra-2",
+            "extra-3",
+            "extra-4",
+            "extra-5",
+        ]);
         remaining = 5;
 
         const result = await syncEmailInbox("user-1", provider(messageIds));
 
-        expect(listPendingEmailSyncMessageIds).toHaveBeenCalledTimes(batches);
+        expect(listPendingEmailSyncMessageIds).toHaveBeenCalledTimes(1);
         expect(completeEmailSyncMessages).toHaveBeenCalledTimes(batches);
         expect(result).toMatchObject({
             found: batches,
@@ -560,5 +564,84 @@ describe("syncEmailInbox", () => {
             [],
         );
         expect(result.scanned).toBe(0);
+    });
+});
+
+describe("sync progress", () => {
+    it("counts saved work, including excluded and missing mail, once per ID", async () => {
+        const ids = Array.from({ length: 60 }, (_, at) => `m-${at}`);
+        pendingBatches = [ids];
+        const events: EmailSyncProgress[] = [];
+        // Keep both reviews in flight while all fetching finishes. The pending
+        // DB snapshot deliberately keeps returning IDs until they are saved.
+        classifyEmails.mockImplementationOnce(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            return [];
+        });
+        classifyEmails.mockImplementationOnce(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 5));
+            return [];
+        });
+        const gmail = provider(ids);
+        gmail.fetchMessages = mock(async (requested: string[]) =>
+            requested.filter((id) => Number(id.slice(2)) < 50).map(email),
+        );
+        await syncEmailInbox("user-1", gmail, "jev", (p) => events.push(p));
+        expect(events[0]?.stage).toBe("discovering");
+        expect(events.some((p) => p.read === 60 && p.checked === 10)).toBe(
+            true,
+        );
+        expect(events.some((p) => p.activeReviews === 2)).toBe(true);
+        expect(events.at(-1)).toMatchObject({
+            stage: "finishing",
+            total: 60,
+            read: 60,
+            checked: 60,
+            relevant: 50,
+            reviewed: 50,
+            activeReviews: 0,
+        });
+        for (let index = 1; index < events.length; index++) {
+            expect(events[index]?.checked ?? Number.NaN).toBeGreaterThanOrEqual(
+                events[index - 1]?.checked ?? Number.NaN,
+            );
+            expect(events[index]?.checked ?? Number.NaN).toBeLessThanOrEqual(
+                events[index]?.read ?? Number.NaN,
+            );
+        }
+        expect(gmail.fetchMessages).toHaveBeenCalledTimes(3);
+    });
+
+    it("keeps successful batch counts when another review fails", async () => {
+        const ids = Array.from({ length: 50 }, (_, at) => `m-${at}`);
+        pendingBatches = [ids];
+        classifyEmails.mockImplementationOnce(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 10));
+            throw new Error("Review unavailable");
+        });
+        classifyEmails.mockImplementationOnce(async () => []);
+        const events: EmailSyncProgress[] = [];
+        await expect(
+            syncEmailInbox("user-1", provider(ids), "jev", (p) =>
+                events.push(p),
+            ),
+        ).rejects.toThrow("Review unavailable");
+        expect(events.at(-1)?.checked).toBe(25);
+        expect(events.some((p) => p.stage === "finishing")).toBe(false);
+        expect(completeEmailSyncMessages).toHaveBeenCalledTimes(1);
+    });
+
+    it("finishes an empty run without inventing work", async () => {
+        const events: EmailSyncProgress[] = [];
+        await syncEmailInbox("user-1", provider([]), "jev", (p) =>
+            events.push(p),
+        );
+        expect(events.at(-1)).toMatchObject({
+            stage: "finishing",
+            total: 0,
+            checked: 0,
+            remainingMs: null,
+        });
+        expect(classifyEmails).not.toHaveBeenCalled();
     });
 });

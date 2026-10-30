@@ -14,6 +14,12 @@ const BODY_LIMIT = 4000;
 // The most IDs Gmail will return from one list call, whatever is asked for.
 const LIST_PAGE_LIMIT = 500;
 
+// Gmail limits simultaneous requests separately from quota units. The corpus
+// reader already uses ten with a short gap; a sync's larger classification
+// batches must not become twenty-five simultaneous Gmail requests.
+const MESSAGE_READ_CONCURRENCY = 10;
+const BETWEEN_READ_ROUNDS_MS = 200;
+
 type GmailHeader = { name: string; value: string };
 type GmailPart = {
     mimeType?: string;
@@ -115,36 +121,62 @@ const unique = (values: string[]): string[] => [...new Set(values)];
 
 export const createGmailProvider = (accessToken: string): EmailProvider => {
     const fetchMessages = async (ids: string[]): Promise<NormalizedEmail[]> => {
-        const messages = await Promise.all(
-            ids.map(async (id): Promise<NormalizedEmail | null> => {
-                try {
-                    const response = await authedFetch(
-                        accessToken,
-                        `/messages/${id}?format=full`,
-                        "message",
-                    );
-                    const message = (await response.json()) as GmailMessage;
-                    const headers = message.payload?.headers ?? [];
-                    const body = extractBody(message.payload).slice(
-                        0,
-                        BODY_LIMIT,
-                    );
-                    return {
-                        id: message.id,
-                        from: headerValue(headers, "From"),
-                        subject: headerValue(headers, "Subject"),
-                        snippet: message.snippet ?? "",
-                        body,
-                        receivedAt: new Date(Number(message.internalDate ?? 0)),
-                    };
-                } catch (error) {
-                    if (error instanceof EmailMessageUnavailableError) {
-                        return null;
-                    }
-                    throw error;
-                }
-            }),
-        );
+        const messages: (NormalizedEmail | null)[] = [];
+        for (
+            let offset = 0;
+            offset < ids.length;
+            offset += MESSAGE_READ_CONCURRENCY
+        ) {
+            if (offset > 0) {
+                await new Promise((resolve) =>
+                    setTimeout(resolve, BETWEEN_READ_ROUNDS_MS),
+                );
+            }
+            const results = await Promise.allSettled(
+                ids
+                    .slice(offset, offset + MESSAGE_READ_CONCURRENCY)
+                    .map(async (id): Promise<NormalizedEmail | null> => {
+                        try {
+                            const response = await authedFetch(
+                                accessToken,
+                                `/messages/${id}?format=full`,
+                                "message",
+                            );
+                            const message =
+                                (await response.json()) as GmailMessage;
+                            const headers = message.payload?.headers ?? [];
+                            const body = extractBody(message.payload).slice(
+                                0,
+                                BODY_LIMIT,
+                            );
+                            return {
+                                id: message.id,
+                                from: headerValue(headers, "From"),
+                                subject: headerValue(headers, "Subject"),
+                                snippet: message.snippet ?? "",
+                                body,
+                                receivedAt: new Date(
+                                    Number(message.internalDate ?? 0),
+                                ),
+                            };
+                        } catch (error) {
+                            if (error instanceof EmailMessageUnavailableError) {
+                                return null;
+                            }
+                            throw error;
+                        }
+                    }),
+            );
+            // Wait for the entire round before reporting failure, so a retry
+            // cannot pile on top of requests left running by Promise.all.
+            const failure = results.find(
+                (result) => result.status === "rejected",
+            );
+            if (failure?.status === "rejected") throw failure.reason;
+            for (const result of results) {
+                if (result.status === "fulfilled") messages.push(result.value);
+            }
+        }
         return messages.filter(
             (message): message is NormalizedEmail => message !== null,
         );

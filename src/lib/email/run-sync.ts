@@ -1,0 +1,125 @@
+import { headers } from "next/headers";
+import { revalidatePath } from "next/cache";
+import { after } from "next/server";
+import {
+    auth,
+    emailSyncEnabled,
+    getRequestSession,
+    getViewAs,
+    GOOGLE_PROVIDER_ID,
+} from "@/lib/auth";
+import { VIEW_ONLY } from "@/lib/view-as";
+import { createGmailProvider } from "./gmail";
+import { EMAIL_SYNC_COPY } from "./copy";
+import { EmailAuthError } from "./types";
+import { recordMetrics } from "@/db/metrics";
+import { withinBudget } from "@/db/rate-limit";
+import { INBOX_SCAN, INBOX_SUGGESTION, record } from "@/lib/metrics";
+import { TOO_MANY_REQUESTS } from "@/lib/limits";
+import { isEmailSyncApproved } from "./access";
+import { getUserSettings } from "@/db/settings";
+import type { SyncResult } from "./sync-result";
+import type { EmailSyncProgress } from "./progress";
+
+export const runInboxSync = async (
+    onProgress?: (progress: EmailSyncProgress) => void,
+): Promise<SyncResult> => {
+    const requestHeaders = await headers();
+    const session = await getRequestSession();
+    if (!session) {
+        return {
+            ok: false,
+            reason: "unauthenticated",
+            message: EMAIL_SYNC_COPY.signIn,
+        };
+    }
+
+    // A sync reads the inbox of whoever is really signed in, so running one
+    // while looking at somebody else would file an admin's mail under their
+    // account.
+    if (await getViewAs()) {
+        return { ok: false, reason: "error", message: VIEW_ONLY };
+    }
+
+    if (!isEmailSyncApproved(session.user.email)) {
+        return {
+            ok: false,
+            reason: "not_approved",
+            message: EMAIL_SYNC_COPY.notApproved,
+        };
+    }
+
+    if (!emailSyncEnabled) {
+        return {
+            ok: false,
+            reason: "ai_unconfigured",
+            message: EMAIL_SYNC_COPY.unconfigured,
+        };
+    }
+
+    // Taken before Google is asked for anything. A sync reads an inbox and then
+    // pays a model to read it, which is the only work here that costs money per
+    // call, so it is budgeted ahead of the token rather than after it.
+    if (!(await withinBudget(session.user.id, "inbox"))) {
+        return { ok: false, reason: "error", message: TOO_MANY_REQUESTS };
+    }
+
+    let accessToken: string;
+    try {
+        const token = await auth.api.getAccessToken({
+            body: { providerId: GOOGLE_PROVIDER_ID },
+            headers: requestHeaders,
+        });
+        if (!token.accessToken) throw new EmailAuthError();
+        accessToken = token.accessToken;
+    } catch {
+        return {
+            ok: false,
+            reason: "not_connected",
+            message: EMAIL_SYNC_COPY.connectGoogle,
+        };
+    }
+
+    const userId = session.user.id;
+
+    try {
+        const provider = createGmailProvider(accessToken);
+        const { syncEmailInbox } = await import("@/lib/email/sync");
+        const { emailClassifier } = await getUserSettings(userId);
+        const outcome = await syncEmailInbox(
+            userId,
+            provider,
+            emailClassifier,
+            onProgress,
+        );
+        // What the model was given and what it proposed, which together are the
+        // only measure of whether it is worth paying for. What becomes of each
+        // proposal is counted where the user answers it.
+        after(() =>
+            recordMetrics([
+                record(INBOX_SCAN, "read", { total: outcome.scanned }),
+                record(INBOX_SUGGESTION, "offered", {
+                    count: outcome.found,
+                }),
+            ]),
+        );
+        revalidatePath("/dashboard", "layout");
+        return { ok: true, ...outcome };
+    } catch (error) {
+        if (error instanceof EmailAuthError) {
+            return {
+                ok: false,
+                reason: "auth_expired",
+                message: EMAIL_SYNC_COPY.accessExpired,
+            };
+        }
+        return {
+            ok: false,
+            reason: "error",
+            message:
+                error instanceof Error
+                    ? error.message
+                    : EMAIL_SYNC_COPY.genericFailure,
+        };
+    }
+};
