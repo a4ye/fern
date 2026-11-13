@@ -1,14 +1,71 @@
-# Fern
+![Fern. A job tracker that fills itself in.](.github/readme/banner.png)
 
 Fern is a job application tracker. When you paste a posting link, the company, role,
 location, and pay automatically fill themselves in. Applications are grouped into lists.
 
 ## Features
 
-- **Link import.** Paste a posting URL and Fern reads the fields from it. Installing the browser extension improves the coverage.
-- **Spreadsheet import.** Bring an existing CSV or XLSX file into Fern.
-- **Charts.** Funnel, timeline, and Sankey views of where applications went.
-- **Version history.** Every change can be undone, redone, or restored.
+<details open>
+<summary><b>Link import.</b> Paste a posting URL and Fern reads the company, role, location, and pay from it.</summary>
+
+Installing the [browser extension](extension/README.md) improves the coverage. A
+posting's QR code can be scanned too.
+
+![Pasting a posting link. The company, role, location, and pay fill in, and the application is added to the list.](.github/readme/link-import.gif)
+
+</details>
+
+<details>
+<summary><b>Spreadsheet import.</b> Bring an existing CSV or XLSX file into Fern.</summary>
+
+Your columns and status names are matched to Fern's, and you review the rows
+before anything is added.
+
+![Importing a CSV file. Its columns and statuses are matched, then six applications are added.](.github/readme/spreadsheet-import.gif)
+
+</details>
+
+<details>
+<summary><b>Charts.</b> A Sankey of where applications went, a funnel of how far they got, and a grid of when you applied.</summary>
+
+Every chart fills itself in from your list.
+
+![The insights for a list: a Sankey from applied to each outcome, the progress funnel, and the activity grid.](.github/readme/charts.webp)
+
+</details>
+
+<details>
+<summary><b>Map.</b> Each dot is a place you applied to, sized by how many applications it holds.</summary>
+
+![A map of North America with a dot for each city applied to.](.github/readme/map.webp)
+
+</details>
+
+<details>
+<summary><b>Version history.</b> Every change is saved, and can be undone or redone.</summary>
+
+You can also restore a list to any earlier point.
+
+![Opening the history of a list and undoing an import. The six imported applications leave the list.](.github/readme/version-history.gif)
+
+</details>
+
+<details>
+<summary><b>Sharing.</b> Share a list with friends, or make a link that you can set to expire.</summary>
+
+<img src=".github/readme/share.webp" alt="The share dialog. The list is shared with one friend and has a link that never expires." width="560">
+
+</details>
+
+<details>
+<summary><b>MCP server.</b> Connect an AI agent and it can view and edit your lists and applications for you.</summary>
+
+Add `https://fern.aaronye.dev/api/mcp` to your agent as a remote MCP server. Its
+changes go into the version history, so you can undo them.
+
+<img src=".github/readme/mcp.webp" alt="The MCP server page, with the server address to copy." width="560">
+
+</details>
 
 ## Stack
 
