@@ -799,6 +799,9 @@ const REGION_CODE_ALIASES: Readonly<Record<string, string>> = {
 const INITIALS = /\b([a-z])\.(?=[a-z]\.?)/gi;
 const ARRANGEMENT_WORDS =
     /\b(?:fully\s+remote|remote(?:[\s-]+first)?|hybrid|on[\s-]?site|in[\s-]+office)\b/giu;
+// Boards mark the head office beside the city, as Ashby's "New York, NY (HQ)"
+// does. No city in the index is named either word.
+const OFFICE_WORDS = /\b(?:hq|headquarters)\b/giu;
 
 export const normalizeLocationPhrase = (value: string): string =>
     value
@@ -811,8 +814,10 @@ export const normalizeLocationPhrase = (value: string): string =>
         .replace(/\s+/g, " ");
 
 export const locationWords = (value: string): string[] => {
-    const withoutArrangement = value.replace(ARRANGEMENT_WORDS, " ");
-    const normalized = normalizeLocationPhrase(withoutArrangement);
+    const withoutNotes = value
+        .replace(ARRANGEMENT_WORDS, " ")
+        .replace(OFFICE_WORDS, " ");
+    const normalized = normalizeLocationPhrase(withoutNotes);
     return normalized ? normalized.split(" ") : [];
 };
 

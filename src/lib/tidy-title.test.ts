@@ -6,22 +6,22 @@ describe("tidyRoleTitle", () => {
         it("drops a trailing season and year", () => {
             expect(
                 tidyRoleTitle("Software Engineering Internships Winter 2027"),
-            ).toBe("Software Engineer Intern");
+            ).toBe("Software Engineering Intern");
         });
 
         it("drops a leading season and year", () => {
             expect(
                 tidyRoleTitle("Winter 2027 Software Engineering Intern"),
-            ).toBe("Software Engineer Intern");
+            ).toBe("Software Engineering Intern");
             expect(tidyRoleTitle("Fall 2026 Software Engineering Intern")).toBe(
-                "Software Engineer Intern",
+                "Software Engineering Intern",
             );
         });
 
         it("drops a bracketed term", () => {
             expect(
                 tidyRoleTitle("Software Engineering Intern (Summer 2027)"),
-            ).toBe("Software Engineer Intern");
+            ).toBe("Software Engineering Intern");
             expect(tidyRoleTitle("Software Engineer Intern (2026)")).toBe(
                 "Software Engineer Intern",
             );
@@ -260,18 +260,18 @@ describe("tidyRoleTitle", () => {
             );
         });
 
-        it("names the role rather than the discipline before an intern word", () => {
+        // The employer chose the discipline. Rewording it to "Engineer" is a
+        // rename, which is not what tidying is for.
+        it("keeps the discipline as posted", () => {
+            expect(tidyRoleTitle("Software Engineering Intern, Frontend")).toBe(
+                "Software Engineering Intern, Frontend",
+            );
             expect(tidyRoleTitle("Analytics Engineering Intern")).toBe(
-                "Analytics Engineer Intern",
+                "Analytics Engineering Intern",
             );
             expect(tidyRoleTitle("Software Engineering Co-op")).toBe(
-                "Software Engineer Co-op",
+                "Software Engineering Co-op",
             );
-        });
-
-        // Unqualified, "Engineering Intern" is how the job is usually written,
-        // and "Engineer Intern" would be the stranger of the two.
-        it("leaves an unqualified discipline alone", () => {
             expect(tidyRoleTitle("Engineering Intern")).toBe(
                 "Engineering Intern",
             );
@@ -323,7 +323,7 @@ describe("tidyRoleTitle", () => {
             );
             expect(
                 tidyRoleTitle("Software Engineering Intern (Full Stack)"),
-            ).toBe("Software Engineer Intern (Full Stack)");
+            ).toBe("Software Engineering Intern (Full Stack)");
         });
 
         it("keeps a hyphenated word whole", () => {

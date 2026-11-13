@@ -186,19 +186,15 @@ const tidySpacing = (value: string): string =>
         .replace(/\s+/g, " ")
         .replace(/^[\s\-–—|:;,]+|[\s\-–—|:;,]+$/g, "");
 
-// "Software Engineering Intern" names a discipline where the row wants a job,
-// and every other title in the list says "Engineer". The rule is deliberately
-// narrow: the discipline must be qualified, so "Engineering Intern" stays as
-// written rather than becoming the odder "Engineer Intern", and a word that
-// only looks similar, like "Business Development Intern", is left alone.
+// The program word becomes the role word, so "Internships" reads "Intern".
+// The discipline stays as posted: "Software Engineering Intern" is the title
+// the employer chose, and rewording it to "Engineer" is a rename, not a tidy.
+// Measured on the Simplify corpus, that rename alone was half of every
+// suggestion shown.
 const nameTheRole = (value: string): string =>
     value
         .replace(/\bintern(?:ship)?s?\b/gi, "Intern")
-        .replace(/\bco-?ops?\b/gi, "Co-op")
-        .replace(
-            /(\S+\s+)engineering\b(?=\s+(?:Intern|Co-op)\b)/gi,
-            "$1Engineer",
-        );
+        .replace(/\bco-?ops?\b/gi, "Co-op");
 
 export const tidyRoleTitle = (raw: string, companyName = ""): string => {
     const original = raw.trim();

@@ -87,6 +87,21 @@ describe("resolvePopularLocation", () => {
             status: "unmatched",
         });
     });
+
+    test("ignores a head office note beside the city", () => {
+        expect(resolvePopularLocation("New York, NY (HQ)")).toEqual({
+            status: "matched",
+            location: "New York, New York, United States",
+            countryCode: "US",
+        });
+        expect(
+            resolvePopularLocation("San Francisco, CA (Headquarters)"),
+        ).toEqual({
+            status: "matched",
+            location: "San Francisco, California, United States",
+            countryCode: "US",
+        });
+    });
 });
 
 describe("searchPopularLocations", () => {
