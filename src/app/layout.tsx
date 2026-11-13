@@ -37,14 +37,16 @@ const RootLayout = ({
             {process.env.NODE_ENV === "production" && (
                 <>
                     <Script
-                        src="https://umami.aaronye.dev/script.js"
+                        src="/c/t.js"
                         strategy="lazyOnload"
                         data-website-id={UMAMI_WEBSITE_ID}
+                        data-host-url="https://fern.aaronye.dev/c"
                     />
                     <Script
-                        src="https://umami.aaronye.dev/recorder.js"
+                        src="/c/r.js"
                         strategy="lazyOnload"
                         data-website-id={UMAMI_WEBSITE_ID}
+                        data-host-url="https://fern.aaronye.dev/c"
                     />
                 </>
             )}

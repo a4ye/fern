@@ -64,6 +64,18 @@ const nextConfig: NextConfig = {
     // every path below it answers as well as the bare address.
     rewrites: async () => [
         {
+            source: "/c/t.js",
+            destination: "https://umami.aaronye.dev/script.js",
+        },
+        {
+            source: "/c/r.js",
+            destination: "https://umami.aaronye.dev/recorder.js",
+        },
+        {
+            source: "/c/api/send",
+            destination: "https://umami.aaronye.dev/api/send",
+        },
+        {
             source: "/.well-known/oauth-authorization-server",
             destination: "/api/well-known/oauth-authorization-server",
         },
