@@ -241,3 +241,26 @@ input[type="checkbox"]:indeterminate {
         opacity: 0.35;
     }
 }
+
+/* Inbox sync progress before the number of emails is known. There is no share
+   to draw yet, so a band sweeps the track instead. Reduced motion shows the
+   empty track. */
+.sync-sweep {
+    animation: sync-sweep 1.4s ease-in-out infinite;
+}
+
+@keyframes sync-sweep {
+    from {
+        transform: translateX(-100%);
+    }
+    to {
+        transform: translateX(300%);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sync-sweep {
+        animation: none;
+        opacity: 0;
+    }
+}
