@@ -34,6 +34,7 @@ import {
 import { CellSelect, type Option } from "@/components/dashboard/table-controls";
 import { useModalDialog } from "@/components/dashboard/use-modal-dialog";
 import { fileSlug, saveFile } from "@/lib/download";
+import { track } from "@/lib/analytics";
 
 const SAGE = "var(--color-accent)";
 const DEEP = "var(--color-accent-deep)";
@@ -1637,11 +1638,13 @@ export const PipelineFlow = ({
         void (async () => {
             try {
                 const chart = exportRef.current;
-                if (chart)
+                if (chart) {
                     saveFile(
                         await chartHref(chart, pending),
                         `${fileSlug(name)}-sankey.${pending}`,
                     );
+                    track("export", { format: pending });
+                }
             } catch {
                 toast.error("Could not export the chart.");
             } finally {

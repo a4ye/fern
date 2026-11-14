@@ -6,6 +6,7 @@ import { loadListInsights } from "@/app/dashboard/actions";
 import { InsightsPlaceholder } from "@/components/dashboard/insights-placeholder";
 import { StatStrip } from "@/components/dashboard/stat-strip";
 import type { ListInsightsData, Stat } from "@/components/dashboard/data";
+import { track } from "@/lib/analytics";
 
 const InsightsContent = dynamic(
     () =>
@@ -66,7 +67,10 @@ export const ListInsights = ({
         });
     }, [open, revision, listId]);
 
-    const toggle = () => setOpen((shown) => !shown);
+    const toggle = () => {
+        if (!open) track("insights-open");
+        setOpen((shown) => !shown);
+    };
 
     return (
         <div>

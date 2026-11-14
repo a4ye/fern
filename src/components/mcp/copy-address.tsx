@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { track } from "@/lib/analytics";
 
 export const CopyAddress = ({ address }: { address: string }) => {
     const [copied, setCopied] = useState(false);
@@ -20,9 +21,10 @@ export const CopyAddress = ({ address }: { address: string }) => {
                 type="button"
                 aria-label={`Copy ${address}`}
                 onClick={() =>
-                    navigator.clipboard
-                        .writeText(address)
-                        .then(() => setCopied(true))
+                    navigator.clipboard.writeText(address).then(() => {
+                        setCopied(true);
+                        track("mcp-copy-address");
+                    })
                 }
                 className="focus-frame flex size-9 shrink-0 cursor-pointer items-center justify-center border-l border-hairline text-sub transition-colors hover:bg-accent-tint-soft hover:text-ink"
             >

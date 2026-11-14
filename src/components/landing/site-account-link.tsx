@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { track } from "@/lib/analytics";
 
 type SessionState = "checking" | "signed-in" | "signed-out";
 
@@ -48,6 +49,12 @@ export const SiteAccountLink = () => {
     return (
         <Link
             href={signedOut ? "/login" : "/dashboard"}
+            // A signed-in visitor going back to their lists is not a sign-up.
+            onClick={
+                sessionState === "signed-in"
+                    ? undefined
+                    : () => track("cta-click", { location: "header" })
+            }
             className="relative inline-flex h-8 w-24 items-center justify-center bg-accent px-3.5 text-xs font-medium text-background transition-colors after:absolute after:inset-x-0 after:-inset-y-1 after:content-[''] hover:bg-accent-deep"
         >
             <span aria-live="polite">{label}</span>

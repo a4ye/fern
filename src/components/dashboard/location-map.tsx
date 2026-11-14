@@ -47,6 +47,7 @@ import {
     viewProjectionFor,
 } from "@/components/dashboard/location-map-data";
 import type { Place } from "@/components/dashboard/data";
+import { track } from "@/lib/analytics";
 
 const countries = feature(
     world as unknown as Topology,
@@ -270,6 +271,14 @@ export const LocationMap = ({ places }: { places: Place[] }) => {
     const [ref, width] = useWidth();
     const [hovered, setHovered] = useState<string | null>(null);
     const [ready, setReady] = useState<ReadonlySet<string>>(new Set());
+    // The map is drawn whenever the insights are open, so being on screen says
+    // nothing. The first drag, zoom, or press on it does, once a mount.
+    const used = useRef(false);
+    const markUsed = () => {
+        if (used.current) return;
+        used.current = true;
+        track("map-use");
+    };
 
     // The zoom the pinch started from, and the zoom on screen right now. A
     // pinch aims at a scale worked out from the first of these rather than
@@ -338,6 +347,9 @@ export const LocationMap = ({ places }: { places: Place[] }) => {
                 <div
                     ref={ref}
                     style={{ height: MAP_HEIGHT }}
+                    onPointerDownCapture={markUsed}
+                    onWheelCapture={markUsed}
+                    onClickCapture={markUsed}
                     className="relative"
                 >
                     {width > 0 && (

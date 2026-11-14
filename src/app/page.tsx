@@ -5,6 +5,7 @@ import { AgentPanel } from "@/components/landing/agent-panel";
 import { AppliedMap } from "@/components/landing/applied-map";
 import { CapturePanel } from "@/components/landing/capture-panel";
 import { ChangeLog } from "@/components/landing/change-log";
+import { CtaLink } from "@/components/landing/cta-link";
 import { HeroMock } from "@/components/landing/hero-mock";
 import { ImportMap } from "@/components/landing/import-map";
 import { Pipeline } from "@/components/landing/pipeline";
@@ -207,12 +208,13 @@ const Home = () => {
                                 )}
                             </p>
                             <div className="mt-8 flex items-center gap-6">
-                                <Link
+                                <CtaLink
                                     href="/dashboard"
+                                    location="hero"
                                     className="inline-flex h-10 items-center bg-accent px-5 text-sm font-medium text-background transition-colors hover:bg-accent-deep"
                                 >
                                     Start tracking
-                                </Link>
+                                </CtaLink>
                                 <a
                                     href="#how"
                                     className="text-sm font-medium text-accent-deep underline decoration-hairline underline-offset-4 transition-colors hover:decoration-accent"
@@ -552,12 +554,13 @@ const Home = () => {
                             link.
                         </p>
                         <div className="mt-9">
-                            <Link
+                            <CtaLink
                                 href="/dashboard"
+                                location="closing"
                                 className="inline-flex h-10 items-center bg-background px-5 text-sm font-medium text-ink transition-colors hover:bg-accent-tint"
                             >
                                 Start tracking
-                            </Link>
+                            </CtaLink>
                         </div>
                     </div>
                 </section>

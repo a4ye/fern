@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { completeOnboarding } from "@/app/dashboard/settings-actions";
 import { useModalDialog } from "@/components/dashboard/use-modal-dialog";
 import { useViewing } from "@/components/dashboard/viewing";
 import { APP_NAME } from "@/lib/site";
+import { track } from "@/lib/analytics";
 
 const BUTTON_CLASS =
     "inline-flex h-10 cursor-pointer items-center gap-2 px-4 text-sm font-medium transition-[background-color,color,scale] active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
@@ -192,6 +193,18 @@ export const Welcome = ({ due }: { due: boolean }) => {
     // behalf. So it never opens itself at them; the button still reaches it.
     const viewing = useViewing();
     const [open, setOpen] = useState(due && !viewing);
+    // Only the welcome that opened itself marks a new account, and only once.
+    // It is counted on the way out rather than on the way in: the page has
+    // only just loaded, and the tracker waits for idle time before it does.
+    const arriving = useRef(due && !viewing);
+
+    const close = () => {
+        if (arriving.current) {
+            arriving.current = false;
+            track("sign-up");
+        }
+        setOpen(false);
+    };
 
     return (
         <>
@@ -204,7 +217,7 @@ export const Welcome = ({ due }: { due: boolean }) => {
             >
                 ?
             </button>
-            {open && <WelcomeDialog onClose={() => setOpen(false)} />}
+            {open && <WelcomeDialog onClose={close} />}
         </>
     );
 };

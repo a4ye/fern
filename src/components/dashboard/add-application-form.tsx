@@ -60,6 +60,7 @@ import { resolvePopularLocation } from "@/lib/job-import/location";
 import { currencyForCountry, payCurrencyIn } from "@/lib/pay";
 import type { ExchangeRates } from "@/lib/exchange";
 import { URL_MAX } from "@/lib/constraints";
+import { track, type AddMethod } from "@/lib/analytics";
 
 const LINK_INPUT_ID = "add-application-link";
 const LINK_CHOICE_BUTTON_CLASS =
@@ -153,6 +154,10 @@ export const AddApplicationForm = ({
     // way, so each one carries a number and only the current one may write.
     const fetchId = useRef(0);
     const editedFields = useRef(new Set<keyof ApplicationFields>());
+    // What filled the form, sent with the saved application. A link scanned
+    // from a QR code counts as a scan whichever reader then filled it in.
+    const addMethod = useRef<AddMethod>("manual");
+    const scanned = useRef(false);
     const extension = useJobImportExtension();
 
     // A newly opened create drawer always begins with its link field in view,
@@ -188,7 +193,16 @@ export const AddApplicationForm = ({
         }
     };
 
-    const applyPosting = (found: ScrapedPosting, url: string) => {
+    const applyPosting = (
+        found: ScrapedPosting,
+        url: string,
+        reader: PostingReader,
+    ) => {
+        addMethod.current = scanned.current
+            ? "qr"
+            : reader === "extension"
+              ? "extension"
+              : "link";
         const locationFetchId = fetchId.current;
         const popularLocation = resolvePopularLocation(found.location);
         const posting =
@@ -306,7 +320,7 @@ export const AddApplicationForm = ({
                 if (fetchId.current !== id) return;
                 if (posting && hasPostingSuggestion(posting)) {
                     reportRead(startedAt, attempted, "browser", posting);
-                    applyPosting(posting, url);
+                    applyPosting(posting, url, "browser");
                     return;
                 }
             }
@@ -327,7 +341,7 @@ export const AddApplicationForm = ({
                         "extension",
                         response.posting,
                     );
-                    applyPosting(response.posting, url);
+                    applyPosting(response.posting, url, "extension");
                     return;
                 }
                 localMiss = true;
@@ -344,7 +358,7 @@ export const AddApplicationForm = ({
                 hasPostingSuggestion(fallback.posting)
             ) {
                 reportRead(startedAt, attempted, "server", fallback.posting);
-                applyPosting(fallback.posting, url);
+                applyPosting(fallback.posting, url, "server");
                 return;
             }
 
@@ -391,7 +405,7 @@ export const AddApplicationForm = ({
                     response.posting,
                 );
                 setFilledFromTab(true);
-                applyPosting(response.posting, url);
+                applyPosting(response.posting, url, "extension");
                 return;
             }
             reportRead(startedAt, ["extension"], "missed");
@@ -433,6 +447,7 @@ export const AddApplicationForm = ({
         if (pasted.trim()) {
             event.preventDefault();
             const link = arriving(pasted);
+            scanned.current = false;
             set("url", link);
             scrape(link);
         }
@@ -442,6 +457,7 @@ export const AddApplicationForm = ({
         // Editing the source link invalidates both an in-flight read and any
         // employer link proposed for the previous value.
         dropFetch();
+        scanned.current = false;
         set("url", value);
         setEmployerUrl(null);
         setTidyRole(null);
@@ -461,6 +477,7 @@ export const AddApplicationForm = ({
     const onQrScan = (url: string) => {
         const link = arriving(url);
         onLinkChange(link);
+        scanned.current = true;
         scrape(link);
     };
 
@@ -475,6 +492,7 @@ export const AddApplicationForm = ({
                 browserTimeZone(),
             );
             if (result.ok) {
+                track("application-add", { method: addMethod.current });
                 dismiss();
                 return;
             }

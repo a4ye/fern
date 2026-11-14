@@ -1,8 +1,14 @@
 import Link from "next/link";
 import { Logo } from "@/components/brand/logo";
+import { CtaLink } from "@/components/landing/cta-link";
 import { APP_NAME, GITHUB_URL } from "@/lib/site";
 
-type FooterLink = { label: string; href: string; external?: boolean };
+type FooterLink = {
+    label: string;
+    href: string;
+    external?: boolean;
+    cta?: boolean;
+};
 
 const FOOTER_COLUMNS: { title: string; links: FooterLink[] }[] = [
     {
@@ -11,7 +17,7 @@ const FOOTER_COLUMNS: { title: string; links: FooterLink[] }[] = [
             { label: "How it works", href: "/#how" },
             { label: "Browser extension", href: "/extension" },
             { label: "MCP server", href: "/mcp" },
-            { label: "Sign in", href: "/login" },
+            { label: "Sign in", href: "/login", cta: true },
         ],
     },
     {
@@ -56,6 +62,14 @@ const FooterColumn = ({
                         >
                             {link.label}
                         </a>
+                    ) : link.cta ? (
+                        <CtaLink
+                            href={link.href}
+                            location="footer"
+                            className="text-sm text-sub transition-colors hover:text-ink"
+                        >
+                            {link.label}
+                        </CtaLink>
                     ) : (
                         <Link
                             href={link.href}

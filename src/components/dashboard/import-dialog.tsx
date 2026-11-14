@@ -40,6 +40,7 @@ import {
     type Sheet,
 } from "@/lib/import/rows";
 import type { ExchangeRates } from "@/lib/exchange";
+import { track } from "@/lib/analytics";
 
 type Step = "file" | "map" | "review";
 
@@ -794,6 +795,9 @@ export const ImportDialog = ({
     const [keeping, setKeeping] = useState<ReadonlySet<number>>(new Set());
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    // The extension of the file that was read, which readSheet has already
+    // narrowed to csv, tsv, txt, or xlsx.
+    const [fileType, setFileType] = useState("");
 
     const listKeys = useMemo(() => existingIndex(applications), [applications]);
 
@@ -844,6 +848,7 @@ export const ImportDialog = ({
             }
 
             setSheet(result.sheet);
+            setFileType(file.name.toLowerCase().split(".").pop() ?? "");
             setMapping(matchColumns(result.sheet.headers));
             setStatusEdits({});
             setArrangementEdits({});
@@ -896,6 +901,10 @@ export const ImportDialog = ({
                 browserTimeZone(),
             );
             if (result.ok) {
+                track("import-commit", {
+                    format: fileType,
+                    rows: drafts.length,
+                });
                 dismiss();
                 return;
             }

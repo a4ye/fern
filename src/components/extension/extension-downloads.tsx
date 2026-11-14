@@ -2,6 +2,7 @@
 
 import { EXTENSION_DOWNLOAD_PATHS, type ExtensionBrowser } from "@/lib/site";
 import { useExtensionBrowser } from "@/components/extension/use-extension-browser";
+import { track } from "@/lib/analytics";
 
 const LABELS: Record<ExtensionBrowser, string> = {
     chrome: "Chrome",
@@ -17,6 +18,7 @@ export const ExtensionDownloads = () => {
             <a
                 href={EXTENSION_DOWNLOAD_PATHS[yours]}
                 download
+                onClick={() => track("extension-download", { browser: yours })}
                 className="focus-frame inline-flex h-11 items-center gap-2.5 bg-accent px-6 text-sm font-medium text-background transition-colors hover:bg-accent-deep"
             >
                 <span
@@ -28,6 +30,7 @@ export const ExtensionDownloads = () => {
             <a
                 href={EXTENSION_DOWNLOAD_PATHS[other]}
                 download
+                onClick={() => track("extension-download", { browser: other })}
                 className="text-sm font-medium text-accent-deep underline decoration-hairline underline-offset-4 transition-colors hover:decoration-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             >
                 Download for {LABELS[other]}

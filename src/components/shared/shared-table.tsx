@@ -43,6 +43,7 @@ import {
 } from "@/components/dashboard/data";
 import { fileSlug, saveBlob } from "@/lib/download";
 import type { ExchangeRates } from "@/lib/exchange";
+import { track } from "@/lib/analytics";
 
 // The table somebody who was sent a list reads it in. It draws the same grid as
 // the owner's, so a shared list is recognisably the same table, and it imports
@@ -211,6 +212,7 @@ export const SharedTable = ({
                 applicationsFile(view.rows, format, name, rankings),
                 `${fileSlug(name)}-applications.${format}`,
             );
+            track("export", { format });
         } catch {
             toast.error("Could not export these applications.");
         }

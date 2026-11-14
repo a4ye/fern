@@ -26,6 +26,7 @@ import { useViewing } from "@/components/dashboard/viewing";
 import type { ListHistoryPage } from "@/db/history";
 import { LIST_DESCRIPTION_MAX, LIST_NAME_MAX } from "@/lib/constraints";
 import { parseListUpdate } from "@/lib/list-input";
+import { track } from "@/lib/analytics";
 
 const HistoryDialog = dynamic(
     () =>
@@ -148,6 +149,7 @@ export const ListHeader = ({
     };
 
     const openHistory = () => {
+        track("history-open");
         setShowingHistory(true);
         if (history || isPending) return;
         startTransition(async () => {
@@ -172,6 +174,7 @@ export const ListHeader = ({
     // dialog appears on the press and fills in. A failed read closes it again
     // rather than leaving an empty panel to be dismissed.
     const openShare = () => {
+        track("share-open");
         setShowingShare(true);
         if (sharing || isPending) return;
         startTransition(async () => {

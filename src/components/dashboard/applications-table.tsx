@@ -98,6 +98,7 @@ import {
     PAY_MAX,
     ROLE_MAX,
 } from "@/lib/constraints";
+import { track } from "@/lib/analytics";
 
 const AddApplicationForm = dynamic(
     () =>
@@ -1144,6 +1145,7 @@ export const ApplicationsTable = ({
                 applicationsFile(view.rows, format, name, rankings),
                 `${fileSlug(name)}-applications.${format}`,
             );
+            track("export", { format });
         } catch {
             toast.error("Could not export these applications.");
         }
@@ -1536,9 +1538,10 @@ export const ApplicationsTable = ({
                                         <>
                                             <button
                                                 type="button"
-                                                onClick={() =>
-                                                    setImporting(true)
-                                                }
+                                                onClick={() => {
+                                                    setImporting(true);
+                                                    track("import-open");
+                                                }}
                                                 className={`${secondaryButtonClass} ${FILL_NARROW}`}
                                             >
                                                 <span
