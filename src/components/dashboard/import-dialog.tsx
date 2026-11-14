@@ -1065,14 +1065,20 @@ export const ImportDialog = ({
                         disabled={busy || readyCount === 0}
                         className={primaryButtonClass}
                     >
-                        {/* The label holds still while the import runs and
-                            the spinner keeps its place either way, so pressing
+                        {/* The spinner takes the label's place in one grid
+                            cell, so the label sits centred at rest and pressing
                             the button cannot resize it and shove the row. */}
-                        <span
-                            aria-hidden="true"
-                            className={`icon-[lucide--loader-circle] mr-1.5 size-3.5 shrink-0 animate-spin ${busy ? "" : "invisible"}`}
-                        />
-                        Import {countLabel(readyCount, "application")}
+                        <span className="grid place-items-center">
+                            <span
+                                className={`col-start-1 row-start-1 ${busy ? "opacity-0" : ""}`}
+                            >
+                                Import {countLabel(readyCount, "application")}
+                            </span>
+                            <span
+                                aria-hidden="true"
+                                className={`icon-[lucide--loader-circle] col-start-1 row-start-1 size-3.5 animate-spin ${busy ? "" : "invisible"}`}
+                            />
+                        </span>
                     </button>
                 )}
             </footer>
