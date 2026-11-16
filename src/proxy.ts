@@ -4,6 +4,7 @@ import {
     getSessionCookie,
     SECURE_COOKIE_PREFIX,
 } from "better-auth/cookies";
+import { loginHref } from "@/lib/login-redirect";
 
 // Route prefixes that hold gated content and require a session. Anything else
 // (marketing, legal, and unknown URLs) falls through so Next can serve the page
@@ -47,7 +48,10 @@ export const proxy = (request: NextRequest) => {
     }
     const sessionCookie = getSessionCookie(request);
     if (!sessionCookie) {
-        return NextResponse.redirect(new URL("/login", request.url));
+        const { pathname, search } = request.nextUrl;
+        return NextResponse.redirect(
+            new URL(loginHref(`${pathname}${search}`), request.url),
+        );
     }
 
     const response = NextResponse.next();

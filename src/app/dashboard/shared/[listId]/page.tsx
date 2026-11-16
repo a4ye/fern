@@ -3,6 +3,7 @@ import Link from "next/link";
 import { cache } from "react";
 import { notFound, redirect } from "next/navigation";
 import { getRequestSession } from "@/lib/auth";
+import { loginHref } from "@/lib/login-redirect";
 import { getExchangeRates } from "@/db/exchange-rates";
 import { getSharedListForViewer } from "@/db/shares";
 import { SharedList } from "@/components/shared/shared-list";
@@ -26,10 +27,11 @@ export const generateMetadata = async ({
 // list that is not comes back as nothing and is a 404, exactly as one that does
 // not exist is, so this page cannot be used to find out which lists are real.
 const SharedListPage = async ({ params }: Props) => {
-    const session = await getRequestSession();
-    if (!session) redirect("/login");
-
     const { listId } = await params;
+    const session = await getRequestSession();
+    if (!session)
+        redirect(loginHref(`/dashboard/shared/${encodeURIComponent(listId)}`));
+
     const [list, rates] = await Promise.all([
         loadSharedList(session.user.id, listId),
         getExchangeRates(),

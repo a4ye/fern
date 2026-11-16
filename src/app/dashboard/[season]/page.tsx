@@ -3,6 +3,7 @@ import Link from "next/link";
 import { cache } from "react";
 import { notFound, redirect } from "next/navigation";
 import { getRequestSession } from "@/lib/auth";
+import { loginHref } from "@/lib/login-redirect";
 import { getListDetail } from "@/db/dashboard";
 import { getExchangeRates } from "@/db/exchange-rates";
 import { getUserSettings } from "@/db/settings";
@@ -28,9 +29,10 @@ export const generateMetadata = async ({
 };
 
 const SeasonPage = async ({ params, searchParams }: Props) => {
-    const session = await getRequestSession();
-    if (!session) redirect("/login");
     const { season } = await params;
+    const session = await getRequestSession();
+    if (!session)
+        redirect(loginHref(`/dashboard/${encodeURIComponent(season)}`));
 
     const [detail, settings, rates] = await Promise.all([
         loadListDetail(session.user.id, season),

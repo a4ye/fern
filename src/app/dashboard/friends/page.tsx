@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { getRequestSession, getViewAs } from "@/lib/auth";
 import { getFriendsPage, githubAccountIdForUser } from "@/db/friends";
 import { githubUsername } from "@/lib/github";
+import { loginHref } from "@/lib/login-redirect";
 import { backHref, FRIENDS_PATH } from "@/components/dashboard/data";
 import { FriendsManager } from "@/components/friends/friends-manager";
 
@@ -17,7 +18,7 @@ const FriendsPage = async ({
     searchParams: Promise<{ from?: string }>;
 }) => {
     const session = await getRequestSession();
-    if (!session) redirect("/login");
+    if (!session) redirect(loginHref(FRIENDS_PATH));
 
     // An admin viewing another account may read this page but cannot act on it,
     // since every action behind it refuses while viewing. The one thing that

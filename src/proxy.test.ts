@@ -52,6 +52,14 @@ describe("proxy", () => {
             expectRedirectToLogin(proxy(requestFor(GATED_PATH)));
         });
 
+        it("sends signed-out visitors back to the page they asked for", () => {
+            const res = proxy(requestFor("/dashboard/2026?from=all"));
+            expect(res.status).toBe(307);
+            expect(res.headers.get("location")).toBe(
+                "https://tracker.test/login?next=%2Fdashboard%2F2026%3Ffrom%3Dall",
+            );
+        });
+
         it("ignores unrelated cookies when checking for a session", () => {
             expectRedirectToLogin(
                 proxy(requestFor(GATED_PATH, "theme=dark; visited=1")),

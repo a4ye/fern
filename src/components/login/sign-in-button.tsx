@@ -2,7 +2,13 @@
 
 import { track } from "@/lib/analytics";
 
-export const SignInButton = () => (
+export const SignInButton = ({
+    callbackURL,
+    errorCallbackURL,
+}: {
+    callbackURL: string;
+    errorCallbackURL: string;
+}) => (
     <button
         type="button"
         aria-describedby="sign-in-terms"
@@ -11,8 +17,8 @@ export const SignInButton = () => (
             void import("@/lib/auth-client").then(({ authClient }) =>
                 authClient.signIn.social({
                     provider: "github",
-                    callbackURL: "/dashboard",
-                    errorCallbackURL: "/login",
+                    callbackURL,
+                    errorCallbackURL,
                 }),
             );
         }}

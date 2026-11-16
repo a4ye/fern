@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getRealSession } from "@/lib/auth";
+import { loginHref } from "@/lib/login-redirect";
 import { oauthConsentRequest } from "@/db/account";
 import { allowsWrite } from "@/lib/mcp/scopes";
 import { APP_NAME } from "@/lib/site";
@@ -27,7 +28,13 @@ const AuthorizePage = async ({
     // is not the account on screen while an admin is viewing another. Asked for
     // directly so the page cannot describe the grant as somebody else's.
     const session = await getRealSession();
-    if (!session) redirect("/login");
+    if (!session) {
+        redirect(
+            loginHref(
+                `/oauth/authorize?${new URLSearchParams({ consent_code: consentCode })}`,
+            ),
+        );
+    }
 
     // Read from the code rather than from the query, so the name and the
     // destination shown belong to the grant that approving this will write.

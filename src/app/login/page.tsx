@@ -3,6 +3,7 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { DEFAULT_AFTER_LOGIN, loginHref, safeNext } from "@/lib/login-redirect";
 import { APP_NAME } from "@/lib/site";
 import { Logo } from "@/components/brand/logo";
 import { LoginArt } from "@/components/login/login-art";
@@ -15,12 +16,13 @@ export const metadata: Metadata = {
 const LoginPage = async ({
     searchParams,
 }: {
-    searchParams: Promise<{ error?: string }>;
+    searchParams: Promise<{ error?: string; next?: string | string[] }>;
 }) => {
-    const session = await auth.api.getSession({ headers: await headers() });
-    if (session) redirect("/dashboard");
+    const { error, next: requested } = await searchParams;
+    const next = safeNext(requested) ?? DEFAULT_AFTER_LOGIN;
 
-    const { error } = await searchParams;
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (session) redirect(next);
 
     return (
         <main className="flex flex-1 items-center justify-center bg-surface px-6 py-16">
@@ -48,7 +50,10 @@ const LoginPage = async ({
                         </p>
 
                         <div className="mt-8">
-                            <SignInButton />
+                            <SignInButton
+                                callbackURL={next}
+                                errorCallbackURL={loginHref(next)}
+                            />
                             <p
                                 id="sign-in-terms"
                                 className="mt-3 text-pretty text-xs leading-5 text-muted"

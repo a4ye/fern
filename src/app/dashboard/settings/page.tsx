@@ -10,6 +10,7 @@ import {
     GITHUB_PROVIDER_ID,
 } from "@/lib/auth";
 import { isEmailSyncApproved } from "@/lib/email/access";
+import { loginHref } from "@/lib/login-redirect";
 import { getUserSettings } from "@/db/settings";
 import { githubUsername } from "@/lib/github";
 import { backHref, SETTINGS_PATH } from "@/components/dashboard/data";
@@ -26,7 +27,7 @@ const SettingsPage = async ({
 }) => {
     const requestHeaders = await headers();
     const session = await getRequestSession();
-    if (!session) redirect("/login");
+    if (!session) redirect(loginHref(SETTINGS_PATH));
 
     // This page is the one place that shows the sign-in behind an account, and
     // that is read from the browser's own session rather than from the account
