@@ -72,8 +72,8 @@ const nextConfig: NextConfig = {
             destination: "https://umami.aaronye.dev/recorder.js",
         },
         {
-            source: "/c/api/send",
-            destination: "https://umami.aaronye.dev/api/send",
+            source: "/c/api/:path*",
+            destination: "https://umami.aaronye.dev/api/:path*",
         },
         {
             source: "/.well-known/oauth-authorization-server",
